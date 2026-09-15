@@ -26,7 +26,21 @@ feat(ingestion): add character-offset spans to normalizer
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
 ```
 
-Other commit rules: conventional-commit prefixes (`feat`, `fix`, `refactor`, `test`, `docs`, `chore`), imperative mood, scope by module (`ingestion`, `summarize`, `tracker`, `privacy`, `db`, `api`). Never commit on `main` without being asked — branch first.
+Other commit rules: conventional-commit prefixes (`feat`, `fix`, `refactor`, `test`, `docs`, `chore`), imperative mood, scope by module (`ingestion`, `summarize`, `tracker`, `privacy`, `db`, `api`).
+
+## Push cadence
+
+**Push after every meaningful change, and update the docs before pushing.**
+
+A "meaningful change" is a coherent unit that leaves the tree working — a module plus its tests, a completed vertical slice, a bug fix. Not every file save, and not a week's work in one drop.
+
+Before each push:
+
+1. Update `README.md` if behaviour, endpoints, setup, or roadmap status changed
+2. Update `CLAUDE.md` if a convention, invariant, or command changed
+3. Update `.env.example` if a setting was added
+4. Run `pytest` and `ruff check .` — do not push a red tree
+5. Commit with no attribution trailer (see above), then `git push`
 
 ---
 

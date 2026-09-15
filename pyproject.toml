@@ -1,0 +1,96 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "status-unblocked"
+version = "0.1.0"
+description = "Async standup bot producing faithful, citation-backed daily digests"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi==0.115.6",
+    "uvicorn[standard]==0.34.0",
+    "sqlalchemy==2.0.36",
+    "alembic==1.14.0",
+    "pydantic==2.10.4",
+    "pydantic-settings==2.7.0",
+    "structlog==24.4.0",
+    "jinja2==3.1.5",
+    "python-multipart==0.0.20",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==8.3.4",
+    "pytest-cov==6.0.0",
+    "httpx==0.28.1",
+    "ruff==0.8.6",
+    "mypy==1.14.1",
+    "import-linter==2.1",
+    "hypothesis==6.123.2",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+standup = ["templates/*.html"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
+markers = [
+    "live_github: hits the real GitHub API; excluded from CI",
+]
+
+[tool.coverage.run]
+source = ["standup"]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "C4"]
+
+[tool.mypy]
+python_version = "3.11"
+packages = ["standup"]
+mypy_path = "src"
+strict = true
+warn_return_any = false
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+strict = false
+
+# The dependency rule from CLAUDE.md, enforced.
+[tool.importlinter]
+root_package = "standup"
+
+[[tool.importlinter.contracts]]
+name = "domain is pure (imports nothing from the project)"
+type = "forbidden"
+source_modules = ["standup.domain"]
+forbidden_modules = [
+    "standup.api",
+    "standup.db",
+    "standup.ingestion",
+    "standup.summarize",
+    "standup.tracker",
+    "standup.privacy",
+    "standup.scheduling",
+    "standup.config",
+]
+
+[[tool.importlinter.contracts]]
+name = "summarize depends only on domain (the prompt boundary)"
+type = "forbidden"
+source_modules = ["standup.summarize"]
+forbidden_modules = [
+    "standup.api",
+    "standup.db",
+    "standup.ingestion",
+    "standup.tracker",
+    "standup.privacy",
+]
