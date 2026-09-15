@@ -88,13 +88,19 @@ If you find yourself wanting to import a SQLAlchemy model into `summarize/`, tha
 
 4. **A summarizer receives no ORM objects, no DB session, no email addresses, and no unredacted text.** `SummaryRequest` is the whole input surface. This is the prompt boundary: when the LLM implementation lands, whatever crosses this line is what leaves the building.
 
-5. **Redaction runs before `SourceDoc` construction**, so a secret cannot reach a third-party model even by accident.
+   Enforced by import-linter over `summarize/{base,rules,validator,render}.py`. `summarize/service.py` is the orchestrator and is exempt — it does the ORM-to-domain mapping precisely so the others never have to.
 
-6. **No manager role.** There is no role hierarchy, no manager-only view, and no per-person metric. Digests are team-scoped and visible to every member equally. If a requested feature needs "so the lead can see who didn't submit", that is the surveillance anti-pattern — push back and refer to `PRIVACY.md`.
+5. **Reclassifying a claim must never rewrite its text.** A misfiled blocker is promoted from Progress into Blockers, but the claim stays the verbatim span and records why in `matched_rule` (`promoted:marker:stuck`). The moment promotion edits text, V3 breaks and the citation stops resolving.
 
-7. **External writes go through the outbox.** `tracker/` never blocks ingestion or digest generation. A GitHub outage must never lose a standup update.
+   Negation is checked before markers, always. `no blockers` / `not blocked` / `no longer blocked` must never yield a blocker — there is a parametrized test guarding this, and it is the single most common bug in this category of tool.
 
-8. **All Microsoft Agents SDK imports stay inside `api/teams_router.py` and `ingestion/teams_adapter.py`.** The SDK surface is young and still moving; keep the blast radius of a breaking change to two files.
+6. **Redaction runs before `SourceDoc` construction**, so a secret cannot reach a third-party model even by accident.
+
+7. **No manager role.** There is no role hierarchy, no manager-only view, and no per-person metric. Digests are team-scoped and visible to every member equally. If a requested feature needs "so the lead can see who didn't submit", that is the surveillance anti-pattern — push back and refer to `PRIVACY.md`.
+
+8. **External writes go through the outbox.** `tracker/` never blocks ingestion or digest generation. A GitHub outage must never lose a standup update.
+
+9. **All Microsoft Agents SDK imports stay inside `api/teams_router.py` and `ingestion/teams_adapter.py`.** The SDK surface is young and still moving; keep the blast radius of a breaking change to two files.
 
 ---
 

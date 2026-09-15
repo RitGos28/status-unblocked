@@ -3,7 +3,7 @@
 > An async standup bot for distributed teams. Collects short updates in Microsoft Teams, produces a **faithful, citation-backed** daily digest, and writes blockers back to GitHub Issues as durable tracked objects — without becoming a surveillance tool.
 
 **Stack:** Python 3.13 · FastAPI · SQLAlchemy 2.0 + Alembic · Postgres (SQLite in dev) · Docker
-**Status:** Week 1 complete — the walking skeleton runs end to end: submit → digest → click through to the verbatim source. 58 tests green. See [Roadmap](#roadmap).
+**Status:** Week 1 complete — the walking skeleton runs end to end: submit → digest → click through to the verbatim source. 72 tests green. See [Roadmap](#roadmap).
 
 ---
 
@@ -116,16 +116,26 @@ src/standup/
 
 ### The faithfulness validator
 
-| Rule | Check |
-|---|---|
-| V1 | Every claim has at least one citation |
-| V2 | Every cited `source_id` exists (kills fabricated IDs) |
-| V3 | `quote == source.text[start:end]` after NFKC + whitespace collapse (kills paraphrase-as-quote) |
-| V4 | Every number/date in the claim appears in a cited source, or is derivable from cited `captured_at` |
-| V5 | Every entity ref (`#123`, URL, `@handle`) appears in a cited source |
-| V6 | Claim's `member_id` matches every cited source (no cross-attribution) |
-| V7 | No cited source is outside consented/visible scope (privacy failures are faithfulness failures) |
-| V8 | Length-inflation guard for abstractive claims |
+| Rule | Check | Status |
+|---|---|---|
+| V1 | Every claim has at least one citation | live |
+| V2 | Every cited `source_id` exists (kills fabricated IDs) | live |
+| V3 | `quote == source.text[start:end]` after NFKC + whitespace collapse (kills paraphrase-as-quote) | live |
+| V4 | Every number/date in the claim appears in a cited source, or is derivable from cited `captured_at` | live |
+| V5 | Every entity ref (`#123`, URL, `@handle`) appears in a cited source | live |
+| V6 | Claim's `member_id` matches every cited source (no cross-attribution) | live |
+| V7 | No cited source is outside consented/visible scope (privacy failures are faithfulness failures) | week 4 — needs the consent model |
+| V8 | Length-inflation guard for abstractive claims | live |
+
+A failing claim is **dropped**, not silently corrected, and the digest reports how many were withheld. Under `STANDUP_VALIDATOR_STRICT=true` (the CI setting) the build raises instead.
+
+### Misfiled blockers get promoted, with a recorded reason
+
+People put blockers in the wrong box. Someone types "Stuck on the deploy pipeline" into **Progress**, and a tool that trusts the form field alone buries the one line the team needed to see.
+
+So a progress or plan line carrying a blocker marker (`blocked`, `waiting on`, `stuck`, `cannot`, `needs review`, …) is promoted into the Blockers section, and the claim records *why* as `matched_rule` — e.g. `promoted:marker:stuck`. Promotion never rewrites the text; the claim is still the verbatim span, so V3 holds and the citation still resolves.
+
+Negations are checked first and win: `no blockers`, `not blocked`, `no longer blocked`, `unblocked` never produce a blocker. That false positive — "No blockers today" reported as a blocker — is the most common failure in this category of tool, and it has its own parametrized test.
 
 ### Blocker to Issue idempotency (three layers)
 
@@ -163,13 +173,25 @@ Walking-skeleton first. **Something demoable at the end of every week.** Risky A
 
 **Done when** — `docker compose up`; three browser submissions; build digest; **every blocker links to an evidence page showing the verbatim source**. Plus a written go/no-go on Teams.
 
+**Shipped — verified against a running server, not only tests:**
+
+- Submit → digest → evidence, with blockers ordered first and every line cited
+- Validator V1–V6 and V8 (pulled forward from week 2), enforced in `service.py` after the summarizer
+- Hash-chained audit log, chain verified intact across ingest / digest-build / evidence-view
+- Alembic initial migration; Dockerfile (multi-stage, non-root, healthcheck); compose with Postgres
+- 72 tests, 95% coverage, ruff clean, both import-linter contracts kept
+
+**Still open:** the Teams tenant go/no-go (check **Teams admin → Setup policies → Upload custom apps**), and a `docker build` — the image is written but unbuilt, since Docker Desktop was not running.
+
 **Cut line:** Postgres — stay on SQLite.
 
 ### Week 2 — Teams adapter + faithfulness enforced in code
 
 **Why.** Week 1 proved citations are *possible*; week 2 makes them **unfakeable**. The validator is the core differentiator — what separates this from "an AI summary you have to trust." It must exist before any AI does, and be provably impossible to bypass. Meanwhile the Teams adapter proves the ingestion seam holds under a second, messier source.
 
-**Deliverables** — `api/teams_router.py` on `microsoft-agents-hosting-fastapi` · `ingestion/teams_adapter.py` to the **same** `RawSubmission` · Adaptive Card (prompt + consent) — *structured fields are what keep the rules summarizer faithful: you never infer "is this a blocker", the user said so* · `teams/manifest/` + `scripts/make_teams_zip.py`, `scripts/devtunnel.ps1` · `conversation_ref` + `consent` tables · `ingestion/permalink.py` with the honest `a:`-conversation null path · **`summarize/validator.py` (V4–V8)** · Playground-captured activity fixtures · validator tests with a `HallucinatingSummarizer` double and **Hypothesis mutation tests**
+**Deliverables** — `api/teams_router.py` on `microsoft-agents-hosting-fastapi` · `ingestion/teams_adapter.py` to the **same** `RawSubmission` · Adaptive Card (prompt + consent) — *structured fields are what keep the rules summarizer faithful: you never infer "is this a blocker", the user said so* · `teams/manifest/` + `scripts/make_teams_zip.py`, `scripts/devtunnel.ps1` · `conversation_ref` + `consent` tables · `ingestion/permalink.py` with the honest `a:`-conversation null path · Playground-captured activity fixtures
+
+> The validator was pulled forward into week 1 — it is only ~150 lines and having it early lets the end-to-end test assert zero violations rather than hand-wave. Week 2 therefore adds V7's groundwork and the Teams work, not the validator itself.
 
 **Done when** — in Agents Playground: type `standup`, get a card, submit, digest updates with citations. And the validator rejects a fabricated-citation summarizer **100%** of the time.
 
@@ -221,7 +243,7 @@ Layout: `tests/{unit,integration,e2e,fixtures}/`. Stack: pytest · pytest-asynci
 Run them:
 
 ```bash
-pytest                      # everything (58 tests, ~1s)
+pytest                      # everything (72 tests, ~1s)
 pytest tests/unit           # fast unit pass
 pytest tests/e2e -v         # end-to-end smoke
 pytest --cov=standup --cov-report=term-missing
@@ -229,7 +251,7 @@ ruff check .                # lint
 lint-imports                # enforce the dependency rule
 ```
 
-Current: **58 passing, 95% coverage overall.** The gate that matters is `summarize/` and `privacy/` at >=90% — those are the modules where a silent regression is a correctness or compliance failure rather than a bug. `normalizer.py`, `summarize/base.py` and `main.py` sit at 100%; `validator.py` at 99%.
+Current: **72 passing, 95% coverage overall.** The gate that matters is `summarize/` and `privacy/` at >=90% — those are the modules where a silent regression is a correctness or compliance failure rather than a bug. `normalizer.py`, `summarize/base.py`, `logging_conf.py` and `main.py` sit at 100%; `validator.py` at 99%.
 
 > `lint-imports` must be run as the console script. `python -m importlinter.cli` exits 0 *without reading* `pyproject.toml`, so it reports success while enforcing nothing — confirmed by adding a deliberate boundary violation and watching it pass.
 
@@ -255,6 +277,26 @@ docker compose up --build
 ```
 
 Then open <http://localhost:8000/submit> to file an update, and <http://localhost:8000/digests> to build and read the digest.
+
+### A two-minute walkthrough
+
+1. **Submit as Ada** — Progress `Shipped the retry logic. Reviewed #214.`, Blockers `Waiting on staging credentials from infra.`, Today `Finish the migration.`
+2. **Submit as Bruno**, and put `No blockers today.` in the Blockers box.
+3. **Submit as Chen**, and type `Stuck on the deploy pipeline.` into **Progress** — deliberately the wrong box.
+4. Go to **Digests** and press **Build digest**.
+
+What you should see, and why each part matters:
+
+| Observation | What it demonstrates |
+|---|---|
+| Blockers section comes first | The digest is ordered by what needs attention, not by who submitted |
+| Bruno's "No blockers today" is absent | Negation handling — the commonest false positive in this category |
+| Chen's line appears **under Blockers** | Misfiled blockers are promoted, tagged `promoted:marker:stuck` |
+| Every line has a **source** link | No claim ships uncited |
+| The evidence page highlights the exact span | The citation is a real offset into stored text, not a vague pointer |
+| "No platform link: webform…" on that page | Missing permalinks state their reason instead of being a silent null |
+
+Then check the digest's `validator_report_json` — `checked: 8, passed: 8, withheld: 0`. Every line was verified against its source before the page rendered.
 
 | Endpoint | Purpose |
 |---|---|
