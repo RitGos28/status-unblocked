@@ -224,9 +224,14 @@ Run them:
 pytest                      # everything (58 tests, ~1s)
 pytest tests/unit           # fast unit pass
 pytest tests/e2e -v         # end-to-end smoke
+pytest --cov=standup --cov-report=term-missing
 ruff check .                # lint
 lint-imports                # enforce the dependency rule
 ```
+
+Current: **58 passing, 95% coverage overall.** The gate that matters is `summarize/` and `privacy/` at >=90% — those are the modules where a silent regression is a correctness or compliance failure rather than a bug. `normalizer.py`, `summarize/base.py` and `main.py` sit at 100%; `validator.py` at 99%.
+
+> `lint-imports` must be run as the console script. `python -m importlinter.cli` exits 0 *without reading* `pyproject.toml`, so it reports success while enforcing nothing — confirmed by adding a deliberate boundary violation and watching it pass.
 
 Week 1 covers: normalizer span round-tripping (including a Hypothesis property over arbitrary text), the rules summarizer with its negation and prompt-injection cases, all implemented validator rules with a `HallucinatingSummarizer` double and mutation properties, and the end-to-end cycle with audit-chain verification.
 
