@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Status Unblocked</h1>
+<p class="sub">Async standup updates, summarised faithfully. Every line links back to the words its author wrote.</p>
+<div class="card">
+  <p style="margin-top:0"><a href="/submit">Submit today's update</a> or <a href="/digests">read a digest</a>.</p>
+  <p class="muted" style="margin-bottom:0">{{ teams|length }} team(s) configured.</p>
+</div>
+{% endblock %}

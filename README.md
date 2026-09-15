@@ -3,7 +3,7 @@
 > An async standup bot for distributed teams. Collects short updates in Microsoft Teams, produces a **faithful, citation-backed** daily digest, and writes blockers back to GitHub Issues as durable tracked objects — without becoming a surveillance tool.
 
 **Stack:** Python 3.13 · FastAPI · SQLAlchemy 2.0 + Alembic · Postgres (SQLite in dev) · Docker
-**Status:** Week 1 — walking skeleton. See [Roadmap](#roadmap).
+**Status:** Week 1 complete — the walking skeleton runs end to end: submit → digest → click through to the verbatim source. 58 tests green. See [Roadmap](#roadmap).
 
 ---
 
@@ -221,10 +221,14 @@ Layout: `tests/{unit,integration,e2e,fixtures}/`. Stack: pytest · pytest-asynci
 Run them:
 
 ```bash
-pytest                      # everything
+pytest                      # everything (58 tests, ~1s)
 pytest tests/unit           # fast unit pass
 pytest tests/e2e -v         # end-to-end smoke
+ruff check .                # lint
+lint-imports                # enforce the dependency rule
 ```
+
+Week 1 covers: normalizer span round-tripping (including a Hypothesis property over arbitrary text), the rules summarizer with its negation and prompt-injection cases, all implemented validator rules with a `HallucinatingSummarizer` double and mutation properties, and the end-to-end cycle with audit-chain verification.
 
 ---
 
@@ -237,10 +241,11 @@ cp .env.example .env
 
 # local (SQLite, no containers)
 pip install -e ".[dev]"
+alembic upgrade head
 python -m scripts.seed_demo
 uvicorn standup.main:app --reload
 
-# or containerised
+# or containerised (Postgres + the API)
 docker compose up --build
 ```
 

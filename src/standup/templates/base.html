@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Status Unblocked{% endblock %}</title>
+<style>
+  :root {
+    --bg: #fbfbfa; --fg: #1d1c1a; --muted: #6b6862; --line: #e2e0db;
+    --card: #ffffff; --accent: #8a5a2b; --warn: #a4442c; --quote: #fff6e6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #17181a; --fg: #e9e7e3; --muted: #9c988f; --line: #2e3033;
+      --card: #1f2023; --accent: #d9a066; --warn: #e08a6d; --quote: #2b2419;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+         font: 15px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .wrap { max-width: 780px; margin: 0 auto; padding: 32px 20px 64px; }
+  header { border-bottom: 1px solid var(--line); margin-bottom: 28px; padding-bottom: 14px;
+           display: flex; gap: 18px; align-items: baseline; flex-wrap: wrap; }
+  header a { color: var(--muted); text-decoration: none; font-size: 14px; }
+  header a:hover { color: var(--fg); }
+  header .brand { font-weight: 650; color: var(--fg); font-size: 16px; letter-spacing: -0.01em; }
+  h1 { font-size: 24px; letter-spacing: -0.02em; margin: 0 0 6px; }
+  h2 { font-size: 15px; text-transform: uppercase; letter-spacing: 0.06em;
+       color: var(--muted); margin: 30px 0 12px; font-weight: 600; }
+  .sub { color: var(--muted); margin: 0 0 28px; font-size: 14px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+          padding: 16px 18px; margin-bottom: 10px; }
+  label { display: block; font-weight: 600; margin: 18px 0 6px; font-size: 14px; }
+  .hint { font-weight: 400; color: var(--muted); font-size: 13px; }
+  textarea, select, input { width: 100%; padding: 10px 12px; font: inherit;
+    border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--fg); }
+  textarea { min-height: 80px; resize: vertical; }
+  button { font: inherit; font-weight: 600; padding: 10px 18px; border-radius: 8px;
+    border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer; }
+  button.ghost { background: transparent; color: var(--accent); }
+  .claim { display: flex; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+  .claim:last-child { border-bottom: 0; }
+  .who { font-weight: 650; white-space: nowrap; }
+  .cite { font-size: 12px; color: var(--accent); text-decoration: none;
+          border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; white-space: nowrap; }
+  .cite:hover { border-color: var(--accent); }
+  .muted { color: var(--muted); font-size: 13px; }
+  .withheld { color: var(--warn); font-size: 13px; border: 1px dashed var(--warn);
+              border-radius: 8px; padding: 10px 12px; margin-top: 18px; }
+  mark { background: var(--quote); color: inherit; padding: 2px 0; border-radius: 2px;
+         box-shadow: 0 0 0 3px var(--quote); }
+  pre.raw { white-space: pre-wrap; word-wrap: break-word; font: inherit;
+            background: var(--card); border: 1px solid var(--line);
+            border-radius: 10px; padding: 16px 18px; margin: 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 9px 8px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 600; font-size: 12px;
+       text-transform: uppercase; letter-spacing: 0.05em; }
+  .row-actions { display: flex; gap: 8px; align-items: center; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <span class="brand">Status Unblocked</span>
+    <a href="/submit">Submit update</a>
+    <a href="/digests">Digests</a>
+    <a href="/healthz">Health</a>
+  </header>
+  {% block content %}{% endblock %}
+</div>
+</body>
+</html>

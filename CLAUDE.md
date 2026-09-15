@@ -69,8 +69,9 @@ This is the constraint that keeps the summarizer seam honest. Enforced by import
 | Layer | May import |
 |---|---|
 | `domain/` | **nothing from this project** — pure dataclasses, enums, errors |
-| `summarize/` | `domain/` only |
-| `scheduling/` | `domain/` only (the `tick` function is pure) |
+| `summarize/{base,rules,validator,render}.py` | `domain/` only — this is the prompt boundary |
+| `summarize/service.py` | anything — it is the orchestrator, and does the I/O the pure modules must not |
+| `scheduling/tick.py` | `domain/` only (the `tick` function is pure) |
 | `ingestion/`, `tracker/`, `privacy/`, `db/`, `api/` | anything — these are the I/O layers |
 
 If you find yourself wanting to import a SQLAlchemy model into `summarize/`, that is the signal you are about to break the seam. Map it to a `domain` dataclass in `service.py` instead.
@@ -107,9 +108,13 @@ pytest tests/unit            # fast pass
 pytest tests/e2e -v          # end-to-end smoke
 pytest --cov=standup --cov-report=term-missing
 
-ruff check . && ruff format --check .
+ruff check .
 mypy src
-lint-imports                 # import-linter — enforces the dependency rule
+
+# import-linter. Use the console script: `python -m importlinter.cli` exits 0
+# without reading pyproject.toml, so it silently "passes" even when a contract
+# is broken. Verified by adding a deliberate violation.
+lint-imports
 
 alembic revision --autogenerate -m "description"
 alembic upgrade head

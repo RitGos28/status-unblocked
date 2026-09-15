@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}{{ team_name }} standup{% endblock %}
+{% block content %}
+<h1>{{ team_name }}</h1>
+<p class="sub">
+  Standup {{ cycle.local_date }} &middot; built {{ digest.generated_at.strftime('%H:%M UTC') }}
+  by <code>{{ digest.summarizer_name }} {{ digest.summarizer_version }}</code>
+</p>
+
+{% if not sections %}
+  <div class="card"><p style="margin:0">No updates were submitted for this cycle.</p></div>
+{% endif %}
+
+{% for section in sections %}
+  <h2>{{ section.title }}</h2>
+  <div class="card">
+    {% for claim in section.claims %}
+    <div class="claim">
+      <span class="who">{{ claim.member_name }}</span>
+      <span style="flex:1">{{ claim.text }}</span>
+      {% for c in claim.citations_json %}
+        <a class="cite" href="/evidence/{{ c.source_id }}" title="See the exact words this came from">source</a>
+      {% endfor %}
+    </div>
+    {% endfor %}
+  </div>
+{% endfor %}
+
+{% if digest.withheld_count %}
+<div class="withheld">
+  {{ digest.withheld_count }} item(s) withheld: failed source verification, or removed by their author.
+</div>
+{% endif %}
+
+<p class="muted" style="margin-top:26px">
+  Every line above is a verbatim quote, checked against its stored source before this page was written.
+  <a href="/digest/{{ digest.id }}.md">Markdown</a>
+</p>
+{% endblock %}

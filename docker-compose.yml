@@ -1,0 +1,37 @@
+# Local stack. Postgres is included because that is what deployment uses;
+# the app still runs on SQLite with no compose at all (see README).
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: standup
+      POSTGRES_PASSWORD: standup
+      POSTGRES_DB: standup
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U standup"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      STANDUP_ENV: docker
+      STANDUP_DATABASE_URL: postgresql+psycopg://standup:standup@db:5432/standup
+      STANDUP_BASE_URL: http://localhost:8000
+      STANDUP_LOG_JSON: "true"
+    ports:
+      - "8000:8000"
+    # Migrate, then seed a demo team so the app is usable on first boot.
+    command: >
+      sh -c "alembic upgrade head &&
+             python -m scripts.seed_demo &&
+             uvicorn standup.main:app --host 0.0.0.0 --port 8000"
+
+volumes:
+  pgdata:

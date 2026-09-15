@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Submit update{% endblock %}
+{% block content %}
+<h1>Today's update</h1>
+<p class="sub">Three short answers. Roughly ninety seconds. Only what you type here is stored.</p>
+
+{% if not members %}
+  <div class="card"><p style="margin:0">No members yet. Run <code>python -m scripts.seed_demo</code> first.</p></div>
+{% else %}
+<form method="post" action="/submit">
+  <label for="member_id">Who are you?</label>
+  <select id="member_id" name="member_id" required>
+    {% for m in members %}<option value="{{ m.id }}">{{ m.display_name }}</option>{% endfor %}
+  </select>
+
+  <label for="progress">Progress <span class="hint">what moved since last standup</span></label>
+  <textarea id="progress" name="progress" placeholder="Shipped the retry logic. Reviewed #214."></textarea>
+
+  <label for="blockers">Blockers <span class="hint">what is stopping you &mdash; this is the part people read</span></label>
+  <textarea id="blockers" name="blockers" placeholder="Waiting on staging credentials from infra."></textarea>
+
+  <label for="plan">Today <span class="hint">what you are picking up</span></label>
+  <textarea id="plan" name="plan" placeholder="Finish the migration, then pair on #219."></textarea>
+
+  <p style="margin-top:24px"><button type="submit">Submit update</button></p>
+</form>
+<p class="muted">Your update is visible to your whole team, equally. There is no manager-only view.</p>
+{% endif %}
+{% endblock %}

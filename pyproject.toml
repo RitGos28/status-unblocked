@@ -20,6 +20,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Only needed when STANDUP_DATABASE_URL points at Postgres; local dev on
+# SQLite does not pull this in.
+postgres = ["psycopg[binary]==3.2.3"]
 dev = [
     "pytest==8.3.4",
     "pytest-cov==6.0.0",
@@ -49,6 +52,8 @@ source = ["standup"]
 [tool.ruff]
 line-length = 100
 src = ["src", "tests"]
+# Alembic writes these; they are generated artifacts, not hand-maintained code.
+extend-exclude = ["src/standup/migrations/versions"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "C4"]
@@ -83,14 +88,23 @@ forbidden_modules = [
     "standup.config",
 ]
 
+# The prompt boundary. summarize.service is the orchestrator and is allowed to
+# do I/O; everything it calls must stay pure, so that whatever crosses into a
+# summarizer is only ever a SummaryRequest.
 [[tool.importlinter.contracts]]
-name = "summarize depends only on domain (the prompt boundary)"
+name = "the summarizer core is pure (the prompt boundary)"
 type = "forbidden"
-source_modules = ["standup.summarize"]
+source_modules = [
+    "standup.summarize.base",
+    "standup.summarize.rules",
+    "standup.summarize.validator",
+    "standup.summarize.render",
+]
 forbidden_modules = [
     "standup.api",
     "standup.db",
     "standup.ingestion",
     "standup.tracker",
     "standup.privacy",
+    "standup.config",
 ]

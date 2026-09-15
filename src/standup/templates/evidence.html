@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Source{% endblock %}
+{% block content %}
+<h1>Source</h1>
+
+{% if expired %}
+  <p class="sub">This evidence has expired under the team's retention policy.</p>
+  <div class="card">
+    <p style="margin:0">The original text was purged on
+      {{ update.purged_at.strftime('%Y-%m-%d') if update.purged_at else 'an earlier date' }}.
+      The quote below is what the digest cited at the time.</p>
+  </div>
+  <h2>Cited quote</h2>
+  <pre class="raw"><mark>{{ quote }}</mark></pre>
+{% else %}
+  <p class="sub">
+    {{ member_name }} &middot; {{ update.captured_at.strftime('%Y-%m-%d %H:%M UTC') }}
+    &middot; via {{ update.source_kind }}
+  </p>
+  <h2>As submitted</h2>
+  <pre class="raw">{{ before }}<mark>{{ quote }}</mark>{{ after }}</pre>
+  <p class="muted">
+    Highlighted span: characters {{ item.span_start }}&ndash;{{ item.span_end }} of the stored submission.
+    {% if update.permalink %}
+      <a href="{{ update.permalink }}">Open in {{ update.source_kind }}</a>
+    {% else %}
+      No platform link: {{ update.permalink_reason }}
+    {% endif %}
+  </p>
+{% endif %}
+
+<p class="muted">This view was logged to the audit trail. The author can see that it was opened.</p>
+{% endblock %}

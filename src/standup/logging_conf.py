@@ -47,7 +47,7 @@ def _scrub_value(value: Any) -> Any:
         return value
     if isinstance(value, dict):
         return {k: _scrub_value(v) for k, v in value.items()}
-    if isinstance(value, (list, tuple)):
+    if isinstance(value, list | tuple):
         return type(value)(_scrub_value(v) for v in value)
     return value
 
