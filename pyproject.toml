@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Async standup bot producing faithful, citation-backed daily digests"
 requires-python = ">=3.11"
 dependencies = [
-    "fastapi==0.115.6",
+    "fastapi==0.135.0",  # bumped from 0.115.6: microsoft-agents-hosting-fastapi needs starlette>=1.0, capped below that pre-0.135
     "uvicorn[standard]==0.34.0",
     "sqlalchemy==2.0.36",
     "alembic==1.14.0",
@@ -17,6 +17,10 @@ dependencies = [
     "structlog==24.4.0",
     "jinja2==3.1.5",
     "python-multipart==0.0.20",
+    "microsoft-agents-activity==1.5.0",
+    "microsoft-agents-hosting-core==1.5.0",
+    "microsoft-agents-hosting-fastapi==1.5.0",
+    "microsoft-agents-hosting-msteams==1.5.0",  # verified via PyPI 2026-09-17; see CLAUDE.md Teams invariant
 ]
 
 [project.optional-dependencies]
