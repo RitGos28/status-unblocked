@@ -71,7 +71,14 @@ for text in "Reviewed the rollout plan." "Reviewed the rollout plan and the runb
         --data-urlencode "blockers=Waiting on staging credentials from infra.")" = 303 ] \
         || fail "Ada submits"
 done
-pass "Ada submits twice; the second replaces the first"
+seq 6 | xargs -P 6 -I{} curl -s -o /dev/null -b "$WORK/ada.jar" -X POST "$BASE/submit" \
+    --data-urlencode "progress=Double-clicked submit {}" \
+    --data-urlencode "blockers=Waiting on staging credentials from infra."
+[ "$(status -b "$WORK/ada.jar" -X POST "$BASE/submit" \
+    --data-urlencode "progress=Reviewed the rollout plan and the runbook." \
+    --data-urlencode "blockers=Waiting on staging credentials from infra.")" = 303 ] \
+    || fail "Ada can still submit after six simultaneous submits"
+pass "Ada submits twice, then six times at once; she is never locked out and the last one counts"
 [ "$(status -c "$WORK/chen.jar" "$(link_for "Chen Wei")")" = 303 ] || fail "Chen's login link"
 [ "$(status -b "$WORK/chen.jar" -X POST "$BASE/submit" \
     --data-urlencode $'progress=Drafted the schema update.\nBlockers:\nnot really' \

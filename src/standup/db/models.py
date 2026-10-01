@@ -85,6 +85,9 @@ class Member(Base):
         JSON(none_as_null=True), nullable=True, default=None
     )
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Bumped by every submission. Its real job is the row lock that the
+    # UPDATE takes, which serialises one member's concurrent submissions.
+    submission_seq: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
     team: Mapped[Team] = relationship(back_populates="members")
 
