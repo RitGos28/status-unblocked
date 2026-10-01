@@ -58,9 +58,8 @@ def build_request(session: Session, cycle_id: str, base_url: str) -> SummaryRequ
             select(UpdateItem, Update)
             .join(Update, UpdateItem.update_id == Update.id)
             .where(Update.cycle_id == cycle_id)
-            .where(Update.purged_at.is_(None))
-            # A resubmission replaces the member's earlier update in the digest.
-            .where(Update.superseded_by.is_(None))
+            # Not purged, and a resubmission replaces the earlier update.
+            .where(Update.is_live())
             .order_by(UpdateItem.order)
         )
         .tuples()

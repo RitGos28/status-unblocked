@@ -97,7 +97,7 @@ def ingest(
             select(Update)
             .where(Update.cycle_id == cycle.id)
             .where(Update.member_id == member.id)
-            .where(Update.superseded_by.is_(None))
+            .where(Update.is_live())
             .order_by(Update.captured_at)
         )
         .scalars()
