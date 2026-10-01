@@ -59,7 +59,7 @@ def load_cycle_views(session: Session, now: datetime) -> list[CycleView]:
         update_count, last_update = session.execute(
             select(func.count(Update.id), func.max(Update.captured_at))
             .where(Update.cycle_id == cycle.id)
-            .where(Update.superseded_by.is_(None))
+            .where(Update.is_live())
         ).one()
         last_digest = session.execute(
             select(func.max(Digest.generated_at)).where(Digest.cycle_id == cycle.id)

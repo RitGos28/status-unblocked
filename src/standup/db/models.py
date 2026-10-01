@@ -27,8 +27,10 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    and_,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.sql.elements import ColumnElement
 
 from standup.domain.enums import CycleState, ItemKind, SourceKind
 
@@ -152,6 +154,15 @@ class Update(Base):
     @property
     def is_purged(self) -> bool:
         return self.purged_at is not None
+
+    @classmethod
+    def is_live(cls) -> ColumnElement[bool]:
+        """SQL filter for the updates that count: not superseded, not purged.
+
+        The single definition. Anything that asks "does this cycle have
+        updates", or "which update is this member's current one", uses it.
+        """
+        return and_(cls.superseded_by.is_(None), cls.purged_at.is_(None))
 
 
 class UpdateItem(Base):
