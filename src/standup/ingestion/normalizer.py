@@ -16,6 +16,7 @@ import unicodedata
 from dataclasses import dataclass
 
 from standup.domain.enums import ItemKind
+from standup.domain.errors import SpanDriftError
 from standup.ingestion.base import RawSubmission
 
 # Order matters: it is the order fields appear in the composed raw text.
@@ -64,18 +65,40 @@ class NormalizedUpdate:
     items: tuple[NormalizedItem, ...]
 
 
+_BLOCK_SEPARATOR = "\n\n"
+
+
+def _compose(submission: RawSubmission) -> tuple[str, dict[ItemKind, int]]:
+    """Build the raw text and record where each field's text starts in it.
+
+    Offsets are taken while the string is built, never found afterwards by
+    searching for a heading: a user can type "Blockers:" into Progress, and a
+    search would match their text instead of the real heading.
+    """
+    blocks: list[str] = []
+    starts: dict[ItemKind, int] = {}
+    position = 0
+    for kind in FIELD_ORDER:
+        value = submission.text_fields.get(kind, "")
+        if not value or not value.strip():
+            continue
+        if blocks:
+            position += len(_BLOCK_SEPARATOR)
+        heading = f"{FIELD_HEADINGS[kind]}:\n"
+        starts[kind] = position + len(heading)
+        block = heading + value.strip()
+        blocks.append(block)
+        position += len(block)
+    return _BLOCK_SEPARATOR.join(blocks), starts
+
+
 def compose_raw_text(submission: RawSubmission) -> str:
     """Build the canonical record of what someone submitted.
 
     Headings are included so the stored evidence reads the way the person filled
     the form in, and so spans have stable, meaningful surroundings.
     """
-    blocks: list[str] = []
-    for kind in FIELD_ORDER:
-        value = submission.text_fields.get(kind, "")
-        if value and value.strip():
-            blocks.append(f"{FIELD_HEADINGS[kind]}:\n{value.strip()}")
-    return "\n\n".join(blocks)
+    return _compose(submission)[0]
 
 
 def extract_entities(text: str) -> list[dict[str, str]]:
@@ -147,7 +170,7 @@ def _segment(block_text: str, block_offset: int) -> list[tuple[str, int, int]]:
 
 def normalize(submission: RawSubmission) -> NormalizedUpdate:
     """Compose the raw text and split it into items with verified spans."""
-    raw_text = compose_raw_text(submission)
+    raw_text, block_starts = _compose(submission)
     digest = hashlib.sha256(raw_text.encode("utf-8")).hexdigest()
 
     items: list[NormalizedItem] = []
@@ -157,15 +180,16 @@ def normalize(submission: RawSubmission) -> NormalizedUpdate:
         if not value or not value.strip():
             continue
 
-        heading = f"{FIELD_HEADINGS[kind]}:\n"
-        block_start = raw_text.index(heading) + len(heading)
+        block_start = block_starts[kind]
         block_text = value.strip()
 
         for text, start, end in _segment(block_text, block_start):
-            # Belt and braces: never emit a span that does not round-trip.
-            assert raw_text[start:end] == text, (
-                f"span drift for {kind}: {raw_text[start:end]!r} != {text!r}"
-            )
+            # Never emit a span that does not round-trip (invariant 3). A raised
+            # error, not an assert: python -O strips asserts.
+            if raw_text[start:end] != text:
+                raise SpanDriftError(
+                    f"span drift for {kind}: {raw_text[start:end]!r} != {text!r}"
+                )
             items.append(
                 NormalizedItem(
                     kind=kind,

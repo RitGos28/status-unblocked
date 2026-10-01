@@ -27,6 +27,13 @@ class ValidationFailure(StandupError):
     title = "Digest failed faithfulness validation"
 
 
+class SpanDriftError(StandupError):
+    """A computed span does not match its text. A bug, never user error."""
+
+    status_code = 500
+    title = "Internal error: citation offsets did not round-trip"
+
+
 class EmptySubmissionError(StandupError):
     status_code = 400
     title = "Submission was empty"
