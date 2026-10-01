@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.expression import Executable
 
 from standup.domain.enums import AuditAction
 
@@ -79,18 +80,27 @@ def _lock_chain(session: Session) -> None:
     from standup.db.models import AuditChainHead
 
     dialect = session.get_bind().dialect.name
+    create_head: Executable
     if dialect == "postgresql":
-        from sqlalchemy.dialects.postgresql import insert as dialect_insert
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+        create_head = (
+            pg_insert(AuditChainHead)
+            .values(id=1, seq=0)
+            .on_conflict_do_nothing(index_elements=["id"])
+        )
     elif dialect == "sqlite":
-        from sqlalchemy.dialects.sqlite import insert as dialect_insert
+        from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+
+        create_head = (
+            sqlite_insert(AuditChainHead)
+            .values(id=1, seq=0)
+            .on_conflict_do_nothing(index_elements=["id"])
+        )
     else:
         raise RuntimeError(f"audit chain locking is not implemented for {dialect!r}")
 
-    session.execute(
-        dialect_insert(AuditChainHead)
-        .values(id=1, seq=0)
-        .on_conflict_do_nothing(index_elements=["id"])
-    )
+    session.execute(create_head)
     session.execute(
         update(AuditChainHead).where(AuditChainHead.id == 1).values(seq=AuditChainHead.seq + 1)
     )
@@ -200,10 +210,10 @@ def verify_evidence(session: Session) -> list[str]:
             pinned[ids["update_id"]] = ids["content_sha256"]
 
     tampered: list[str] = []
-    for update in session.execute(select(Update)).scalars():
-        if update.raw_text is None:
+    for stored in session.execute(select(Update)).scalars():
+        if stored.raw_text is None:
             continue
-        actual = hashlib.sha256(update.raw_text.encode("utf-8")).hexdigest()
-        if pinned.get(update.id) != actual:
-            tampered.append(update.id)
+        actual = hashlib.sha256(stored.raw_text.encode("utf-8")).hexdigest()
+        if pinned.get(stored.id) != actual:
+            tampered.append(stored.id)
     return tampered
