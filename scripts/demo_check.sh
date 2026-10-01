@@ -78,6 +78,11 @@ pass "Ada submits twice; the second replaces the first"
     --data-urlencode "blockers=Stuck on the deploy pipeline.")" = 303 ] \
     || fail "a section heading typed into another box is accepted, not a 500"
 pass "Chen types 'Blockers:' inside Progress; the submission is stored correctly"
+[ "$(status -c "$WORK/bruno.jar" "$(link_for "Bruno Silva")")" = 303 ] || fail "Bruno's login link"
+[ "$(status -b "$WORK/bruno.jar" -X POST "$BASE/submit" \
+    --data-urlencode "progress=Merged the API changes, but waiting on review for the DB migration." \
+    --data-urlencode "blockers=None")" = 303 ] || fail "Bruno submits"
+pass "Bruno answers 'None' for blockers and mentions a wait inside Progress"
 
 # --- the daily build, at the cutoff (demo clock) -----------------------------
 AT="$($PY - <<'EOF'
@@ -99,6 +104,9 @@ grep -q "Moved to Blockers" <<<"$PAGE" || fail "Chen's misfiled blocker is promo
 grep -q "runbook" <<<"$PAGE" || fail "the resubmission is the one in the digest"
 MD="$(curl -s -b "$WORK/ada.jar" "$BASE/digest/$DIGEST_ID.md")"
 ! grep -q "No blockers today" <<<"$MD" || fail "'No blockers today.' is not a blocker"
+! grep -q "Bruno Silva\*\* - None" <<<"$MD" || fail "'None' in the Blockers box is not a blocker"
+grep -q "waiting on review for the DB migration" <<<"$(sed -n '/## Blockers/,/## Progress/p' <<<"$MD")" \
+    || fail "a blocker in one clause survives a negation-free sentence and is promoted"
 grep -q "$BASE/evidence/" <<<"$MD" || fail "every line links to its evidence"
 pass "digest: blockers first, promotion explained, negation honoured, every line cited"
 
