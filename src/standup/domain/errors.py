@@ -27,6 +27,13 @@ class ValidationFailure(StandupError):
     title = "Digest failed faithfulness validation"
 
 
+class ConfigurationError(StandupError):
+    """A required setting is missing for the operation being attempted."""
+
+    status_code = 500
+    title = "Configuration error"
+
+
 class SpanDriftError(StandupError):
     """A computed span does not match its text. A bug, never user error."""
 

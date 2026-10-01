@@ -106,6 +106,11 @@ class StandupCycle(Base):
     opens_at_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     cutoff_at_utc: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     state: Mapped[str] = mapped_column(String(16), default=CycleState.OPEN)
+    # When the team was told this cycle's digest is ready. Exactly one notice
+    # per cycle, whoever built the digest and whenever.
+    notified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
 
 
 class Update(Base):
