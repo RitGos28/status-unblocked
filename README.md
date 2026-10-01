@@ -1,9 +1,9 @@
 # Status Unblocked — Team Task & Standup Bot
 
-> An async standup bot for distributed teams. Collects short updates in Microsoft Teams, produces a **faithful, citation-backed** daily digest, and writes blockers back to GitHub Issues as durable tracked objects — without becoming a surveillance tool.
+> An async standup bot for distributed teams. Collects short updates through a web form (Microsoft Teams is in progress) and produces a **faithful, citation-backed** digest — without becoming a surveillance tool. Writing blockers back to GitHub Issues as durable tracked objects is the week-3 milestone; see [Roadmap](#roadmap) for what exists today.
 
 **Stack:** Python 3.13 · FastAPI · SQLAlchemy 2.0 + Alembic · Postgres (SQLite in dev) · Docker
-**Status:** Week 1 complete — the walking skeleton runs end to end: submit → digest → click through to the verbatim source. 72 tests green. See [Roadmap](#roadmap).
+**Status:** Week 1 complete — the walking skeleton runs end to end: submit → digest → click through to the verbatim source. 76 tests green. See [Roadmap](#roadmap).
 
 ---
 
@@ -38,12 +38,14 @@ So collection is not the problem. Collection is solved. The problem is **synthes
 
 **Shared blind spot: the digest is a terminal artifact.** It is produced, posted, forgotten. Nothing in any of these products knows on Wednesday that Monday's blocker is still open.
 
-### Four improvements this project makes
+### Four improvements this project is built around
 
-1. **Blocker lifecycle, not blocker mention.** Each blocker becomes a GitHub Issue with an owner and state, re-surfaced in the digest with an age (`open 3 days`) until closed. This automates the manual ritual teams converge on — a rotating owner spending three minutes a day checking yesterday's blockers.
-2. **Faithfulness as an enforced invariant, not a prompt instruction.** A validator that *fails the digest build*: every claim carries at least one citation; every quote must be a verifiable substring of the immutable source. Incumbents ship AI summaries with no provenance at all.
-3. **Write-back, not read-only.** Geekbot's explicit weakness, inverted into the core feature.
-4. **Privacy as architecture with a user-facing surface.** Not a policy page — a `/me/data` view, redaction, retention jobs, a hash-chained audit log of reads, and a **contest/correct** action on any digest line.
+Only part of each is built today; the Roadmap says which.
+
+1. **Blocker lifecycle, not blocker mention.** *(Planned, week 3.)* Each blocker will become a GitHub Issue with an owner and state, re-surfaced in the digest with an age (`open 3 days`) until closed. This automates the manual ritual teams converge on — a rotating owner spending three minutes a day checking yesterday's blockers.
+2. **Faithfulness as an enforced invariant, not a prompt instruction.** A validator that runs after every summarizer and drops any claim that fails (strict mode fails the build instead): every claim carries at least one citation; every quote must be a verifiable substring of the immutable source. Incumbents ship AI summaries with no provenance at all.
+3. **Write-back, not read-only.** *(Planned, week 3.)* Geekbot's explicit weakness, inverted into the core feature.
+4. **Privacy as architecture with a user-facing surface.** Not a policy page. Built today: a hash-chained audit log of reads. Planned for week 4: a `/me/data` view, redaction, retention jobs, and a **contest/correct** action on any digest line.
 
 ---
 
@@ -63,13 +65,13 @@ So the ordering is deliberate: build the extractive pipeline **and the validator
 
 **3. True per-message Teams permalinks are not constructible from a 1:1 bot chat.** Message deep links require a `19:`-form chat ID; Microsoft's docs state that 1:1 bot payloads carry the conversation ID in **`a:xxx`** format. This is a hard constraint, not an unknown.
 
-> **Consequence — the citation contract does not depend on Teams.** Every submission is stored immutably with every identifier Teams gives us, and the canonical citation target is an internal **evidence view** (`GET /evidence/{item_id}`) served by FastAPI. A native permalink is emitted *additionally* when constructible (channel messages). This is the more defensible answer anyway: the evidence store is tamper-evident and survives Teams retention/deletion, which a permalink does not.
+> **Consequence — the citation contract does not depend on Teams.** Every submission is stored immutably with every identifier Teams gives us, and the canonical citation target is an internal **evidence view** (`GET /evidence/{item_id}`) served by FastAPI. A native permalink is emitted *additionally* when constructible (channel messages). This is the more defensible answer anyway: the evidence store survives Teams retention/deletion, which a permalink does not. (Making it tamper-evident, by pinning each update's content hash into the audit chain, is in progress.)
 
 ### Privacy: the legal nuance most implementations miss
 
-Under GDPR, **consent is not a valid lawful basis in an employment context** — the power imbalance means an employee cannot freely refuse. So the design uses **legitimate interest with a documented assessment** (`docs/LIA.md`), plus strict data minimization and purpose limitation. The member-facing opt-in governs **scope** — notably `allow_external_processing`, which gates any future LLM — not participation.
+Under GDPR, **consent is not a valid lawful basis in an employment context** — the power imbalance means an employee cannot freely refuse. So the design uses **legitimate interest with a documented assessment** (`docs/LIA.md`, not yet written), plus strict data minimization and purpose limitation. The member-facing opt-in governs **scope** — notably `allow_external_processing`, which gates any future LLM — not participation.
 
-Because workers must be able to see how a tool classified their activity and contest mistakes (GDPR Art. 21, and EU AI Act human-oversight obligations once AI lands), **every digest line carries a contest/correct action.**
+Because workers must be able to see how a tool classified their activity and contest mistakes (GDPR Art. 21, and EU AI Act human-oversight obligations once AI lands), **every digest line will carry a contest/correct action** (week 4; not built yet).
 
 **Anti-patterns explicitly not implemented** — and defensible from the code, not merely claimed:
 
@@ -83,11 +85,13 @@ Because workers must be able to see how a tool classified their activity and con
 - No retention past the stated window
 - No third-party model sees anyone's text without that person's separate opt-in
 
-Backed by code: the bot requests **zero Microsoft Graph permissions** (checkable by an admin from the manifest), ingests only card submissions / 1:1 messages / explicit mentions, and the normalizer rejects anything else with a `scope_violation` counter.
+Planned for the Teams bot (week 2, not built yet): it will request **zero Microsoft Graph permissions** (checkable by an admin from the manifest), ingest only card submissions / 1:1 messages / explicit mentions, and reject anything else with a `scope_violation` counter. Today the only ingestion path is the web form, and there is no login yet, so anyone who can reach the app can read every team's digests.
 
 ---
 
 ## Architecture
+
+Target layout; modules not yet written are listed in CLAUDE.md.
 
 ```
 src/standup/
@@ -102,17 +106,17 @@ src/standup/
   db/         session models repositories/
 ```
 
-**Dependency rule.** `domain` imports nothing from the project; `summarize` imports only `domain`; `api` / `ingestion` / `tracker` are the only I/O layers. Enforced by an **import-linter** contract in CI — cheap, and it is what stops the LLM seam from leaking real data.
+**Dependency rule.** `domain` imports nothing from the project; `summarize` imports only `domain`; `api` / `ingestion` / `tracker` are the only I/O layers. Enforced by **import-linter** contracts (`lint-imports`; CI is not set up yet) — cheap, and it is what stops the LLM seam from leaking real data.
 
 ### Key seams
 
 | Module | Role |
 |---|---|
 | `ingestion/base.py` | `IngestionAdapter` protocol + `RawSubmission`. Teams and the web form are two adapters; everything downstream sees only canonical `Update`/`UpdateItem`. **This is what makes Teams optional.** |
-| `summarize/base.py` | `Summarizer` protocol (`SummaryRequest`/`SummaryResult`/`Claim`/`Citation`). The **prompt boundary**: a summarizer receives no ORM objects, no DB session, no emails, no unredacted text, and nothing from members who have not opted into external processing. |
+| `summarize/base.py` | `Summarizer` protocol (`SummaryRequest`/`SummaryResult`/`Claim`/`Citation`). The **prompt boundary**: a summarizer receives no ORM objects, no DB session, no emails, no unredacted text, and (once the consent model lands in week 4) nothing from members who have not opted into external processing. |
 | `summarize/validator.py` | Runs in `service.py` **after** any summarizer so it cannot be bypassed. Failing claims are dropped; the digest reports "*N withheld*". |
-| `tracker/base.py` | `TrackerAdapter` with `GitHubTracker` + `NoopTracker`. All writes go through `tracker_outbox` with backoff — **a GitHub outage must never lose a standup update.** |
-| `scheduling/tick.py` | One per-minute job calling a **pure** `tick(now, teams, members) -> [Action]`. Pure function + injected clock = zero flaky tests; "simulate three days" is a loop in a test. |
+| `tracker/base.py` *(planned)* | `TrackerAdapter` with `GitHubTracker` + `NoopTracker`. All writes go through `tracker_outbox` with backoff — **a GitHub outage must never lose a standup update.** |
+| `scheduling/tick.py` *(planned)* | One per-minute job calling a **pure** `tick(now, teams, members) -> [Action]`. Pure function + injected clock = zero flaky tests; "simulate three days" is a loop in a test. |
 
 ### The faithfulness validator
 
@@ -127,7 +131,7 @@ src/standup/
 | V7 | No cited source is outside consented/visible scope (privacy failures are faithfulness failures) | week 4 — needs the consent model |
 | V8 | Length-inflation guard for abstractive claims | live |
 
-A failing claim is **dropped**, not silently corrected, and the digest reports how many were withheld. Under `STANDUP_VALIDATOR_STRICT=true` (the CI setting) the build raises instead.
+A failing claim is **dropped**, not silently corrected, and the digest reports how many were withheld. Under `STANDUP_VALIDATOR_STRICT=true` (intended for CI, once CI exists) the build raises instead.
 
 ### Misfiled blockers get promoted, with a recorded reason
 
@@ -167,7 +171,7 @@ Walking-skeleton first. **Something demoable at the end of every week.** Risky A
 
 **Why.** Two independent risks can sink the project: discovering in week 3 that the tenant blocks sideloading, and discovering in week 3 that the citation model doesn't work. Week 1 kills both. The skeleton proves the *whole* value chain end-to-end with zero external services, so every later week is an upgrade to something already working rather than a bet.
 
-**Deliverables** — `pyproject.toml`, `main.py`, `config.py` (fail-fast on missing keys), `logging_conf.py` (structlog JSON + secret scrubbing), `api/health.py` · `db/models.py` + first Alembic migration (`team`, `member`, `standup_cycle`, `update`, `update_item`, `digest`, `digest_claim`, `audit_log`) · `api/web_forms.py` (3-field HTML form) · `ingestion/{base,web_adapter,normalizer}.py` with **character-offset spans** · `summarize/{base,rules,render,service}.py` (`RulesSummarizer` v0; renderer handles **withheld claims** from day one) · `api/evidence.py`, `api/digests.py`, `scripts/seed_demo.py` · `tests/unit/test_normalizer.py`, `tests/e2e/test_smoke_cycle.py` · `docker-compose.yml`, `.env.example`
+**Deliverables** — `pyproject.toml`, `main.py`, `config.py` (fail-fast on missing keys, once the first required secret exists; today every setting has a default), `logging_conf.py` (structlog JSON + secret scrubbing), `api/health.py` · `db/models.py` + first Alembic migration (`team`, `member`, `standup_cycle`, `update`, `update_item`, `digest`, `digest_claim`, `audit_log`) · `api/web_forms.py` (3-field HTML form) · `ingestion/{base,web_adapter,normalizer}.py` with **character-offset spans** · `summarize/{base,rules,render,service}.py` (`RulesSummarizer` v0; renderer handles **withheld claims** from day one) · `api/evidence.py`, `api/digests.py`, `scripts/seed_demo.py` · `tests/unit/test_normalizer.py`, `tests/e2e/test_smoke_cycle.py` · `docker-compose.yml`, `.env.example`
 
 **In parallel, days 1–2 — hard timebox 6 hours:** Entra app (single-tenant) + Azure Bot (F0, free); **check Teams admin → "Upload custom apps" policy**; apply to M365 Developer Program (bonus, never the critical path); install Agents Toolkit + Playground. Record in `docs/TEAMS-READINESS.md`.
 
@@ -179,7 +183,7 @@ Walking-skeleton first. **Something demoable at the end of every week.** Risky A
 - Validator V1–V6 and V8 (pulled forward from week 2), enforced in `service.py` after the summarizer
 - Hash-chained audit log, chain verified intact across ingest / digest-build / evidence-view
 - Alembic initial migration; Dockerfile (multi-stage, non-root, healthcheck); compose with Postgres
-- 72 tests, 95% coverage, ruff clean, both import-linter contracts kept
+- 72 tests at the end of week 1, 95% coverage, ruff clean, both import-linter contracts kept
 
 **Still open:** the Teams tenant go/no-go (check **Teams admin → Setup policies → Upload custom apps**), and a `docker build` — the image is written but unbuilt, since Docker Desktop was not running.
 
@@ -229,21 +233,21 @@ Drop in this order: (1) Projects v2 board sync, (2) GitHub App auth (keep fine-g
 
 ## Testing
 
-Layout: `tests/{unit,integration,e2e,fixtures}/`. Stack: pytest · pytest-asyncio · httpx `AsyncClient` (ASGI transport) · **respx** · **Hypothesis** · injected `Clock` protocol (not freezegun).
+Layout today: `tests/{unit,e2e}/`. Stack: pytest · FastAPI `TestClient` · **Hypothesis** · injected `Clock` protocol (not freezegun). `tests/integration/`, `tests/fixtures/` and **respx** arrive with the work that needs them.
 
-| What | How |
-|---|---|
-| **Teams adapter, no tenant** | Capture activity JSON from Agents Playground once, commit as fixtures, `Activity.model_validate(json)`, assert canonical `RawSubmission`. A `FakeTurnContext` records `send_activity` calls so card rendering is asserted with zero network. |
-| **Faithfulness** | `tests/fixtures/golden/*.yaml` parametrized over `[RulesSummarizer, FakeLLMSummarizer]`, so the future LLM must clear the identical bar. Adversarial cases: sarcasm, negation (`not blocked anymore`), a number appearing nowhere, near-identical text from two members (attribution), and a **prompt-injection** string. |
-| **Validator** | `HallucinatingSummarizer` double, assert 100% rejection. Hypothesis mutation tests (flip a digit, swap a `source_id`, shift an offset by 1, paraphrase a quote, reassign `member_id`), assert *every* mutation is rejected. |
-| **GitHub** | respx with recorded fixtures. `ensure_blocker_issue` twice gives exactly one POST; a 403 secondary-rate-limit schedules an outbox retry with the digest unaffected; reconcile rebuilds `tracker_link`. One `@pytest.mark.live_github` test, excluded from CI. |
-| **Privacy** | Audit-chain integrity; a test asserting a known secret never appears in captured logs; retention purge leaves digests renderable; `/me/delete` marks claims withheld. |
-| **E2E smoke** (<10s) | Three submissions, advance clock past cutoff, digest, validator passes, evidence link returns exact source text, `audit_log` has expected rows. **The regression net and the demo script simultaneously.** |
+| What | Status | How |
+|---|---|---|
+| **Teams adapter, no tenant** | built (adapter only) | Activity JSON built inline in the test, `Activity.model_validate(json)`, assert canonical `RawSubmission`. Playground-recorded fixtures and a `FakeTurnContext` for card rendering come with `api/teams_router.py`. |
+| **Faithfulness** | partial | Negation and misfiled-blocker cases are parametrized tests in `tests/unit/test_rules_summarizer.py`. Planned: a `tests/fixtures/golden/*.yaml` set parametrized over `[RulesSummarizer, FakeLLMSummarizer]`, adding sarcasm, a number appearing nowhere, near-identical text from two members, and a **prompt-injection** string. |
+| **Validator** | built | `HallucinatingSummarizer` double, assert 100% rejection. Hypothesis mutation properties (flip a digit, swap a `source_id`, shift an offset by 1) and example tests for paraphrase-as-quote and cross-attribution, each asserting the mutation is rejected. |
+| **GitHub** | planned (week 3) | respx with recorded fixtures. `ensure_blocker_issue` twice gives exactly one POST; a 403 secondary-rate-limit schedules an outbox retry with the digest unaffected; reconcile rebuilds `tracker_link`. One `@pytest.mark.live_github` test, excluded from CI. |
+| **Privacy** | partial | Built: audit-chain integrity (in the e2e smoke test) and a test asserting a known secret never appears in captured logs. Planned (week 4): retention purge leaves digests renderable; `/me/delete` marks claims withheld. |
+| **E2E smoke** (<10s) | built | Three submissions, digest, validator passes, evidence link returns exact source text, `audit_log` has the expected rows in an intact chain. Advancing the clock past a cutoff arrives with scheduling. **The regression net and the demo script simultaneously.** |
 
 Run them:
 
 ```bash
-pytest                      # everything (72 tests, ~1s)
+pytest                      # everything (76 tests, ~1s)
 pytest tests/unit           # fast unit pass
 pytest tests/e2e -v         # end-to-end smoke
 pytest --cov=standup --cov-report=term-missing
@@ -251,7 +255,7 @@ ruff check .                # lint
 lint-imports                # enforce the dependency rule
 ```
 
-Current: **72 passing, 95% coverage overall.** The gate that matters is `summarize/` and `privacy/` at >=90% — those are the modules where a silent regression is a correctness or compliance failure rather than a bug. `normalizer.py`, `summarize/base.py`, `logging_conf.py` and `main.py` sit at 100%; `validator.py` at 99%.
+Current: **76 passing, 95% coverage overall.** The gate that matters is `summarize/` and `privacy/` at >=90% — those are the modules where a silent regression is a correctness or compliance failure rather than a bug. `normalizer.py`, `summarize/base.py`, `logging_conf.py` and `main.py` sit at 100%; `validator.py` at 99%.
 
 > `lint-imports` must be run as the console script. `python -m importlinter.cli` exits 0 *without reading* `pyproject.toml`, so it reports success while enforcing nothing — confirmed by adding a deliberate boundary violation and watching it pass.
 
