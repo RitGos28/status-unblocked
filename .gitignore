@@ -6,6 +6,7 @@ dist/
 .venv/
 venv/
 .env
+.local-secret-key
 *.db
 *.sqlite3
 .pytest_cache/
