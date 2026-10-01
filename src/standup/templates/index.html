@@ -3,7 +3,11 @@
 <h1>Status Unblocked</h1>
 <p class="sub">Async standup updates, summarised faithfully. Every line links back to the words its author wrote.</p>
 <div class="card">
-  <p style="margin-top:0"><a href="/submit">Submit today's update</a> or <a href="/digests">read a digest</a>.</p>
-  <p class="muted" style="margin-bottom:0">{{ teams|length }} team(s) configured.</p>
+  {% if viewer %}
+  <p style="margin-top:0"><a href="/submit">Submit today's update</a> or <a href="/digests">read your team's digests</a>.</p>
+  <p class="muted" style="margin-bottom:0">Signed in as {{ viewer.display_name }}, {{ viewer.team.name }}.</p>
+  {% else %}
+  <p style="margin:0">Open the personal link your team gave you to sign in. There are no passwords; each link is for one person and expires.</p>
+  {% endif %}
 </div>
 {% endblock %}

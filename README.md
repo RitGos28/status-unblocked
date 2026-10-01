@@ -3,7 +3,7 @@
 > An async standup bot for distributed teams. Collects short updates through a web form (Microsoft Teams is in progress) and produces a **faithful, citation-backed** digest — without becoming a surveillance tool. Writing blockers back to GitHub Issues as durable tracked objects is the week-3 milestone; see [Roadmap](#roadmap) for what exists today.
 
 **Stack:** Python 3.13 · FastAPI · SQLAlchemy 2.0 + Alembic · Postgres (SQLite in dev) · Docker
-**Status:** Week 1 complete — the walking skeleton runs end to end: submit → digest → click through to the verbatim source. 91 tests green. See [Roadmap](#roadmap).
+**Status:** Week 1 complete — the walking skeleton runs end to end: submit → digest → click through to the verbatim source, behind per-member sign-in with team-scoped access. 108 tests green. See [Roadmap](#roadmap).
 
 ---
 
@@ -85,7 +85,7 @@ Because workers must be able to see how a tool classified their activity and con
 - No retention past the stated window
 - No third-party model sees anyone's text without that person's separate opt-in
 
-Planned for the Teams bot (week 2, not built yet): it will request **zero Microsoft Graph permissions** (checkable by an admin from the manifest), ingest only card submissions / 1:1 messages / explicit mentions, and reject anything else with a `scope_violation` counter. Today the only ingestion path is the web form, and there is no login yet, so anyone who can reach the app can read every team's digests.
+Planned for the Teams bot (week 2, not built yet): it will request **zero Microsoft Graph permissions** (checkable by an admin from the manifest), ingest only card submissions / 1:1 messages / explicit mentions, and reject anything else with a `scope_violation` counter. Today the only ingestion path is the web form. What is enforced now: every page except `/` and `/healthz` requires sign-in through a personal, signed, expiring link (no passwords, no roles); a member sees only their own team's digests and evidence, and another team's resources answer 404 so their existence is not disclosed; who submitted an update comes from the session, never the form, so nobody can file as someone else; and every evidence view is audited under the viewing member's id.
 
 ---
 
@@ -171,7 +171,7 @@ Walking-skeleton first. **Something demoable at the end of every week.** Risky A
 
 **Why.** Two independent risks can sink the project: discovering in week 3 that the tenant blocks sideloading, and discovering in week 3 that the citation model doesn't work. Week 1 kills both. The skeleton proves the *whole* value chain end-to-end with zero external services, so every later week is an upgrade to something already working rather than a bet.
 
-**Deliverables** — `pyproject.toml`, `main.py`, `config.py` (fail-fast on missing keys, once the first required secret exists; today every setting has a default), `logging_conf.py` (structlog JSON + secret scrubbing), `api/health.py` · `db/models.py` + first Alembic migration (`team`, `member`, `standup_cycle`, `update`, `update_item`, `digest`, `digest_claim`, `audit_log`) · `api/web_forms.py` (3-field HTML form) · `ingestion/{base,web_adapter,normalizer}.py` with **character-offset spans** · `summarize/{base,rules,render,service}.py` (`RulesSummarizer` v0; renderer handles **withheld claims** from day one) · `api/evidence.py`, `api/digests.py`, `scripts/seed_demo.py` · `tests/unit/test_normalizer.py`, `tests/e2e/test_smoke_cycle.py` · `docker-compose.yml`, `.env.example`
+**Deliverables** — `pyproject.toml`, `main.py`, `config.py` (fail-fast on missing keys), `logging_conf.py` (structlog JSON + secret scrubbing), `api/health.py` · `db/models.py` + first Alembic migration (`team`, `member`, `standup_cycle`, `update`, `update_item`, `digest`, `digest_claim`, `audit_log`) · `api/web_forms.py` (3-field HTML form) · `ingestion/{base,web_adapter,normalizer}.py` with **character-offset spans** · `summarize/{base,rules,render,service}.py` (`RulesSummarizer` v0; renderer handles **withheld claims** from day one) · `api/evidence.py`, `api/digests.py`, `scripts/seed_demo.py` · `tests/unit/test_normalizer.py`, `tests/e2e/test_smoke_cycle.py` · `docker-compose.yml`, `.env.example`
 
 **In parallel, days 1–2 — hard timebox 6 hours:** Entra app (single-tenant) + Azure Bot (F0, free); **check Teams admin → "Upload custom apps" policy**; apply to M365 Developer Program (bonus, never the critical path); install Agents Toolkit + Playground. Record in `docs/TEAMS-READINESS.md`.
 
@@ -247,7 +247,7 @@ Layout today: `tests/{unit,integration,e2e}/`. Stack: pytest · FastAPI `TestCli
 Run them:
 
 ```bash
-pytest                      # everything (91 tests, ~1s)
+pytest                      # everything (108 tests, a few seconds)
 pytest tests/unit           # fast unit pass
 pytest tests/e2e -v         # end-to-end smoke
 pytest --cov=standup --cov-report=term-missing
@@ -259,7 +259,7 @@ python -m scripts.verify_integrity   # audit chain + stored-text hashes
 
 CI (`.github/workflows/ci.yml`) runs all of the above with `STANDUP_VALIDATOR_STRICT=true`, gates `summarize/` and `privacy/` at 90% coverage, runs migrations plus the integration and e2e tests against Postgres 16, and builds the Docker image.
 
-Current: **91 passing, 95% coverage overall.** The gate that matters is `summarize/` and `privacy/` at >=90% — those are the modules where a silent regression is a correctness or compliance failure rather than a bug. `normalizer.py`, `summarize/base.py`, `logging_conf.py` and `main.py` sit at 100%; `validator.py` at 99%.
+Current: **108 passing, 96% coverage overall.** The gate that matters is `summarize/` and `privacy/` at >=90% — those are the modules where a silent regression is a correctness or compliance failure rather than a bug. `normalizer.py`, `summarize/base.py`, `logging_conf.py` and `main.py` sit at 100%; `validator.py` at 99%.
 
 > `lint-imports` must be run as the console script. `python -m importlinter.cli` exits 0 *without reading* `pyproject.toml`, so it reports success while enforcing nothing — confirmed by adding a deliberate boundary violation and watching it pass.
 
@@ -273,24 +273,27 @@ Week 1 covers: normalizer span round-tripping (including a Hypothesis property o
 git clone https://github.com/RitGos28/status-unblocked.git
 cd status-unblocked
 cp .env.example .env
+# set STANDUP_SECRET_KEY in .env (required, 32+ chars):
+python -c "import secrets; print(secrets.token_urlsafe(48))"
 
 # local (SQLite, no containers)
 pip install -e ".[dev]"
 alembic upgrade head
-python -m scripts.seed_demo
+python -m scripts.seed_demo        # prints a personal login link per member
 uvicorn standup.main:app --reload
 
-# or containerised (Postgres + the API)
-docker compose up --build
+# or containerised (Postgres + the API); reads STANDUP_SECRET_KEY from your shell
+export STANDUP_SECRET_KEY=...
+docker compose up --build          # the seed's links appear in the logs
 ```
 
-Then open <http://localhost:8000/submit> to file an update, and <http://localhost:8000/digests> to build and read the digest.
+Open a member's login link to sign in as them, then use **Submit update** and **Digests**. `python -m scripts.issue_links` prints fresh links at any time.
 
 ### A two-minute walkthrough
 
-1. **Submit as Ada** — Progress `Shipped the retry logic. Reviewed #214.`, Blockers `Waiting on staging credentials from infra.`, Today `Finish the migration.`
-2. **Submit as Bruno**, and put `No blockers today.` in the Blockers box.
-3. **Submit as Chen**, and type `Stuck on the deploy pipeline.` into **Progress** — deliberately the wrong box.
+1. **Open Ada's link and submit** — Progress `Shipped the retry logic. Reviewed #214.`, Blockers `Waiting on staging credentials from infra.`, Today `Finish the migration.`
+2. **Open Bruno's link and submit**, putting `No blockers today.` in the Blockers box.
+3. **Open Chen's link and submit**, typing `Stuck on the deploy pipeline.` into **Progress** — deliberately the wrong box.
 4. Go to **Digests** and press **Build digest**.
 
 What you should see, and why each part matters:

@@ -11,11 +11,12 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from standup.config import get_settings
+from standup.config import get_database_settings, get_settings
 from standup.db import session as db_session
 from standup.db.models import Member, Team
 from standup.deps import set_clock
 from standup.domain.models import FakeClock, SystemClock
+from tests.helpers import TEST_SECRET_KEY
 
 
 @pytest.fixture
@@ -35,8 +36,10 @@ def app_env(tmp_path, monkeypatch, clock):
     monkeypatch.setenv("STANDUP_DATABASE_URL", db_url)
     monkeypatch.setenv("STANDUP_BASE_URL", "http://testserver")
     monkeypatch.setenv("STANDUP_ENV", "test")
+    monkeypatch.setenv("STANDUP_SECRET_KEY", TEST_SECRET_KEY)
 
     get_settings.cache_clear()
+    get_database_settings.cache_clear()
     db_session.reset_engine()
     db_session.create_all()
     set_clock(clock)
@@ -48,6 +51,7 @@ def app_env(tmp_path, monkeypatch, clock):
         db_session.drop_all()
     db_session.reset_engine()
     get_settings.cache_clear()
+    get_database_settings.cache_clear()
 
 
 @pytest.fixture

@@ -16,8 +16,8 @@ Every view appends an audit row. Reading someone's words is an event.
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
-from standup.db.models import Update, UpdateItem
-from standup.deps import DbSession, templates
+from standup.db.models import StandupCycle, Update, UpdateItem
+from standup.deps import CurrentMember, DbSession, ensure_same_team, templates
 from standup.domain.enums import AuditAction
 from standup.domain.errors import NotFoundError
 from standup.privacy.audit import record_audit
@@ -26,19 +26,21 @@ router = APIRouter(tags=["evidence"])
 
 
 @router.get("/evidence/{item_id}", response_class=HTMLResponse)
-def view_evidence(item_id: str, request: Request, session: DbSession) -> HTMLResponse:
+def view_evidence(
+    item_id: str, request: Request, session: DbSession, member: CurrentMember
+) -> HTMLResponse:
     item = session.get(UpdateItem, item_id)
-    if item is None:
+    update = session.get(Update, item.update_id) if item else None
+    cycle = session.get(StandupCycle, update.cycle_id) if update else None
+    if item is None or update is None or cycle is None:
         raise NotFoundError(f"evidence {item_id} not found")
-
-    update = session.get(Update, item.update_id)
-    if update is None:
-        raise NotFoundError(f"update {item.update_id} not found")
+    # Checked before the audit row is written: a refused read is not a read.
+    ensure_same_team(member, cycle.team_id, f"evidence {item_id}")
 
     record_audit(
         session,
-        actor_kind="viewer",
-        actor_id=request.client.host if request.client else "unknown",
+        actor_kind="member",
+        actor_id=member.id,
         action=AuditAction.EVIDENCE_VIEWED,
         subject_member_id=update.member_id,
         object_ids={"update_item_id": item_id, "update_id": update.id},
@@ -59,6 +61,7 @@ def view_evidence(item_id: str, request: Request, session: DbSession) -> HTMLRes
                 "before": "",
                 "quote": item.text,
                 "after": "",
+                "viewer": member,
             },
         )
 
@@ -74,5 +77,6 @@ def view_evidence(item_id: str, request: Request, session: DbSession) -> HTMLRes
             "quote": raw[item.span_start : item.span_end],
             "after": raw[item.span_end :],
             "member_name": update.member.display_name,
+            "viewer": member,
         },
     )

@@ -5,6 +5,7 @@ Run: python -m scripts.seed_demo
 
 from sqlalchemy import select
 
+from scripts.issue_links import print_links
 from standup.db.models import Member, Team
 from standup.db.session import create_all, session_scope
 
@@ -50,7 +51,10 @@ def seed() -> None:
             )
 
         print(f"Seeded team {team.name!r} with {len(DEMO_MEMBERS)} members.")
-        print("Now run: uvicorn standup.main:app --reload")
+
+    print("\nPersonal login links (each signs in as that person):")
+    print_links(DEMO_TEAM_SLUG)
+    print("\nNow run: uvicorn standup.main:app --reload")
 
 
 if __name__ == "__main__":

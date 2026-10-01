@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from sqlalchemy import Engine, create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
 
-from standup.config import get_settings
+from standup.config import get_database_settings
 from standup.db.models import Base
 
 _engine: Engine | None = None
@@ -32,7 +32,7 @@ def _make_engine(url: str) -> Engine:
 def get_engine() -> Engine:
     global _engine
     if _engine is None:
-        _engine = _make_engine(get_settings().database_url)
+        _engine = _make_engine(get_database_settings().database_url)
     return _engine
 
 

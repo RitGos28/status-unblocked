@@ -67,9 +67,12 @@
 <div class="wrap">
   <header>
     <span class="brand">Status Unblocked</span>
+    {% if viewer %}
     <a href="/submit">Submit update</a>
     <a href="/digests">Digests</a>
-    <a href="/healthz">Health</a>
+    <span class="muted" style="margin-left:auto">{{ viewer.display_name }} &middot; {{ viewer.team.name }}</span>
+    <form method="post" action="/logout" style="margin:0"><button class="ghost" type="submit">Sign out</button></form>
+    {% endif %}
   </header>
   {% block content %}{% endblock %}
 </div>

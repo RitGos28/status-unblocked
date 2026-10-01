@@ -65,15 +65,17 @@ alembic upgrade head
 
 ### Running the app locally
 
-`alembic upgrade head` and the seed are both required before `uvicorn`, or the submit page renders with no members and nothing can be filed:
+`STANDUP_SECRET_KEY` (32+ chars) must be set, or startup fails naming it. `alembic upgrade head` does not need it. The seed is required too, since every page except `/` and `/healthz` needs a signed-in member:
 
 ```bash
+export STANDUP_SECRET_KEY=$(python -c "import secrets; print(secrets.token_urlsafe(48))")
 alembic upgrade head
-python -m scripts.seed_demo      # team "Core Platform", 3 members
+python -m scripts.seed_demo      # team "Core Platform", 3 members; prints a login link each
 uvicorn standup.main:app --reload
+python -m scripts.issue_links    # fresh links any time
 ```
 
-Then `/submit` to file an update, `/digests` to build and read one. `docker compose up --build` runs the same thing against Postgres.
+Open a member's link to sign in as them, then `/submit` and `/digests`. `docker compose up --build` runs the same thing against Postgres (it reads `STANDUP_SECRET_KEY` from your shell). In tests, `tests/helpers.login_as(client, member_id)` signs in through the real `/login` route.
 
 ### import-linter
 
@@ -158,9 +160,10 @@ src/standup/
   config.py        pydantic-settings, STANDUP_ prefix
   deps.py          DI: get_db, get_clock, get_summarizer; Jinja templates
   logging_conf.py  structlog + secret scrubbing
-  api/             health, web_forms, evidence, digests
+  api/             health, auth, web_forms, evidence, digests
+  auth/            tokens (signed, expiring per-member login links)
   domain/          enums, errors, models (Clock, SystemClock, FakeClock), timezones   (pure, zero I/O)
-  ingestion/       base, web_adapter, teams_adapter, normalizer
+  ingestion/       base, web_adapter, teams_adapter, normalizer, service (the one ingest() path)
   summarize/       base, rules, validator, render, service
   privacy/         audit  (hash-chained log)
   db/              models, session
@@ -172,7 +175,7 @@ Planned but **not yet written** — do not import these, and do not assume they 
 
 `api/teams_router.py`, `api/privacy.py`, `api/admin.py`, `ingestion/permalink.py`, `summarize/llm.py`, `summarize/prompts.py`, all of `tracker/`, all of `scheduling/`, and `privacy/{consent,visibility,redaction,retention,export}.py`.
 
-**There is no authentication or authorization yet.** `/digests` lists every team's cycles and `/evidence/{id}` opens for anyone; "team-scoped" is the design, not something the code enforces today. Do not describe it as enforced in docs.
+**Auth is per-member magic links, and team scoping is enforced.** `deps.CurrentMember` resolves the signed-in member from the session cookie (401 otherwise). Every route that touches a team's data checks `deps.ensure_same_team()`, which answers 404 for another team's resources. A new route that reads digests, evidence or updates must do the same.
 
 ---
 
@@ -215,6 +218,8 @@ Wanting to import a SQLAlchemy model into `summarize/` is the signal you are abo
 10. **Every ingestion path pins the content hash.** The `update.ingested` audit row's `object_ids` must carry `content_sha256`, or `verify_evidence` reports that update as tampered. Any new adapter route (Teams, CSV import) must record it the same way `api/web_forms.py` does.
 
 11. **A cycle is the team's local date, never the UTC date.** Use `domain/timezones.local_cycle_date(now, team.tz_default)`; `now.date()` splits one working day across two cycles for teams far from UTC.
+
+12. **Who submitted comes from the session, never the request body.** Every ingestion path goes through `ingestion/service.ingest(session, submission, member, now)` with a member resolved by auth (or, for Teams, by `Member.source_keys`). A resubmission sets `superseded_by` on the earlier update; it never edits it.
 
 ---
 

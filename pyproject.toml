@@ -16,6 +16,7 @@ dependencies = [
     "pydantic-settings==2.7.0",
     "structlog==24.4.0",
     "jinja2==3.1.5",
+    "itsdangerous==2.2.0",  # signed login links and the session cookie
     "tzdata>=2025.2",  # IANA zones for zoneinfo on hosts without a system tz database
     "python-multipart==0.0.20",
     "microsoft-agents-activity==1.5.0",
@@ -96,6 +97,7 @@ forbidden_modules = [
     "standup.privacy",
     "standup.scheduling",
     "standup.config",
+    "standup.auth",
 ]
 
 # The prompt boundary. summarize.service is the orchestrator and is allowed to
@@ -117,4 +119,5 @@ forbidden_modules = [
     "standup.tracker",
     "standup.privacy",
     "standup.config",
+    "standup.auth",
 ]

@@ -8,6 +8,13 @@ class StandupError(Exception):
     title = "Internal error"
 
 
+class UnauthorizedError(StandupError):
+    """No signed-in member. Browsers get a page explaining how to sign in."""
+
+    status_code = 401
+    title = "Sign in with your personal link"
+
+
 class NotFoundError(StandupError):
     status_code = 404
     title = "Not found"

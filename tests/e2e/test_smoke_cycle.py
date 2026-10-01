@@ -14,19 +14,7 @@ from sqlalchemy import select
 from standup.db.models import AuditLog, Digest, DigestClaim, StandupCycle, Update, UpdateItem
 from standup.domain.enums import AuditAction, ClaimKind, CycleState
 from standup.privacy.audit import verify_chain
-
-
-def submit(client, member_id: str, progress: str = "", blockers: str = "", plan: str = ""):
-    return client.post(
-        "/submit",
-        data={
-            "member_id": member_id,
-            "progress": progress,
-            "blockers": blockers,
-            "plan": plan,
-        },
-        follow_redirects=False,
-    )
+from tests.helpers import login_as, submit
 
 
 def test_full_cycle_submit_digest_and_verify_evidence(client, session, team_with_members):
@@ -155,12 +143,13 @@ def test_empty_submission_is_rejected(client, team_with_members):
     assert response.headers["content-type"].startswith("application/problem+json")
 
 
-def test_unknown_member_is_rejected(client, team_with_members):
-    response = submit(client, "nope", progress="hello")
-    assert response.status_code == 404
+def test_submitting_requires_sign_in(client, team_with_members):
+    response = client.post("/submit", data={"progress": "hello"}, follow_redirects=False)
+    assert response.status_code == 401
 
 
-def test_evidence_for_unknown_item_is_a_problem_response(client, app_env):
+def test_evidence_for_unknown_item_is_a_problem_response(client, team_with_members):
+    login_as(client, team_with_members[1][0].id)
     response = client.get("/evidence/does-not-exist")
     assert response.status_code == 404
     assert response.json()["title"] == "Not found"

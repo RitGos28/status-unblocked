@@ -24,6 +24,8 @@ services:
       STANDUP_ENV: docker
       STANDUP_DATABASE_URL: postgresql+psycopg://standup:standup@db:5432/standup
       STANDUP_BASE_URL: http://localhost:8000
+      # Required; compose refuses to start without it. See .env.example.
+      STANDUP_SECRET_KEY: ${STANDUP_SECRET_KEY:?set STANDUP_SECRET_KEY (see .env.example)}
       STANDUP_LOG_JSON: "true"
     ports:
       - "8000:8000"

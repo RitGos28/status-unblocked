@@ -1,0 +1,125 @@
+"""Sign-in and team boundaries.
+
+Each member sees exactly their own team's digests and evidence. Another
+team's resources answer 404 rather than 403, so their existence is not
+disclosed. Nobody can file an update as someone else.
+"""
+
+import pytest
+from sqlalchemy import select
+
+from standup.db.models import AuditLog, Digest, Member, StandupCycle, Team, Update, UpdateItem
+from standup.domain.enums import AuditAction
+from tests.helpers import login_as, submit
+
+
+@pytest.fixture
+def other_team(session) -> tuple[Team, Member]:
+    team = Team(slug="mobile", name="Mobile")
+    session.add(team)
+    session.flush()
+    member = Member(team_id=team.id, display_name="Dana Park", tz="UTC")
+    session.add(member)
+    session.commit()
+    return team, member
+
+
+def build_digest_for(client, session, team_id: str) -> Digest:
+    cycle = session.execute(
+        select(StandupCycle).where(StandupCycle.team_id == team_id)
+    ).scalar_one()
+    assert client.post(f"/digests/build/{cycle.id}", follow_redirects=False).status_code == 303
+    session.expire_all()
+    return session.execute(select(Digest).where(Digest.cycle_id == cycle.id)).scalar_one()
+
+
+def test_pages_require_sign_in(client, team_with_members):
+    for path in ("/submit", "/digests"):
+        response = client.get(path, headers={"accept": "text/html"})
+        assert response.status_code == 401
+        assert "personal link" in response.text
+
+
+def test_forged_link_does_not_sign_in(client, team_with_members):
+    response = client.get("/login/not-a-real-token", follow_redirects=False)
+    assert response.status_code == 401
+    assert client.get("/digests").status_code == 401
+
+
+def test_sign_out_ends_the_session(client, team_with_members):
+    login_as(client, team_with_members[1][0].id)
+    assert client.get("/digests").status_code == 200
+    client.post("/logout", follow_redirects=False)
+    assert client.get("/digests").status_code == 401
+
+
+def test_cannot_submit_as_someone_else(client, session, team_with_members):
+    _team, (ada, bruno, _chen) = team_with_members
+    login_as(client, ada.id)
+    # A forged member_id field is ignored: the session decides who submits.
+    client.post(
+        "/submit",
+        data={"member_id": bruno.id, "progress": "Pretending to be Bruno."},
+        follow_redirects=False,
+    )
+    update = session.execute(select(Update)).scalar_one()
+    assert update.member_id == ada.id
+
+
+def test_other_teams_digest_and_evidence_are_not_found(
+    client, session, team_with_members, other_team
+):
+    core, (ada, *_rest) = team_with_members
+    _mobile, dana = other_team
+
+    submit(client, ada.id, blockers="Waiting on staging credentials.")
+    digest = build_digest_for(client, session, core.id)
+    item = session.execute(select(UpdateItem)).scalar_one()
+    cycle_id = digest.cycle_id
+
+    login_as(client, dana.id)
+    assert client.get(f"/digest/{digest.id}").status_code == 404
+    assert client.get(f"/digest/{digest.id}.md").status_code == 404
+    assert client.get(f"/evidence/{item.id}").status_code == 404
+    assert client.post(f"/digests/build/{cycle_id}").status_code == 404
+    assert "Core Platform" not in client.get("/digests").text
+
+    # A refused read is not a read: no audit row names Dana.
+    views = session.execute(
+        select(AuditLog).where(AuditLog.action == AuditAction.EVIDENCE_VIEWED.value)
+    ).scalars().all()
+    assert all(v.actor_id != dana.id for v in views)
+
+
+def test_evidence_views_are_audited_by_member(client, session, team_with_members):
+    _team, (ada, bruno, _chen) = team_with_members
+    submit(client, ada.id, blockers="Waiting on staging credentials.")
+    item = session.execute(select(UpdateItem)).scalar_one()
+
+    login_as(client, bruno.id)
+    assert client.get(f"/evidence/{item.id}").status_code == 200
+
+    view = session.execute(
+        select(AuditLog).where(AuditLog.action == AuditAction.EVIDENCE_VIEWED.value)
+    ).scalar_one()
+    assert view.actor_kind == "member"
+    assert view.actor_id == bruno.id
+    assert view.subject_member_id == ada.id
+
+
+def test_resubmitting_supersedes_the_earlier_update(client, session, clock, team_with_members):
+    core, (ada, *_rest) = team_with_members
+    submit(client, ada.id, progress="First draft of my update.")
+    clock.advance(minutes=5)
+    submit(client, ada.id, progress="Corrected update.")
+
+    session.expire_all()
+    first, second = session.execute(select(Update).order_by(Update.captured_at)).scalars().all()
+    assert first.superseded_by == second.id
+    assert second.superseded_by is None
+    # The earlier text is untouched (invariant 2), just no longer used.
+    assert "First draft" in first.raw_text
+
+    digest = build_digest_for(client, session, core.id)
+    texts = [c.text for c in digest.claims]
+    assert texts == ["Corrected update."]

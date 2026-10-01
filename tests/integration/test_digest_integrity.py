@@ -9,14 +9,7 @@ from sqlalchemy import select
 
 from standup.db.models import DigestClaim, StandupCycle, Team, Update
 from standup.privacy.audit import verify_chain, verify_evidence
-
-
-def submit(client, member_id: str, **fields: str):
-    return client.post(
-        "/submit",
-        data={"member_id": member_id, **fields},
-        follow_redirects=False,
-    )
+from tests.helpers import login_as, submit
 
 
 def build(client, session) -> str:
@@ -72,7 +65,8 @@ def test_cycle_uses_the_team_local_date(client, session, clock, team_with_member
     assert cycles[0].cutoff_at_utc is not None
 
 
-def test_browser_errors_render_html_and_api_errors_stay_json(client, app_env):
+def test_browser_errors_render_html_and_api_errors_stay_json(client, team_with_members):
+    login_as(client, team_with_members[1][0].id)
     browser = client.get("/digest/does-not-exist", headers={"accept": "text/html"})
     assert browser.status_code == 404
     assert browser.headers["content-type"].startswith("text/html")

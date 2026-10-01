@@ -7,7 +7,14 @@ from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from sqlalchemy import select
 
 from standup.db.models import Digest, StandupCycle, Team, Update
-from standup.deps import AppSettings, AppSummarizer, DbSession, templates
+from standup.deps import (
+    AppSettings,
+    AppSummarizer,
+    CurrentMember,
+    DbSession,
+    ensure_same_team,
+    templates,
+)
 from standup.domain.errors import NotFoundError
 from standup.summarize.service import build_digest
 
@@ -15,9 +22,14 @@ router = APIRouter(tags=["digest"])
 
 
 @router.get("/digests", response_class=HTMLResponse)
-def list_digests(request: Request, session: DbSession) -> HTMLResponse:
+def list_digests(request: Request, session: DbSession, member: CurrentMember) -> HTMLResponse:
+    """The viewer's own team only. Other teams' cycles are not listed."""
     cycles = (
-        session.execute(select(StandupCycle).order_by(StandupCycle.local_date.desc()))
+        session.execute(
+            select(StandupCycle)
+            .where(StandupCycle.team_id == member.team_id)
+            .order_by(StandupCycle.local_date.desc())
+        )
         .scalars()
         .all()
     )
@@ -31,7 +43,13 @@ def list_digests(request: Request, session: DbSession) -> HTMLResponse:
             .limit(1)
         ).scalar_one_or_none()
         update_count = len(
-            session.execute(select(Update).where(Update.cycle_id == cycle.id)).scalars().all()
+            session.execute(
+                select(Update)
+                .where(Update.cycle_id == cycle.id)
+                .where(Update.superseded_by.is_(None))
+            )
+            .scalars()
+            .all()
         )
         team = session.get(Team, cycle.team_id)
         rows.append(
@@ -46,7 +64,11 @@ def list_digests(request: Request, session: DbSession) -> HTMLResponse:
     return templates.TemplateResponse(
         request=request,
         name="digests.html",
-        context={"rows": rows, "submitted": request.query_params.get("submitted")},
+        context={
+            "rows": rows,
+            "submitted": request.query_params.get("submitted"),
+            "viewer": member,
+        },
     )
 
 
@@ -55,36 +77,51 @@ def build(
     cycle_id: str,
     request: Request,
     session: DbSession,
+    member: CurrentMember,
     summarizer: AppSummarizer,
     settings: AppSettings,
 ) -> RedirectResponse:
+    cycle = session.get(StandupCycle, cycle_id)
+    if cycle is None:
+        raise NotFoundError(f"cycle {cycle_id} not found")
+    ensure_same_team(member, cycle.team_id, f"cycle {cycle_id}")
+
     digest = build_digest(
         session,
         cycle_id=cycle_id,
         summarizer=summarizer,
         base_url=settings.base_url or str(request.base_url),
+        actor_id=member.id,
     )
     return RedirectResponse(url=f"/digest/{digest.id}", status_code=303)
 
 
 @router.get("/digest/{digest_id}.md", response_class=PlainTextResponse)
-def view_digest_markdown(digest_id: str, session: DbSession) -> str:
+def view_digest_markdown(digest_id: str, session: DbSession, member: CurrentMember) -> str:
     """Registered before the HTML route: Starlette matches in declaration
     order, and ``{digest_id}`` would otherwise swallow the ``.md`` suffix."""
-    digest = session.get(Digest, digest_id)
-    if digest is None:
-        raise NotFoundError(f"digest {digest_id} not found")
+    digest, _cycle = _visible_digest(session, member, digest_id)
     return digest.body_md
 
 
-@router.get("/digest/{digest_id}", response_class=HTMLResponse)
-def view_digest(digest_id: str, request: Request, session: DbSession) -> HTMLResponse:
+def _visible_digest(
+    session: DbSession, member: CurrentMember, digest_id: str
+) -> tuple[Digest, StandupCycle]:
+    """A digest the viewer's team owns, or 404 for anything else."""
     digest = session.get(Digest, digest_id)
-    if digest is None:
+    cycle = session.get(StandupCycle, digest.cycle_id) if digest else None
+    if digest is None or cycle is None:
         raise NotFoundError(f"digest {digest_id} not found")
+    ensure_same_team(member, cycle.team_id, f"digest {digest_id}")
+    return digest, cycle
 
-    cycle = session.get(StandupCycle, digest.cycle_id)
-    team = session.get(Team, cycle.team_id) if cycle else None
+
+@router.get("/digest/{digest_id}", response_class=HTMLResponse)
+def view_digest(
+    digest_id: str, request: Request, session: DbSession, member: CurrentMember
+) -> HTMLResponse:
+    digest, cycle = _visible_digest(session, member, digest_id)
+    team = session.get(Team, cycle.team_id)
 
     # Sections in reading order: what is blocking comes before what is done.
     from standup.summarize.render import SECTION_ORDER, SECTION_TITLES
@@ -105,5 +142,6 @@ def view_digest(digest_id: str, request: Request, session: DbSession) -> HTMLRes
             "cycle": cycle,
             "team_name": team.name if team else "Team",
             "sections": sections,
+            "viewer": member,
         },
     )

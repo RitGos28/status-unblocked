@@ -120,6 +120,12 @@ class Update(Base):
     captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     redacted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     purged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Set when the same member resubmits in the same cycle. The newer update is
+    # the one the digest uses; this row's text is never edited (invariant 2),
+    # so old digests that cited it still resolve.
+    superseded_by: Mapped[str | None] = mapped_column(
+        ForeignKey("update.id"), nullable=True, default=None
+    )
 
     items: Mapped[list["UpdateItem"]] = relationship(
         back_populates="update", cascade="all, delete-orphan"
