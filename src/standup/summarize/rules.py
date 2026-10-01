@@ -61,19 +61,43 @@ _NEGATIONS = (
 )
 
 
+# What people type into the Blockers box to mean "nothing". Compared after
+# lowercasing and dropping punctuation other than "/" and "-".
+_EMPTY_ANSWERS = frozenset(
+    {
+        "none", "n/a", "na", "nothing", "-", "--", "nope", "nil", "no",
+        "none today", "nothing today", "nothing yet", "none so far", "nothing so far",
+    }
+)
+
+# Clause boundaries. A negation cancels only the markers in its own clause:
+# "no blockers on the API, but stuck on the migration" still has a blocker.
+_CLAUSE_SPLIT = re.compile(r"[,;]|\b(?:but|however|although|though)\b")
+
+
+def is_empty_answer(text: str) -> bool:
+    """True for answers like "None", "N/A" or "-" that mean "no blocker"."""
+    cleaned = re.sub(r"[^\w/\-\s]", "", text.lower())
+    return " ".join(cleaned.split()) in _EMPTY_ANSWERS
+
+
 def looks_like_blocker(text: str) -> tuple[bool, str]:
-    """Return (is_blocker, matched_rule). Negations win over markers."""
-    lowered = text.lower()
+    """Return (is_blocker, matched_rule).
 
-    for negation in _NEGATIONS:
-        if negation in lowered:
-            return False, f"negation:{negation}"
-
-    for marker in _BLOCKER_MARKERS:
-        if re.search(rf"\b{re.escape(marker)}", lowered):
-            return True, f"marker:{marker}"
-
-    return False, ""
+    Evaluated clause by clause, and within a clause negations win over markers.
+    When nothing marks a blocker, the rule names the first negation seen, if
+    any, so a Blockers field that says "not blocked" can be dropped.
+    """
+    negation_rule = ""
+    for clause in _CLAUSE_SPLIT.split(text.lower()):
+        negation = next((n for n in _NEGATIONS if n in clause), None)
+        if negation is not None:
+            negation_rule = negation_rule or f"negation:{negation}"
+            continue
+        for marker in _BLOCKER_MARKERS:
+            if re.search(rf"\b{re.escape(marker)}", clause):
+                return True, f"marker:{marker}"
+    return False, negation_rule
 
 
 class RulesSummarizer:
@@ -101,9 +125,13 @@ class RulesSummarizer:
                     claim_kind = ClaimKind.BLOCKER
                     matched_rule = f"promoted:{rule}"
             else:
-                # A blocker field saying "no blockers" is not a blocker.
-                _, rule = looks_like_blocker(text)
-                if rule.startswith("negation:"):
+                # A blocker field saying "None", or "no blockers", is not a
+                # blocker. One that also names a real blocker in another clause
+                # ("no blockers on X, but stuck on Y") is.
+                if is_empty_answer(text):
+                    continue
+                is_blocker, rule = looks_like_blocker(text)
+                if not is_blocker and rule.startswith("negation:"):
                     continue
 
             # The claim IS the span. start/end index into source.text, so

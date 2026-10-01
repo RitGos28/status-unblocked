@@ -41,7 +41,8 @@ It reports `built 2 digest(s)`: yesterday's and today's. Then open **Digests** a
 ## 4. What the digest shows
 - **Blockers come first.** Ada: "Waiting on staging credentials from infra."
 - **Chen's misfiled blocker:** he typed "Stuck on the deploy pipeline." under Progress; it is under Blockers with "Moved to Blockers: the author filed it elsewhere, but it says 'stuck'". The text itself is unchanged.
-- **Negation:** Bruno wrote "No blockers today." It is not reported as a blocker.
+- **Negation:** Bruno wrote "No blockers today." It is not reported as a blocker. Answers like "None", "N/A" or "-" are not blockers either.
+- **Clauses:** a sentence such as "Merged the API changes, but waiting on review for the DB migration." is promoted: each clause is judged on its own, so "no blockers on X, but stuck on Y" still reports Y.
 - Every line has a **source** link. The **Markdown** link at the bottom gives the same digest as text.
 
 ## 5. Evidence, and proving nothing was edited

@@ -173,3 +173,25 @@ def test_section_cap_reports_how_many_lines_it_cut():
 def test_no_truncation_under_the_cap():
     result = summarize(source("s1", "Shipped it.", ItemKind.PROGRESS))
     assert result.truncated == 0
+
+
+@pytest.mark.parametrize("text", ["None", "none.", "N/A", "n/a", "Nothing", "-", "Nope", "nil"])
+def test_empty_answers_in_the_blocker_box_are_not_blockers(text: str):
+    """'None' typed into Blockers means no blocker, not a blocker called None."""
+    assert summarize(source("s1", text, ItemKind.BLOCKER)).claims == ()
+
+
+def test_negation_only_cancels_its_own_clause():
+    """'No blockers on X, but stuck on Y' still has a blocker: Y."""
+    is_blocker, rule = looks_like_blocker(
+        "No blockers on the API, but stuck on the DB migration."
+    )
+    assert is_blocker is True
+    assert rule == "marker:stuck"
+
+
+def test_a_mixed_sentence_in_progress_is_promoted():
+    text = "Finished the API, but waiting on review for the DB migration."
+    (claim,) = summarize(source("s1", text, ItemKind.PROGRESS)).claims
+    assert claim.kind is ClaimKind.BLOCKER
+    assert claim.text == text
