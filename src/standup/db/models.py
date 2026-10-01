@@ -348,3 +348,13 @@ class TrackerOutbox(Base):
     next_attempt_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     # A short, secret-free reason for the last failure or skip.
     last_error: Mapped[str] = mapped_column(String(300), default="")
+
+
+class Lease(Base):
+    """A named, expiring "only one runner at a time" lease (see db/lease.py)."""
+
+    __tablename__ = "lease"
+
+    name: Mapped[str] = mapped_column(String(64), primary_key=True)
+    holder: Mapped[str] = mapped_column(String(64), default="")
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
