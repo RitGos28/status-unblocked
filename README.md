@@ -1,9 +1,9 @@
 # Status Unblocked — Team Task & Standup Bot
 
-> An async standup bot for distributed teams. Collects short updates through a web form or a Microsoft Teams bot and produces a **faithful, citation-backed** digest — without becoming a surveillance tool. Writing blockers back to GitHub Issues as durable tracked objects is the week-3 milestone; see [Roadmap](#roadmap) for what exists today.
+> An async standup bot for distributed teams. Collects short updates through a web form or a Microsoft Teams bot and produces a **faithful, citation-backed** digest — without becoming a surveillance tool. Each blocker is written back to GitHub Issues as a durable tracked object; see [Roadmap](#roadmap) for what exists today.
 
 **Stack:** Python 3.13 · FastAPI · SQLAlchemy 2.0 + Alembic · Postgres (SQLite in dev) · Docker
-**Status:** Week 1 complete — the walking skeleton runs end to end: submit → digest → click through to the verbatim source, behind per-member sign-in with team-scoped access, from the web form or the Teams bot. 140 tests green. See [Roadmap](#roadmap).
+**Status:** Week 1 complete — the walking skeleton runs end to end: submit → digest → click through to the verbatim source, behind per-member sign-in with team-scoped access, from the web form or the Teams bot, with blockers written back to GitHub Issues. 162 tests green. See [Roadmap](#roadmap).
 
 ---
 
@@ -42,9 +42,9 @@ So collection is not the problem. Collection is solved. The problem is **synthes
 
 Only part of each is built today; the Roadmap says which.
 
-1. **Blocker lifecycle, not blocker mention.** *(Planned, week 3.)* Each blocker will become a GitHub Issue with an owner and state, re-surfaced in the digest with an age (`open 3 days`) until closed. This automates the manual ritual teams converge on — a rotating owner spending three minutes a day checking yesterday's blockers.
+1. **Blocker lifecycle, not blocker mention.** Each blocker becomes a GitHub Issue, linked from its digest line with its age (`#42 · 3d`). The same blocker on a later day adds a comment rather than a new issue. *(Not yet: syncing the issue's open/closed state back into the digest.)* This automates the manual ritual teams converge on — a rotating owner spending three minutes a day checking yesterday's blockers.
 2. **Faithfulness as an enforced invariant, not a prompt instruction.** A validator that runs after every summarizer and drops any claim that fails (strict mode fails the build instead): every claim carries at least one citation; every quote must be a verifiable substring of the immutable source. Incumbents ship AI summaries with no provenance at all.
-3. **Write-back, not read-only.** *(Planned, week 3.)* Geekbot's explicit weakness, inverted into the core feature.
+3. **Write-back, not read-only.** Geekbot's explicit weakness, inverted into the core feature.
 4. **Privacy as architecture with a user-facing surface.** Not a policy page. Built today: a hash-chained audit log of reads. Planned for week 4: a `/me/data` view, redaction, retention jobs, and a **contest/correct** action on any digest line.
 
 ---
@@ -115,7 +115,7 @@ src/standup/
 | `ingestion/base.py` | `IngestionAdapter` protocol + `RawSubmission`. Teams and the web form are two adapters; everything downstream sees only canonical `Update`/`UpdateItem`. **This is what makes Teams optional.** |
 | `summarize/base.py` | `Summarizer` protocol (`SummaryRequest`/`SummaryResult`/`Claim`/`Citation`). The **prompt boundary**: a summarizer receives no ORM objects, no DB session, no emails, no unredacted text, and (once the consent model lands in week 4) nothing from members who have not opted into external processing. |
 | `summarize/validator.py` | Runs in `service.py` **after** any summarizer so it cannot be bypassed. Failing claims are dropped; the digest reports "*N withheld*". |
-| `tracker/base.py` *(planned)* | `TrackerAdapter` with `GitHubTracker` + `NoopTracker`. All writes go through `tracker_outbox` with backoff — **a GitHub outage must never lose a standup update.** |
+| `tracker/base.py` | `TrackerAdapter` with `GitHubTracker` + `NoopTracker`. All writes go through `tracker_outbox` with backoff — **a GitHub outage must never lose a standup update.** |
 | `scheduling/tick.py` *(planned)* | One per-minute job calling a **pure** `tick(now, teams, members) -> [Action]`. Pure function + injected clock = zero flaky tests; "simulate three days" is a loop in a test. |
 
 ### The faithfulness validator
@@ -145,9 +145,13 @@ Negations are checked first and win: `no blockers`, `not blocked`, `no longer bl
 
 1. **Fingerprint** — `sha256(team | member | normalized_blocker_key)` with a UNIQUE constraint on `tracker_link.fingerprint`
 2. **Machine marker in the issue body** — `<!-- standup-bot:blocker:{fingerprint} -->` plus a `standup-blocker` label, so the mapping is rebuildable from GitHub alone
-3. **Reconcile job** — lists labelled issues and repairs the table after any crash
+3. **One write per blocker per cycle** — UNIQUE `(fingerprint, cycle_id)` on `tracker_outbox`, so rebuilding a digest never writes twice
 
-Recurrence adds **one** comment per cycle (guarded by a unique `(tracker_link_id, cycle_id)` row). Resolution comments, and closes the issue **only** if `TRACKER_AUTOCLOSE=true` — default **off**, because the bot should not close humans' issues unasked.
+Before creating an issue, the drain looks for an existing one carrying the marker, so a crash between "issue created" and "link saved" cannot open a duplicate. Recurrence adds **one** comment per cycle. The bot never closes issues; people do. *(Planned, not built: a periodic reconcile job that rebuilds every link from labelled issues.)*
+
+**Delivery never blocks a digest (invariant 8).** Building a digest only queues `tracker_outbox` rows. A drain then calls GitHub, running in the background after each build, or on demand with `python -m scripts.drain_outbox`. Rate limits (403 with `x-ratelimit-remaining: 0`, or 429) and 5xx errors back off and retry, honouring `retry-after`, for up to 8 attempts. A bad token or a missing repo fails the row at once with a stated reason. Every write is audited (`tracker.write`).
+
+To switch it on: `STANDUP_TRACKER=github`, `STANDUP_GITHUB_TOKEN` (a fine-grained token with Issues read/write on one repo), then `python -m scripts.set_github_repo --team core --repo owner/name`.
 
 ---
 
@@ -213,6 +217,8 @@ Walking-skeleton first. **Something demoable at the end of every week.** Risky A
 
 **Cut lines:** Projects v2 board sync, GitHub App auth, proactive scheduled prompts.
 
+**Shipped so far:** `tracker/{base,github,noop,idempotency,outbox}.py` · `tracker_link` + `tracker_outbox` tables · blocker-to-Issue with body marker and label · links both ways (issue → evidence and digest; digest → issue with age) · background drain with backoff · respx-mocked tests including a two-day recurrence that comments instead of duplicating. **Not yet:** the scheduler, the reconcile job, carry-over detection in `rules.py`, and a run against a real scratch repo (a read-only live test exists and is skipped without credentials).
+
 ### Week 4 — Privacy, deployment, docs, and the LLM seam
 
 **Why.** Two of the three "enterprise-grade" requirements land here, plus production deployment. Privacy is the subsystem that makes "not surveillance" *true rather than aspirational* — and the one architectural commitment guaranteeing it is that **there is no manager role and no manager-only view.**
@@ -242,14 +248,14 @@ Layout today: `tests/{unit,integration,e2e}/`. Stack: pytest · FastAPI `TestCli
 | **Teams bot, no tenant** | built | Hand-written activity fixtures in `tests/fixtures/teams/` (not yet recorded from Playground) drive the scope gate and `StandupAgent.on_turn` with a `FakeTurnContext` that records replies, against a real database. The HTTP route is exercised in anonymous mode. A manifest test asserts zero Graph permissions, and an SDK-compat test builds real replies. |
 | **Faithfulness** | partial | Negation and misfiled-blocker cases are parametrized tests in `tests/unit/test_rules_summarizer.py`. Planned: a `tests/fixtures/golden/*.yaml` set parametrized over `[RulesSummarizer, FakeLLMSummarizer]`, adding sarcasm, a number appearing nowhere, near-identical text from two members, and a **prompt-injection** string. |
 | **Validator** | built | `HallucinatingSummarizer` double, assert 100% rejection. Hypothesis mutation properties (flip a digit, swap a `source_id`, shift an offset by 1) and example tests for paraphrase-as-quote and cross-attribution, each asserting the mutation is rejected. |
-| **GitHub** | planned (week 3) | respx with recorded fixtures. `ensure_blocker_issue` twice gives exactly one POST; a 403 secondary-rate-limit schedules an outbox retry with the digest unaffected; reconcile rebuilds `tracker_link`. One `@pytest.mark.live_github` test, excluded from CI. |
+| **GitHub** | built (no reconcile yet) | respx-mocked API (`tests/unit/test_github_tracker.py`, `tests/integration/test_tracker_writeback.py`). A blocker gives exactly one POST; a rebuild adds nothing; the next day adds one comment; a lost link is recovered from the issue marker with no POST; a 403 rate limit schedules a retry and leaves the digest unaffected; a 401 fails the row; no tracker or no repo skips with a reason. One read-only `@pytest.mark.live_github` test, skipped without credentials. |
 | **Privacy** | partial | Built: audit-chain integrity (in the e2e smoke test) and a test asserting a known secret never appears in captured logs. Planned (week 4): retention purge leaves digests renderable; `/me/delete` marks claims withheld. |
 | **E2E smoke** (<10s) | built | Three submissions, digest, validator passes, evidence link returns exact source text, `audit_log` has the expected rows in an intact chain. Advancing the clock past a cutoff arrives with scheduling. **The regression net and the demo script simultaneously.** |
 
 Run them:
 
 ```bash
-pytest                      # everything (140 tests, a few seconds)
+pytest                      # everything (162 tests, a few seconds)
 pytest tests/unit           # fast unit pass
 pytest tests/e2e -v         # end-to-end smoke
 pytest --cov=standup --cov-report=term-missing
@@ -261,7 +267,7 @@ python -m scripts.verify_integrity   # audit chain + stored-text hashes
 
 CI (`.github/workflows/ci.yml`) runs all of the above with `STANDUP_VALIDATOR_STRICT=true`, gates `summarize/` and `privacy/` at 90% coverage, runs migrations plus the integration and e2e tests against Postgres 16, and builds the Docker image.
 
-Current: **140 passing, 97% coverage overall.** The gate that matters is `summarize/` and `privacy/` at >=90% — those are the modules where a silent regression is a correctness or compliance failure rather than a bug. `normalizer.py`, `summarize/base.py`, `logging_conf.py` and `main.py` sit at 100%; `validator.py` at 99%.
+Current: **162 passing, 97% coverage overall.** The gate that matters is `summarize/` and `privacy/` at >=90% — those are the modules where a silent regression is a correctness or compliance failure rather than a bug. `normalizer.py`, `summarize/base.py`, `logging_conf.py` and `main.py` sit at 100%; `validator.py` at 99%.
 
 > `lint-imports` must be run as the console script. `python -m importlinter.cli` exits 0 *without reading* `pyproject.toml`, so it reports success while enforcing nothing — confirmed by adding a deliberate boundary violation and watching it pass.
 

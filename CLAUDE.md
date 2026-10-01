@@ -168,6 +168,7 @@ src/standup/
   ingestion/       base, web_adapter, teams_adapter (+ scope gate, card), permalink, normalizer, service (the one ingest() path)
   summarize/       base, rules, validator, render, service
   privacy/         audit  (hash-chained log)
+  tracker/         base (TrackerAdapter protocol), github, noop, idempotency, outbox
   db/              models, session
   templates/       base, index, submit, digests, digest, evidence, error
   migrations/      alembic
@@ -175,7 +176,7 @@ src/standup/
 
 Planned but **not yet written** — do not import these, and do not assume they exist:
 
-`api/privacy.py`, `api/admin.py`, `summarize/llm.py`, `summarize/prompts.py`, all of `tracker/`, all of `scheduling/`, and `privacy/{consent,visibility,redaction,retention,export}.py`.
+`api/privacy.py`, `api/admin.py`, `summarize/llm.py`, `summarize/prompts.py`, the tracker reconcile job, all of `scheduling/`, and `privacy/{consent,visibility,redaction,retention,export}.py`.
 
 **Auth is per-member magic links, and team scoping is enforced.** `deps.CurrentMember` resolves the signed-in member from the session cookie (401 otherwise). Every route that touches a team's data checks `deps.ensure_same_team()`, which answers 404 for another team's resources. A new route that reads digests, evidence or updates must do the same.
 
@@ -213,7 +214,7 @@ Wanting to import a SQLAlchemy model into `summarize/` is the signal you are abo
 
 7. **No manager role.** No role hierarchy, no manager-only view, no per-person metrics. Digests are team-scoped and visible to every member equally. If a request needs "so the lead can see who didn't submit", that is the surveillance anti-pattern — push back rather than building it.
 
-8. **External writes go through the outbox** (week 3). `tracker/` never blocks ingestion or digest generation.
+8. **External writes go through the outbox.** `build_digest` only calls `tracker.outbox.enqueue_blocker_issues`; HTTP happens in `drain()`, after the response or from `scripts/drain_outbox`. The build route commits before scheduling the drain, because FastAPI runs background tasks before `get_db` teardown commits. Pass the injected clock's `now` through (`build_digest(now=...)`), or outbox rows will not be due under a `FakeClock`.
 
 9. **All Microsoft Agents SDK imports stay inside `api/teams_router.py` and `ingestion/teams_adapter.py`** (week 2). That SDK is about a year old and still moving; keep the blast radius of a breaking change to two files. Note `botbuilder-python` is archived and must not be used.
 
@@ -228,7 +229,7 @@ Wanting to import a SQLAlchemy model into `summarize/` is the signal you are abo
 ## Testing conventions
 
 - **Injected `Clock`, never `freezegun`.** Time comes from `deps.get_clock()`; tests pass a `FakeClock`. No `sleep` anywhere.
-- **No network.** `respx` will mock httpx once `tracker/` lands (it is not yet in `[dev]` — add it with the first tracker test). The one exception is `@pytest.mark.live_github`, excluded from CI.
+- **No network.** `respx` mocks the GitHub API in tracker tests. The one exception is `@pytest.mark.live_github`, a read-only test skipped unless `STANDUP_LIVE_GITHUB_TOKEN` and `STANDUP_LIVE_GITHUB_REPO` are set.
 - **Teams is tested from fixtures in `tests/fixtures/teams/`**, loaded with `tests/teams_fixtures.activity(name)`. They are hand-written today; replace them with Agents Playground recordings when available, keeping the names. Bot tests drive `StandupAgent.on_turn` with a `FakeTurnContext`, so they need no network.
 - **Keep pydantic >= 2.11.** The Agents SDK's models rely on `validate_by_name`; on 2.10 its own constructors fail. `tests/unit/test_teams_sdk_compat.py` guards this.
 - **The validator suite is parametrized over every summarizer implementation.** When you add one, add it to that list — do not write it a softer test.

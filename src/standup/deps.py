@@ -21,6 +21,9 @@ from standup.domain.models import Clock, SystemClock
 from standup.summarize.base import Summarizer
 from standup.summarize.render import explain_rule
 from standup.summarize.rules import RulesSummarizer
+from standup.tracker.base import TrackerAdapter
+from standup.tracker.github import GitHubTracker
+from standup.tracker.noop import NoopTracker
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
@@ -62,6 +65,13 @@ def get_summarizer(settings: Annotated[Settings, Depends(get_settings)]) -> Summ
     raise ValueError(
         f"unknown summarizer {settings.summarizer!r} (available: 'rules')"
     )
+
+
+def tracker_from_settings(settings: Settings) -> TrackerAdapter:
+    """GitHub when configured (config.py guarantees the token), else no-op."""
+    if settings.tracker == "github" and settings.github_token is not None:
+        return GitHubTracker(settings.github_token.get_secret_value())
+    return NoopTracker()
 
 
 DbSession = Annotated[Session, Depends(get_db)]

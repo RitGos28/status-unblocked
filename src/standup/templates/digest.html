@@ -21,6 +21,8 @@
         {% set why = claim.matched_rule | explain_rule %}
         {% if why %}<span class="why">{{ why }}</span>{% endif %}
       </span>
+      {% set issue = issues.get(claim.tracker_fingerprint) if claim.tracker_fingerprint else None %}
+      {% if issue %}<a class="cite" href="{{ issue.url }}" title="Tracked as a GitHub issue">#{{ issue.number }}{% if issue.age_days %} &middot; {{ issue.age_days }}d{% endif %}</a>{% endif %}
       {% for c in claim.citations_json %}
         <a class="cite" href="/evidence/{{ c.source_id }}" title="See the exact words this came from">source<span class="sr-only"> for this line</span></a>
       {% endfor %}

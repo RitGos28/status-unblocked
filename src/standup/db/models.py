@@ -207,6 +207,9 @@ class DigestClaim(Base):
     # "promoted:marker:stuck". Persisted so a classification stays explainable
     # after the build, not just while the summarizer is running.
     matched_rule: Mapped[str] = mapped_column(String(120), default="")
+    # For blocker claims: the fingerprint linking this line to its tracker
+    # issue (see tracker/idempotency.py). Empty for every other claim.
+    tracker_fingerprint: Mapped[str] = mapped_column(String(64), default="")
     order: Mapped[int] = mapped_column(Integer, default=0)
 
     digest: Mapped[Digest] = relationship(back_populates="claims")
@@ -251,3 +254,56 @@ class IngestRejection(Base):
     source: Mapped[str] = mapped_column(String(16))
     reason: Mapped[str] = mapped_column(String(64))
     conversation_type: Mapped[str] = mapped_column(String(32), default="")
+
+
+class TrackerLink(Base):
+    """One blocker's issue in the task tracker.
+
+    ``fingerprint`` is UNIQUE: the first of the three idempotency layers that
+    guarantee a recurring blocker never opens a second issue.
+    """
+
+    __tablename__ = "tracker_link"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    fingerprint: Mapped[str] = mapped_column(String(64), unique=True)
+    team_id: Mapped[str] = mapped_column(ForeignKey("team.id"))
+    member_id: Mapped[str] = mapped_column(ForeignKey("member.id"))
+    provider: Mapped[str] = mapped_column(String(16))
+    repo: Mapped[str] = mapped_column(String(200))
+    issue_number: Mapped[int] = mapped_column(Integer)
+    issue_url: Mapped[str] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    # The latest cycle that has been written to the issue, so a recurrence adds
+    # one comment per cycle and a rebuild of the same day adds none.
+    last_cycle_id: Mapped[str] = mapped_column(String(36))
+
+
+class TrackerOutbox(Base):
+    """A pending write to the task tracker.
+
+    Digest building only enqueues these; a separate drain step performs the
+    HTTP calls with backoff, so a tracker outage can never block a digest or
+    lose an update (invariant 8). One row per blocker per cycle.
+    """
+
+    __tablename__ = "tracker_outbox"
+    __table_args__ = (
+        UniqueConstraint("fingerprint", "cycle_id", name="uq_outbox_fingerprint_cycle"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    fingerprint: Mapped[str] = mapped_column(String(64))
+    team_id: Mapped[str] = mapped_column(ForeignKey("team.id"))
+    member_id: Mapped[str] = mapped_column(ForeignKey("member.id"))
+    cycle_id: Mapped[str] = mapped_column(ForeignKey("standup_cycle.id"))
+    digest_id: Mapped[str] = mapped_column(ForeignKey("digest.id"))
+    # What the issue or comment needs: title, quote, author, date, links.
+    payload_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    # pending -> done | skipped | failed
+    status: Mapped[str] = mapped_column(String(16), default="pending")
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    next_attempt_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    # A short, secret-free reason for the last failure or skip.
+    last_error: Mapped[str] = mapped_column(String(300), default="")

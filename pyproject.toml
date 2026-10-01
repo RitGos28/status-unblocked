@@ -20,6 +20,7 @@ dependencies = [
     "structlog==24.4.0",
     "jinja2==3.1.5",
     "itsdangerous==2.2.0",  # signed login links and the session cookie
+    "httpx==0.28.1",  # GitHub API client for tracker write-back
     "tzdata>=2025.2",  # IANA zones for zoneinfo on hosts without a system tz database
     "python-multipart==0.0.20",
     "microsoft-agents-activity==1.5.0",
@@ -41,6 +42,7 @@ dev = [
     "mypy==1.14.1",
     "import-linter==2.1",
     "hypothesis==6.123.2",
+    "respx==0.23.1",  # mocks the GitHub API in tracker tests; no network in CI
 ]
 
 [tool.setuptools.packages.find]

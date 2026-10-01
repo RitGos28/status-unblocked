@@ -8,6 +8,7 @@ It is also the mapping layer between the ORM and the pure domain types, which
 is what keeps ``summarize/`` free of database imports.
 """
 
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
@@ -25,6 +26,7 @@ from standup.summarize.base import (
 )
 from standup.summarize.render import render_markdown
 from standup.summarize.validator import FaithfulnessValidator
+from standup.tracker.outbox import enqueue_blocker_issues
 
 if TYPE_CHECKING:
     from standup.db.models import Digest
@@ -95,6 +97,7 @@ def build_digest(
     cycle_id: str,
     summarizer: Summarizer,
     base_url: str,
+    now: datetime,
     actor_id: str = "system",
 ) -> "Digest":
     """Produce and persist a digest for one cycle.
@@ -136,6 +139,7 @@ def build_digest(
 
     digest = Digest(
         cycle_id=cycle_id,
+        generated_at=now,
         summarizer_name=result.summarizer_name,
         summarizer_version=result.summarizer_version,
         validator_report_json=report.to_dict(),
@@ -147,7 +151,7 @@ def build_digest(
     session.flush()
 
     for order, claim in enumerate(kept):
-        session.add(
+        digest.claims.append(
             DigestClaim(
                 digest_id=digest.id,
                 kind=claim.kind.value,
@@ -175,6 +179,9 @@ def build_digest(
     cycle = session.get(StandupCycle, cycle_id)
     if cycle is not None:
         cycle.state = CycleState.DIGESTED
+        # Blocker write-back is queued here and delivered later by the outbox
+        # drain, so the tracker can never slow down or fail a digest.
+        enqueue_blocker_issues(session, digest, cycle, base_url, now)
 
     record_audit(
         session,

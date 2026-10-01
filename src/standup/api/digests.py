@@ -1,22 +1,29 @@
 """Digest building and reading."""
 
+from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, BackgroundTasks, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from sqlalchemy import select
 
-from standup.db.models import Digest, StandupCycle, Team, Update
+from standup.config import get_settings
+from standup.db.models import Digest, StandupCycle, Team, TrackerLink, Update
+from standup.db.session import session_scope
 from standup.deps import (
+    AppClock,
     AppSettings,
     AppSummarizer,
     CurrentMember,
     DbSession,
     ensure_same_team,
+    get_clock,
     templates,
+    tracker_from_settings,
 )
 from standup.domain.errors import NotFoundError
 from standup.summarize.service import build_digest
+from standup.tracker.outbox import drain
 
 router = APIRouter(tags=["digest"])
 
@@ -80,6 +87,8 @@ def build(
     member: CurrentMember,
     summarizer: AppSummarizer,
     settings: AppSettings,
+    background: BackgroundTasks,
+    clock: AppClock,
 ) -> RedirectResponse:
     cycle = session.get(StandupCycle, cycle_id)
     if cycle is None:
@@ -91,8 +100,15 @@ def build(
         cycle_id=cycle_id,
         summarizer=summarizer,
         base_url=settings.base_url or str(request.base_url),
+        now=clock.now(),
         actor_id=member.id,
     )
+    # Commit now: FastAPI runs background tasks before dependency teardown,
+    # which is where get_db would otherwise commit, so the drain would find
+    # no outbox rows.
+    session.commit()
+    # Runs after the response is sent: the page never waits on GitHub.
+    background.add_task(drain_tracker_outbox)
     return RedirectResponse(url=f"/digest/{digest.id}", status_code=303)
 
 
@@ -118,10 +134,26 @@ def _visible_digest(
 
 @router.get("/digest/{digest_id}", response_class=HTMLResponse)
 def view_digest(
-    digest_id: str, request: Request, session: DbSession, member: CurrentMember
+    digest_id: str, request: Request, session: DbSession, member: CurrentMember, clock: AppClock
 ) -> HTMLResponse:
     digest, cycle = _visible_digest(session, member, digest_id)
     team = session.get(Team, cycle.team_id)
+    fingerprints = [c.tracker_fingerprint for c in digest.claims if c.tracker_fingerprint]
+    links = {
+        link.fingerprint: link
+        for link in session.execute(
+            select(TrackerLink).where(TrackerLink.fingerprint.in_(fingerprints))
+        ).scalars()
+    }
+    now = clock.now()
+    issues = {
+        fp: {
+            "number": link.issue_number,
+            "url": link.issue_url,
+            "age_days": _age_days(now, link.created_at),
+        }
+        for fp, link in links.items()
+    }
 
     # Sections in reading order: what is blocking comes before what is done.
     from standup.summarize.render import SECTION_ORDER, SECTION_TITLES
@@ -143,5 +175,19 @@ def view_digest(
             "team_name": team.name if team else "Team",
             "sections": sections,
             "viewer": member,
+            "issues": issues,
         },
     )
+
+
+def _age_days(now: datetime, created_at: datetime) -> int:
+    # SQLite returns naive datetimes; both sides are UTC.
+    if created_at.tzinfo is None:
+        now = now.replace(tzinfo=None)
+    return max((now - created_at).days, 0)
+
+
+def drain_tracker_outbox() -> None:
+    """Deliver queued blocker writes. Called as a background task after a build."""
+    with session_scope() as session:
+        drain(session, tracker_from_settings(get_settings()), get_clock().now())
