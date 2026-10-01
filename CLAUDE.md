@@ -226,7 +226,7 @@ Wanting to import a SQLAlchemy model into `summarize/` is the signal you are abo
 
 11. **A cycle is the team's local date, never the UTC date.** Use `domain/timezones.local_cycle_date(now, team.tz_default)`; `now.date()` splits one working day across two cycles for teams far from UTC.
 
-12. **Who submitted comes from the session, never the request body.** Every ingestion path goes through `ingestion/service.ingest(session, submission, member, now)` with a member resolved by auth (or, for Teams, by `Member.source_keys`). A resubmission sets `superseded_by` on the earlier update; it never edits it.
+12. **Who submitted comes from the session, never the request body.** Every ingestion path goes through `ingestion/service.ingest(session, submission, member, now)` with a member resolved by auth (or, for Teams, by `Member.source_keys`). A resubmission sets `superseded_by` on the earlier update(s); it never edits them. `ingest()` first bumps `Member.submission_seq`, which takes a row/write lock so one member's concurrent submissions queue, and the day's cycle is created with `db.upsert.insert_ignoring_conflict`. Neither needs SAVEPOINT, which pysqlite lacks.
 
 13. **Audit appends go through `record_audit`, which locks `audit_chain_head` first.** Never insert `AuditLog` rows directly: reading the last row without that lock is how concurrent requests forked the chain. `UNIQUE(prev_hash)` turns any fork into a loud error.
 

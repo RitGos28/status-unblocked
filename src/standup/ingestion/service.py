@@ -11,12 +11,15 @@ here, so the invariants that make a citation verifiable are enforced once:
   of editing it.
 """
 
+import uuid
 from datetime import datetime
 
 from sqlalchemy import select
+from sqlalchemy import update as sql_update
 from sqlalchemy.orm import Session
 
 from standup.db.models import Member, StandupCycle, Team, Update, UpdateItem
+from standup.db.upsert import insert_ignoring_conflict
 from standup.domain.enums import AuditAction, CycleState
 from standup.domain.errors import EmptySubmissionError
 from standup.domain.timezones import cutoff_utc, local_cycle_date
@@ -29,25 +32,36 @@ log = get_logger(__name__)
 
 
 def get_or_create_open_cycle(session: Session, team: Team, now: datetime) -> StandupCycle:
-    """One cycle per team per local date, in the team's own time zone."""
+    """One cycle per team per local date, in the team's own time zone.
+
+    Safe under concurrency: when several people file the day's first update at
+    once, each tries the insert, all but one do nothing (UNIQUE team_id,
+    local_date), and everyone then reads the same row.
+    """
     local_date = local_cycle_date(now, team.tz_default)
-    cycle = session.execute(
+    query = (
         select(StandupCycle)
         .where(StandupCycle.team_id == team.id)
         .where(StandupCycle.local_date == local_date)
-    ).scalar_one_or_none()
+    )
+    cycle = session.execute(query).scalar_one_or_none()
+    if cycle is not None:
+        return cycle
 
-    if cycle is None:
-        cycle = StandupCycle(
-            team_id=team.id,
-            local_date=local_date,
-            opens_at_utc=now,
-            cutoff_at_utc=cutoff_utc(local_date, team.cutoff_local_time, team.tz_default),
-            state=CycleState.OPEN,
-        )
-        session.add(cycle)
-        session.flush()
-    return cycle
+    insert_ignoring_conflict(
+        session,
+        StandupCycle,
+        {
+            "id": str(uuid.uuid4()),
+            "team_id": team.id,
+            "local_date": local_date,
+            "opens_at_utc": now,
+            "cutoff_at_utc": cutoff_utc(local_date, team.cutoff_local_time, team.tz_default),
+            "state": CycleState.OPEN.value,
+        },
+        ["team_id", "local_date"],
+    )
+    return session.execute(query).scalar_one()
 
 
 def ingest(
@@ -64,14 +78,31 @@ def ingest(
         raise EmptySubmissionError("submission contained no text")
 
     normalized = normalize(submission)
+
+    # Serialise this member's submissions: bumping their counter takes the row
+    # lock (Postgres) or the write lock (SQLite) until commit, so a double
+    # click's second request waits, then sees the first one's update.
+    session.execute(
+        sql_update(Member)
+        .where(Member.id == member.id)
+        .values(submission_seq=Member.submission_seq + 1)
+    )
     cycle = get_or_create_open_cycle(session, member.team, now)
 
-    previous = session.execute(
-        select(Update)
-        .where(Update.cycle_id == cycle.id)
-        .where(Update.member_id == member.id)
-        .where(Update.superseded_by.is_(None))
-    ).scalar_one_or_none()
+    # Every live update this member has in the cycle: normally zero or one,
+    # but data written before the lock existed may hold several, and this
+    # supersedes them all so it recovers instead of failing.
+    previous = (
+        session.execute(
+            select(Update)
+            .where(Update.cycle_id == cycle.id)
+            .where(Update.member_id == member.id)
+            .where(Update.superseded_by.is_(None))
+            .order_by(Update.captured_at)
+        )
+        .scalars()
+        .all()
+    )
 
     update = Update(
         cycle_id=cycle.id,
@@ -89,8 +120,8 @@ def ingest(
     session.add(update)
     session.flush()
 
-    if previous is not None:
-        previous.superseded_by = update.id
+    for earlier in previous:
+        earlier.superseded_by = update.id
 
     for item in normalized.items:
         session.add(
@@ -118,7 +149,7 @@ def ingest(
             "update_id": update.id,
             "cycle_id": cycle.id,
             "content_sha256": normalized.content_sha256,
-            **({"supersedes": previous.id} if previous is not None else {}),
+            **({"supersedes": [earlier.id for earlier in previous]} if previous else {}),
         },
         purpose="standup submission",
     )
@@ -130,6 +161,6 @@ def ingest(
         cycle_id=cycle.id,
         items=len(normalized.items),
         source=submission.source_kind.value,
-        superseded=previous.id if previous is not None else None,
+        superseded=[earlier.id for earlier in previous],
     )
     return update
