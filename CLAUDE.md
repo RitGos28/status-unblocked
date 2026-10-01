@@ -218,7 +218,7 @@ Wanting to import a SQLAlchemy model into `summarize/` is the signal you are abo
 
 7. **No manager role.** No role hierarchy, no manager-only view, no per-person metrics. Digests are team-scoped and visible to every member equally. If a request needs "so the lead can see who didn't submit", that is the surveillance anti-pattern — push back rather than building it.
 
-8. **External writes go through the outbox.** `build_digest` only calls `tracker.outbox.enqueue_blocker_issues`; HTTP happens in `drain()`, after the response or from `scripts/drain_outbox`. The build route commits before scheduling the drain, because FastAPI runs background tasks before `get_db` teardown commits. Pass the injected clock's `now` through (`build_digest(now=...)`), or outbox rows will not be due under a `FakeClock`.
+8. **External writes go through the outbox.** `build_digest` only calls `tracker.outbox.enqueue_blocker_issues`; HTTP happens in `drain()`, after the response or from `scripts/drain_outbox`. `drain()` is single-runner: it must hold the `outbox-drain` lease (`db/lease.py`), because two drains could both see "no issue yet" for the same blocker and both create one. The build route commits before scheduling the drain, because FastAPI runs background tasks before `get_db` teardown commits. Pass the injected clock's `now` through (`build_digest(now=...)`), or outbox rows will not be due under a `FakeClock`.
 
 9. **All Microsoft Agents SDK imports stay inside `api/teams_router.py` and `ingestion/teams_adapter.py`** (week 2). That SDK is about a year old and still moving; keep the blast radius of a breaking change to two files. Note `botbuilder-python` is archived and must not be used.
 

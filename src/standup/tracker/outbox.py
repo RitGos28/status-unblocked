@@ -10,6 +10,7 @@ Each blocker becomes one issue. The same blocker reported on a later day adds
 one comment to that issue. The bot never closes issues; people do.
 """
 
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any
@@ -17,6 +18,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from standup.db.lease import acquire_lease, release_lease
 from standup.db.models import (
     Digest,
     StandupCycle,
@@ -39,6 +41,7 @@ _BLOCKER_KINDS = {ClaimKind.BLOCKER.value, ClaimKind.CARRYOVER.value}
 
 @dataclass
 class DrainReport:
+    busy: bool = False
     done: int = 0
     skipped: int = 0
     retrying: int = 0
@@ -103,11 +106,35 @@ def enqueue_blocker_issues(
     return queued
 
 
+DRAIN_LEASE = "outbox-drain"
+DRAIN_LEASE_TTL = timedelta(minutes=5)
+
+
 def drain(
     session: Session, tracker: TrackerAdapter, now: datetime, *, limit: int = 50
 ) -> DrainReport:
     """Deliver due outbox rows. Commits after each row, so one bad row cannot
-    roll back the issues already created for the others."""
+    roll back the issues already created for the others.
+
+    Single-runner: a drain must hold the outbox-drain lease, otherwise it
+    returns at once (``busy``). Two drains at the same moment would both see
+    "no issue yet" for a blocker and both create one, even for two different
+    rows of the same blocker, so per-row claims are not enough.
+    """
+    holder = str(uuid.uuid4())
+    if not acquire_lease(session, DRAIN_LEASE, holder, now, DRAIN_LEASE_TTL):
+        log.info("tracker.drain_busy")
+        return DrainReport(busy=True)
+    try:
+        return _drain_rows(session, tracker, now, limit)
+    finally:
+        session.rollback()
+        release_lease(session, DRAIN_LEASE, holder)
+
+
+def _drain_rows(
+    session: Session, tracker: TrackerAdapter, now: datetime, limit: int
+) -> DrainReport:
     report = DrainReport()
     rows = (
         session.execute(
