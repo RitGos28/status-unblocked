@@ -172,7 +172,7 @@ src/standup/
   summarize/       base, rules, validator, render, service
   privacy/         audit  (hash-chained log)
   tracker/         base (TrackerAdapter protocol), github, noop, idempotency, outbox
-  scheduling/      tick (pure: what is due), jobs (runs it: build, notify, drain)
+  scheduling/      tick (pure: what is due), jobs (runs it under the `scheduler` lease, in worker threads: build, notify once per cycle via `notified_at`, drain)
   db/              models, session
   templates/       base, index, submit, digests, digest, evidence, error
   migrations/      alembic

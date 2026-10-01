@@ -116,7 +116,7 @@ src/standup/
 | `summarize/base.py` | `Summarizer` protocol (`SummaryRequest`/`SummaryResult`/`Claim`/`Citation`). The **prompt boundary**: a summarizer receives no ORM objects, no DB session, no emails, no unredacted text, and (once the consent model lands in week 4) nothing from members who have not opted into external processing. |
 | `summarize/validator.py` | Runs in `service.py` **after** any summarizer so it cannot be bypassed. Failing claims are dropped; the digest reports "*N withheld*". |
 | `tracker/base.py` | `TrackerAdapter` with `GitHubTracker` + `NoopTracker`. All writes go through `tracker_outbox` with backoff — **a GitHub outage must never lose a standup update.** |
-| `scheduling/tick.py` | A **pure** `tick(now, cycles) -> [BuildDigest | DrainOutbox]`, enforced by an import-linter contract. `scheduling/jobs.py` runs it: each team's digest builds once its local cutoff passes, rebuilds quietly after a late update, notifies linked Teams users with a link and a blocker count (never anyone's words) on the first build, and drains the tracker outbox. It runs in-app every 60s with `STANDUP_SCHEDULER=true`, or once per call with `python -m scripts.tick` for cron. Pure function + injected clock = zero flaky tests; "simulate three days" is a loop in a test, and there is one. |
+| `scheduling/tick.py` | A **pure** `tick(now, cycles) -> [BuildDigest | DrainOutbox]`, enforced by an import-linter contract. `scheduling/jobs.py` runs it: each team's digest builds once its local cutoff passes, rebuilds quietly after a late update, notifies linked Teams users once per cycle with a link and a blocker count (never anyone's words), and drains the tracker outbox. It is single-runner (a database lease), so several workers or cron plus the in-app loop never build or announce twice; its database and HTTP work runs off the event loop; and it refuses to run without `STANDUP_BASE_URL`. It runs in-app every 60s with `STANDUP_SCHEDULER=true`, or once per call with `python -m scripts.tick` for cron. Pure function + injected clock = zero flaky tests; "simulate three days" is a loop in a test, and there is one. |
 
 ### The faithfulness validator
 
@@ -255,7 +255,7 @@ Layout today: `tests/{unit,integration,e2e}/`. Stack: pytest · FastAPI `TestCli
 Run them:
 
 ```bash
-pytest                      # everything (207 tests, a few seconds)
+pytest                      # everything (212 tests, a few seconds)
 pytest tests/unit           # fast unit pass
 pytest tests/e2e -v         # end-to-end smoke
 pytest --cov=standup --cov-report=term-missing
@@ -267,7 +267,7 @@ python -m scripts.verify_integrity   # audit chain + stored-text hashes
 
 CI (`.github/workflows/ci.yml`) runs all of the above with `STANDUP_VALIDATOR_STRICT=true`, gates `summarize/` and `privacy/` at 90% coverage, runs migrations plus the integration and e2e tests against Postgres 16, and builds the Docker image.
 
-Current: **207 passing, 97% coverage overall.** The gate that matters is `summarize/` and `privacy/` at >=90% — those are the modules where a silent regression is a correctness or compliance failure rather than a bug. `normalizer.py`, `summarize/base.py`, `logging_conf.py` and `main.py` sit at 100%; `validator.py` at 99%.
+Current: **212 passing, 97% coverage overall.** The gate that matters is `summarize/` and `privacy/` at >=90% — those are the modules where a silent regression is a correctness or compliance failure rather than a bug. `normalizer.py`, `summarize/base.py`, `logging_conf.py` and `main.py` sit at 100%; `validator.py` at 99%.
 
 > `lint-imports` must be run as the console script. `python -m importlinter.cli` exits 0 *without reading* `pyproject.toml`, so it reports success while enforcing nothing — confirmed by adding a deliberate boundary violation and watching it pass.
 

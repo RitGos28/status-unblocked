@@ -5,6 +5,8 @@ asks the pure ``tick()`` what is due, and does it. Called every minute by the
 in-app loop (``STANDUP_SCHEDULER=true``) or by ``python -m scripts.tick``.
 """
 
+import asyncio
+import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any, Protocol
@@ -12,10 +14,12 @@ from typing import Any, Protocol
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from standup.db.lease import acquire_lease, release_lease
 from standup.db.models import Digest, Member, StandupCycle, Team, Update
 from standup.domain.enums import ClaimKind
+from standup.domain.errors import ConfigurationError
 from standup.logging_conf import get_logger
-from standup.scheduling.tick import BuildDigest, CycleView, DrainOutbox, tick
+from standup.scheduling.tick import BuildDigest, CycleView, DrainOutbox, NotifyDigest, tick
 from standup.summarize.base import Summarizer
 from standup.summarize.service import build_digest
 from standup.tracker.base import TrackerAdapter
@@ -36,6 +40,7 @@ class DigestNotifier(Protocol):
 
 @dataclass
 class TickReport:
+    busy: bool = False
     built: list[str] = field(default_factory=list)
     notified: int = 0
     notify_failures: int = 0
@@ -71,9 +76,14 @@ def load_cycle_views(session: Session, now: datetime) -> list[CycleView]:
                 has_updates=update_count > 0,
                 last_update_at=_aware(last_update),
                 last_digest_at=_aware(last_digest),
+                notified=cycle.notified_at is not None,
             )
         )
     return views
+
+
+SCHEDULER_LEASE = "scheduler"
+SCHEDULER_LEASE_TTL = timedelta(minutes=10)
 
 
 async def run_tick(
@@ -85,42 +95,114 @@ async def run_tick(
     base_url: str,
     notifier: DigestNotifier | None = None,
 ) -> TickReport:
+    """One pass: build due digests, send due notices, drain the outbox.
+
+    Single-runner: it must hold the scheduler lease, so several workers, or
+    cron plus the in-app loop, never build or announce the same digest twice.
+    Every database and HTTP step runs in a worker thread, off the event loop,
+    so a slow pass never stalls the web app. The session is used by one thread
+    at a time, in sequence.
+    """
+    if not base_url:
+        raise ConfigurationError(
+            "STANDUP_BASE_URL is required for scheduled digests: their links go into "
+            "GitHub issues and Teams notices, where a relative link is useless"
+        )
+    holder = str(uuid.uuid4())
+    acquired = await asyncio.to_thread(
+        acquire_lease, session, SCHEDULER_LEASE, holder, now, SCHEDULER_LEASE_TTL
+    )
+    if not acquired:
+        log.info("scheduler.busy")
+        return TickReport(busy=True)
+    try:
+        return await _run_jobs(session, now, summarizer, tracker, base_url, notifier)
+    finally:
+        await asyncio.to_thread(_finish, session, holder)
+
+
+def _finish(session: Session, holder: str) -> None:
+    session.rollback()
+    release_lease(session, SCHEDULER_LEASE, holder)
+
+
+async def _run_jobs(
+    session: Session,
+    now: datetime,
+    summarizer: Summarizer,
+    tracker: TrackerAdapter,
+    base_url: str,
+    notifier: DigestNotifier | None,
+) -> TickReport:
     report = TickReport()
-    for job in tick(now, load_cycle_views(session, now)):
+    jobs = await asyncio.to_thread(lambda: tick(now, load_cycle_views(session, now)))
+    for job in jobs:
         if isinstance(job, BuildDigest):
-            digest = build_digest(
-                session,
-                cycle_id=job.cycle_id,
-                summarizer=summarizer,
-                base_url=base_url,
-                now=now,
-                actor_id="scheduler",
+            digest_id = await asyncio.to_thread(
+                _build, session, job.cycle_id, summarizer, base_url, now
             )
-            session.commit()
-            report.built.append(digest.id)
-            if job.notify and notifier is not None:
-                await _notify_team(session, notifier, digest, base_url, report)
+            report.built.append(digest_id)
+            if job.notify:
+                await _announce(session, notifier, job.cycle_id, base_url, now, report)
+        elif isinstance(job, NotifyDigest):
+            await _announce(session, notifier, job.cycle_id, base_url, now, report)
         elif isinstance(job, DrainOutbox):
-            report.drained = drain(session, tracker, now).done
+            drained = await asyncio.to_thread(drain, session, tracker, now)
+            report.drained = drained.done
     return report
 
 
-async def _notify_team(
+def _build(
+    session: Session, cycle_id: str, summarizer: Summarizer, base_url: str, now: datetime
+) -> str:
+    digest = build_digest(
+        session,
+        cycle_id=cycle_id,
+        summarizer=summarizer,
+        base_url=base_url,
+        now=now,
+        actor_id="scheduler",
+    )
+    session.commit()
+    return digest.id
+
+
+async def _announce(
     session: Session,
-    notifier: DigestNotifier,
-    digest: Digest,
+    notifier: DigestNotifier | None,
+    cycle_id: str,
     base_url: str,
+    now: datetime,
     report: TickReport,
 ) -> None:
-    """Post the digest link to every member with a Teams conversation.
+    """Tell the team their digest is ready, once per cycle.
 
     The notice carries a link and a count, never anyone's words: the digest
-    itself stays behind sign-in.
+    itself stays behind sign-in. The cycle is marked notified even when no one
+    can be reached (Teams off, or no linked members), so it is not retried.
     """
-    cycle = session.get(StandupCycle, digest.cycle_id)
+    text, references = await asyncio.to_thread(_notice, session, cycle_id, base_url)
+    if notifier is not None:
+        for member_id, reference in references:
+            try:
+                await notifier.notify(reference, text)
+                report.notified += 1
+            except Exception as exc:  # noqa: BLE001 - one unreachable member must not stop the rest
+                report.notify_failures += 1
+                log.warning("digest.notify_failed", member_id=member_id, error=type(exc).__name__)
+    await asyncio.to_thread(_mark_notified, session, cycle_id, now)
+
+
+def _notice(
+    session: Session, cycle_id: str, base_url: str
+) -> tuple[str, list[tuple[str, dict[str, Any]]]]:
+    cycle = session.get(StandupCycle, cycle_id)
     team = session.get(Team, cycle.team_id) if cycle else None
-    if team is None:
-        return
+    digest = session.execute(
+        select(Digest).where(Digest.cycle_id == cycle_id).order_by(Digest.generated_at.desc())
+    ).scalars().first()
+    if team is None or digest is None:
+        return "", []
     blockers = sum(1 for c in digest.claims if c.kind == ClaimKind.BLOCKER.value)
     text = (
         f"Today's {team.name} digest is ready ({blockers} blocker"
@@ -132,13 +214,14 @@ async def _notify_team(
         .where(Member.active.is_(True))
         .where(Member.teams_conversation_ref.is_not(None))
     ).scalars()
-    for member in members:
-        try:
-            await notifier.notify(member.teams_conversation_ref or {}, text)
-            report.notified += 1
-        except Exception as exc:  # noqa: BLE001 - one unreachable member must not stop the rest
-            report.notify_failures += 1
-            log.warning("digest.notify_failed", member_id=member.id, error=type(exc).__name__)
+    return text, [(m.id, m.teams_conversation_ref or {}) for m in members]
+
+
+def _mark_notified(session: Session, cycle_id: str, now: datetime) -> None:
+    cycle = session.get(StandupCycle, cycle_id)
+    if cycle is not None:
+        cycle.notified_at = now
+    session.commit()
 
 
 async def run_once(notifier: DigestNotifier | None = None) -> TickReport:

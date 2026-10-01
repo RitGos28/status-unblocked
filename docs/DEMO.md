@@ -38,6 +38,8 @@ python -m scripts.tick --at 2026-10-01T11:06:00Z     # today's date, just after 
 
 It reports `built 2 digest(s)`: yesterday's and today's. Then open **Digests** and today's digest.
 
+Run it again, or twice at once: nothing is built twice and no one is told twice, because only one pass may run at a time (a database lease) and each cycle is announced once. Run it with `STANDUP_BASE_URL` unset and it refuses, because its links go into GitHub issues and Teams messages.
+
 ## 4. What the digest shows
 - **Blockers come first.** Ada: "Waiting on staging credentials from infra."
 - **Chen's misfiled blocker:** he typed "Stuck on the deploy pipeline." under Progress; it is under Blockers with "Moved to Blockers: the author filed it elsewhere, but it says 'stuck'". The text itself is unchanged.

@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime, timedelta
 
-from standup.scheduling.tick import BuildDigest, CycleView, DrainOutbox, tick
+from standup.scheduling.tick import BuildDigest, CycleView, DrainOutbox, NotifyDigest, tick
 
 CUTOFF = datetime(2026, 9, 15, 11, 0, tzinfo=UTC)
 
@@ -30,15 +30,22 @@ def test_first_build_after_the_cutoff_notifies():
     assert builds(tick(CUTOFF, [cycle()])) == [BuildDigest("c1", notify=True)]
 
 
-def test_an_up_to_date_digest_is_left_alone():
-    done = cycle(last_digest_at=CUTOFF + timedelta(minutes=1))
-    assert builds(tick(CUTOFF + timedelta(hours=1), [done])) == []
+def test_an_up_to_date_notified_digest_is_left_alone():
+    done = cycle(last_digest_at=CUTOFF + timedelta(minutes=1), notified=True)
+    assert tick(CUTOFF + timedelta(hours=1), [done]) == [DrainOutbox()]
+
+
+def test_a_digest_built_by_hand_before_the_cutoff_is_announced_at_the_cutoff():
+    manual = cycle(last_digest_at=CUTOFF - timedelta(minutes=30))
+    assert tick(CUTOFF - timedelta(minutes=1), [manual]) == [DrainOutbox()]
+    assert tick(CUTOFF, [manual]) == [NotifyDigest("c1"), DrainOutbox()]
 
 
 def test_a_late_update_triggers_a_quiet_rebuild():
     late = cycle(
         last_digest_at=CUTOFF + timedelta(minutes=1),
         last_update_at=CUTOFF + timedelta(minutes=30),
+        notified=True,
     )
     assert builds(tick(CUTOFF + timedelta(hours=1), [late])) == [BuildDigest("c1", notify=False)]
 
@@ -63,6 +70,7 @@ def test_simulating_three_days_is_a_loop():
                 cutoff_at=CUTOFF + timedelta(days=d),
                 last_update_at=CUTOFF + timedelta(days=d) - timedelta(hours=1),
                 last_digest_at=digested.get(f"day{d}"),
+                notified=f"day{d}" in digested,
             )
             for d in range(3)
         ]

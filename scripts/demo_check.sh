@@ -99,9 +99,19 @@ cutoff = now.replace(hour=11, minute=5, second=0, microsecond=0)
 print((max(now, cutoff) + timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%SZ"))
 EOF
 )"
-TICK="$($PY -m scripts.tick --at "$AT" 2>/dev/null | tail -1)" || fail "scripts.tick --at"
-grep -Eq "built [1-9]" <<<"$TICK" || fail "tick built digests (got: $TICK)"
-pass "scheduler pass at $AT: $TICK"
+if STANDUP_BASE_URL= $PY -m scripts.tick --at "$AT" >/dev/null 2>&1; then
+    fail "a scheduler pass without STANDUP_BASE_URL refuses (its links would be relative)"
+fi
+# Wait on these two by PID: a bare `wait` would also wait for the server.
+$PY -m scripts.tick --at "$AT" 2>/dev/null | tail -1 >"$WORK/tick1.txt" &
+TICK1=$!
+$PY -m scripts.tick --at "$AT" 2>/dev/null | tail -1 >"$WORK/tick2.txt" &
+TICK2=$!
+wait "$TICK1" "$TICK2"
+TICK="$(cat "$WORK/tick1.txt") / $(cat "$WORK/tick2.txt")"
+BUILT=$(grep -Eho "built [0-9]+" "$WORK/tick1.txt" "$WORK/tick2.txt" | awk '{s += $2} END {print s}')
+[ "$BUILT" = 2 ] || fail "two simultaneous passes build each day's digest exactly once (got: $TICK)"
+pass "two scheduler passes at once ($AT) build each digest once; no base URL refuses"
 
 DIGEST_ID="$(curl -s -b "$WORK/ada.jar" "$BASE/digests" | grep -o 'href="/digest/[0-9a-f-]*"' | head -1 | cut -d/ -f3 | tr -d '"')"
 [ -n "$DIGEST_ID" ] || fail "today's digest is listed"
