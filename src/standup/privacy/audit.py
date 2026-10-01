@@ -13,12 +13,15 @@ lands in week 4.
 import hashlib
 import json
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from standup.domain.enums import AuditAction
+
+if TYPE_CHECKING:
+    from standup.db.models import AuditLog
 
 GENESIS_HASH = "0" * 64
 
@@ -75,7 +78,7 @@ def record_audit(
     subject_member_id: str | None = None,
     object_ids: dict[str, Any] | None = None,
     purpose: str = "",
-):
+) -> "AuditLog":
     """Append one row to the chain. Flushes so ``seq`` is assigned immediately."""
     from standup.db.models import AuditLog
 
@@ -140,3 +143,35 @@ def verify_chain(session: Session) -> tuple[bool, int | None]:
         prev_hash = row.row_hash
 
     return True, None
+
+
+def verify_evidence(session: Session) -> list[str]:
+    """Check every stored update against the content hash the chain pinned.
+
+    Returns the ids of updates whose ``raw_text`` no longer hashes to the value
+    recorded in their ``update.ingested`` audit row, or that have no such row.
+    An empty list means the evidence store is intact. Purged updates are
+    skipped: retention nulls their text deliberately.
+
+    This only proves anything when ``verify_chain`` also passes; otherwise the
+    pinned hashes themselves could have been rewritten.
+    """
+    from standup.db.models import AuditLog, Update
+
+    pinned: dict[str, str] = {}
+    rows = session.execute(
+        select(AuditLog).where(AuditLog.action == AuditAction.UPDATE_INGESTED.value)
+    ).scalars()
+    for row in rows:
+        ids = row.object_ids_json or {}
+        if "update_id" in ids and "content_sha256" in ids:
+            pinned[ids["update_id"]] = ids["content_sha256"]
+
+    tampered: list[str] = []
+    for update in session.execute(select(Update)).scalars():
+        if update.raw_text is None:
+            continue
+        actual = hashlib.sha256(update.raw_text.encode("utf-8")).hexdigest()
+        if pinned.get(update.id) != actual:
+            tampered.append(update.id)
+    return tampered

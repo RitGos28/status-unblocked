@@ -24,7 +24,7 @@ FIELD_ORDER: tuple[ItemKind, ...] = (ItemKind.PROGRESS, ItemKind.BLOCKER, ItemKi
 FIELD_HEADINGS: dict[ItemKind, str] = {
     ItemKind.PROGRESS: "Progress",
     ItemKind.BLOCKER: "Blockers",
-    ItemKind.PLAN: "Plan",
+    ItemKind.PLAN: "Today",
 }
 
 # A segment ends at a newline, a bullet, or sentence-final punctuation followed

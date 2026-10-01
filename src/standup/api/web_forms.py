@@ -15,6 +15,7 @@ from standup.db.models import Member, StandupCycle, Team, Update, UpdateItem
 from standup.deps import AppClock, DbSession, templates
 from standup.domain.enums import AuditAction, CycleState, SourceKind
 from standup.domain.errors import EmptySubmissionError, NotFoundError
+from standup.domain.timezones import cutoff_utc, local_cycle_date
 from standup.ingestion.normalizer import normalize
 from standup.ingestion.web_adapter import WebFormAdapter
 from standup.logging_conf import get_logger
@@ -24,20 +25,21 @@ router = APIRouter(tags=["ingestion"])
 log = get_logger(__name__)
 
 
-def get_or_create_open_cycle(session: DbSession, team_id: str, now: datetime) -> StandupCycle:
-    """One cycle per team per local date."""
-    local_date = now.date()
+def get_or_create_open_cycle(session: DbSession, team: Team, now: datetime) -> StandupCycle:
+    """One cycle per team per local date, in the team's own time zone."""
+    local_date = local_cycle_date(now, team.tz_default)
     cycle = session.execute(
         select(StandupCycle)
-        .where(StandupCycle.team_id == team_id)
+        .where(StandupCycle.team_id == team.id)
         .where(StandupCycle.local_date == local_date)
     ).scalar_one_or_none()
 
     if cycle is None:
         cycle = StandupCycle(
-            team_id=team_id,
+            team_id=team.id,
             local_date=local_date,
             opens_at_utc=now,
+            cutoff_at_utc=cutoff_utc(local_date, team.cutoff_local_time, team.tz_default),
             state=CycleState.OPEN,
         )
         session.add(cycle)
@@ -83,7 +85,7 @@ def submit(
         raise EmptySubmissionError("submission contained no text")
 
     normalized = normalize(submission)
-    cycle = get_or_create_open_cycle(session, member.team_id, now)
+    cycle = get_or_create_open_cycle(session, member.team, now)
 
     update = Update(
         cycle_id=cycle.id,
@@ -123,7 +125,13 @@ def submit(
         actor_id=member.id,
         action=AuditAction.UPDATE_INGESTED,
         subject_member_id=member.id,
-        object_ids={"update_id": update.id, "cycle_id": cycle.id},
+        # The content hash goes into the hash chain, so editing raw_text later
+        # is detectable: privacy.audit.verify_evidence recomputes and compares.
+        object_ids={
+            "update_id": update.id,
+            "cycle_id": cycle.id,
+            "content_sha256": normalized.content_sha256,
+        },
         purpose="standup submission",
     )
 

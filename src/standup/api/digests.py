@@ -1,5 +1,7 @@
 """Digest building and reading."""
 
+from typing import Any
+
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from sqlalchemy import select
@@ -51,6 +53,7 @@ def list_digests(request: Request, session: DbSession) -> HTMLResponse:
 @router.post("/digests/build/{cycle_id}")
 def build(
     cycle_id: str,
+    request: Request,
     session: DbSession,
     summarizer: AppSummarizer,
     settings: AppSettings,
@@ -59,7 +62,7 @@ def build(
         session,
         cycle_id=cycle_id,
         summarizer=summarizer,
-        base_url=settings.base_url,
+        base_url=settings.base_url or str(request.base_url),
     )
     return RedirectResponse(url=f"/digest/{digest.id}", status_code=303)
 
@@ -86,7 +89,7 @@ def view_digest(digest_id: str, request: Request, session: DbSession) -> HTMLRes
     # Sections in reading order: what is blocking comes before what is done.
     from standup.summarize.render import SECTION_ORDER, SECTION_TITLES
 
-    sections = []
+    sections: list[dict[str, Any]] = []
     for kind in SECTION_ORDER:
         claims = [c for c in digest.claims if c.kind == kind.value]
         if claims:

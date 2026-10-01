@@ -170,6 +170,9 @@ class Digest(Base):
     # Claims dropped for failing faithfulness validation, or removed by their
     # author. Surfaced in the digest so a gap is never silent.
     withheld_count: Mapped[int] = mapped_column(Integer, default=0)
+    # Claims cut by the per-section line limit. Also surfaced, so a long
+    # digest never loses lines without saying so.
+    truncated_count: Mapped[int] = mapped_column(Integer, default=0)
 
     claims: Mapped[list["DigestClaim"]] = relationship(
         back_populates="digest", cascade="all, delete-orphan"
@@ -188,6 +191,10 @@ class DigestClaim(Base):
     # [{source_id, quote, start, end}, ...] - duplicated on purpose, see module docstring.
     citations_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     extractive: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Why the claim is in its section, e.g. "field:progress" or
+    # "promoted:marker:stuck". Persisted so a classification stays explainable
+    # after the build, not just while the summarizer is running.
+    matched_rule: Mapped[str] = mapped_column(String(120), default="")
     order: Mapped[int] = mapped_column(Integer, default=0)
 
     digest: Mapped[Digest] = relationship(back_populates="claims")

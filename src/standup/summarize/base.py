@@ -83,6 +83,9 @@ class SummaryResult:
     summarizer_name: str
     summarizer_version: str
     notes: dict[str, str] = field(default_factory=dict)
+    # Claims cut by ``max_claims_per_section``. Reported, never silently lost:
+    # this is distinct from "withheld" (failed validation or author removal).
+    truncated: int = 0
 
 
 class Summarizer(Protocol):

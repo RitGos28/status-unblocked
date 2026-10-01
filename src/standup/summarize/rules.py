@@ -130,20 +130,23 @@ class RulesSummarizer:
                 )
             )
 
-        claims = self._order(claims, req.max_claims_per_section)
+        claims, truncated = self._order(claims, req.max_claims_per_section)
 
         return SummaryResult(
             claims=tuple(claims),
             summarizer_name=self.name,
             summarizer_version=self.version,
             notes={"sources": str(len(req.sources)), "claims": str(len(claims))},
+            truncated=truncated,
         )
 
     @staticmethod
-    def _order(claims: list[Claim], cap: int) -> list[Claim]:
+    def _order(claims: list[Claim], cap: int) -> tuple[list[Claim], int]:
         """Blockers first — they are the reason anyone reads a digest.
 
         Within a section, group by member so a reader can find their own name.
+        Returns the kept claims and how many the per-section cap cut, so the
+        digest can say so instead of dropping them silently.
         """
         section_rank = {
             ClaimKind.CARRYOVER: 0,
@@ -154,11 +157,13 @@ class RulesSummarizer:
         ordered = sorted(claims, key=lambda c: (section_rank[c.kind], c.member_name))
 
         capped: list[Claim] = []
+        truncated = 0
         seen: dict[ClaimKind, int] = {}
         for claim in ordered:
             count = seen.get(claim.kind, 0)
             if count >= cap:
+                truncated += 1
                 continue
             seen[claim.kind] = count + 1
             capped.append(claim)
-        return capped
+        return capped, truncated

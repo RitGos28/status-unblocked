@@ -20,7 +20,9 @@ class Settings(BaseSettings):
 
     env: str = "local"
     database_url: str = "sqlite:///./standup.db"
-    base_url: str = "http://localhost:8000"
+    # Public URL used in evidence links. Empty means "use the address the
+    # request arrived on", which is right for local runs and most proxies.
+    base_url: str = ""
 
     log_level: str = "INFO"
     log_json: bool = False

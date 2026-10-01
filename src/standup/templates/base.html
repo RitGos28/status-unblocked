@@ -12,7 +12,7 @@
   @media (prefers-color-scheme: dark) {
     :root {
       --bg: #17181a; --fg: #e9e7e3; --muted: #9c988f; --line: #2e3033;
-      --card: #1f2023; --accent: #d9a066; --warn: #e08a6d; --quote: #2b2419;
+      --card: #1f2023; --accent: #d9a066; --warn: #e08a6d; --quote: #6e5220;
     }
   }
   * { box-sizing: border-box; }
@@ -44,7 +44,10 @@
   .cite { font-size: 12px; color: var(--accent); text-decoration: none;
           border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; white-space: nowrap; }
   .cite:hover { border-color: var(--accent); }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden;
+             clip: rect(0 0 0 0); white-space: nowrap; }
   .muted { color: var(--muted); font-size: 13px; }
+  .why { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
   .withheld { color: var(--warn); font-size: 13px; border: 1px dashed var(--warn);
               border-radius: 8px; padding: 10px 12px; margin-top: 18px; }
   mark { background: var(--quote); color: inherit; padding: 2px 0; border-radius: 2px;

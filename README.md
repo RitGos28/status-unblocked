@@ -3,7 +3,7 @@
 > An async standup bot for distributed teams. Collects short updates through a web form (Microsoft Teams is in progress) and produces a **faithful, citation-backed** digest — without becoming a surveillance tool. Writing blockers back to GitHub Issues as durable tracked objects is the week-3 milestone; see [Roadmap](#roadmap) for what exists today.
 
 **Stack:** Python 3.13 · FastAPI · SQLAlchemy 2.0 + Alembic · Postgres (SQLite in dev) · Docker
-**Status:** Week 1 complete — the walking skeleton runs end to end: submit → digest → click through to the verbatim source. 76 tests green. See [Roadmap](#roadmap).
+**Status:** Week 1 complete — the walking skeleton runs end to end: submit → digest → click through to the verbatim source. 91 tests green. See [Roadmap](#roadmap).
 
 ---
 
@@ -65,7 +65,7 @@ So the ordering is deliberate: build the extractive pipeline **and the validator
 
 **3. True per-message Teams permalinks are not constructible from a 1:1 bot chat.** Message deep links require a `19:`-form chat ID; Microsoft's docs state that 1:1 bot payloads carry the conversation ID in **`a:xxx`** format. This is a hard constraint, not an unknown.
 
-> **Consequence — the citation contract does not depend on Teams.** Every submission is stored immutably with every identifier Teams gives us, and the canonical citation target is an internal **evidence view** (`GET /evidence/{item_id}`) served by FastAPI. A native permalink is emitted *additionally* when constructible (channel messages). This is the more defensible answer anyway: the evidence store survives Teams retention/deletion, which a permalink does not. (Making it tamper-evident, by pinning each update's content hash into the audit chain, is in progress.)
+> **Consequence — the citation contract does not depend on Teams.** Every submission is stored immutably with every identifier Teams gives us, and the canonical citation target is an internal **evidence view** (`GET /evidence/{item_id}`) served by FastAPI. A native permalink is emitted *additionally* when constructible (channel messages). This is the more defensible answer anyway: the evidence store survives Teams retention/deletion, which a permalink does not. It is also tamper-evident: each update's content hash is pinned into the hash-chained audit log at ingestion, and `python -m scripts.verify_integrity` recomputes every hash and fails if any stored text was edited afterwards.
 
 ### Privacy: the legal nuance most implementations miss
 
@@ -106,7 +106,7 @@ src/standup/
   db/         session models repositories/
 ```
 
-**Dependency rule.** `domain` imports nothing from the project; `summarize` imports only `domain`; `api` / `ingestion` / `tracker` are the only I/O layers. Enforced by **import-linter** contracts (`lint-imports`; CI is not set up yet) — cheap, and it is what stops the LLM seam from leaking real data.
+**Dependency rule.** `domain` imports nothing from the project; `summarize` imports only `domain`; `api` / `ingestion` / `tracker` are the only I/O layers. Enforced by **import-linter** contracts, run in CI (`.github/workflows/ci.yml`) — cheap, and it is what stops the LLM seam from leaking real data.
 
 ### Key seams
 
@@ -131,13 +131,13 @@ src/standup/
 | V7 | No cited source is outside consented/visible scope (privacy failures are faithfulness failures) | week 4 — needs the consent model |
 | V8 | Length-inflation guard for abstractive claims | live |
 
-A failing claim is **dropped**, not silently corrected, and the digest reports how many were withheld. Under `STANDUP_VALIDATOR_STRICT=true` (intended for CI, once CI exists) the build raises instead.
+A failing claim is **dropped**, not silently corrected, and the digest reports how many were withheld. Under `STANDUP_VALIDATOR_STRICT=true` (the CI setting) the build raises instead.
 
 ### Misfiled blockers get promoted, with a recorded reason
 
 People put blockers in the wrong box. Someone types "Stuck on the deploy pipeline" into **Progress**, and a tool that trusts the form field alone buries the one line the team needed to see.
 
-So a progress or plan line carrying a blocker marker (`blocked`, `waiting on`, `stuck`, `cannot`, `needs review`, …) is promoted into the Blockers section, and the claim records *why* as `matched_rule` — e.g. `promoted:marker:stuck`. Promotion never rewrites the text; the claim is still the verbatim span, so V3 holds and the citation still resolves.
+So a progress or plan line carrying a blocker marker (`blocked`, `waiting on`, `stuck`, `cannot`, `needs review`, …) is promoted into the Blockers section, and the claim records *why* as `matched_rule` — e.g. `promoted:marker:stuck`. The reason is stored with the digest and shown under the line ("Moved to Blockers: the author filed it elsewhere, but it says “stuck”."). Promotion never rewrites the text; the claim is still the verbatim span, so V3 holds and the citation still resolves.
 
 Negations are checked first and win: `no blockers`, `not blocked`, `no longer blocked`, `unblocked` never produce a blocker. That false positive — "No blockers today" reported as a blocker — is the most common failure in this category of tool, and it has its own parametrized test.
 
@@ -233,7 +233,7 @@ Drop in this order: (1) Projects v2 board sync, (2) GitHub App auth (keep fine-g
 
 ## Testing
 
-Layout today: `tests/{unit,e2e}/`. Stack: pytest · FastAPI `TestClient` · **Hypothesis** · injected `Clock` protocol (not freezegun). `tests/integration/`, `tests/fixtures/` and **respx** arrive with the work that needs them.
+Layout today: `tests/{unit,integration,e2e}/`. Stack: pytest · FastAPI `TestClient` · **Hypothesis** · injected `Clock` protocol (not freezegun). `tests/fixtures/` and **respx** arrive with the work that needs them. The integration and e2e tests also run against Postgres in CI when `STANDUP_TEST_DATABASE_URL` is set.
 
 | What | Status | How |
 |---|---|---|
@@ -247,15 +247,19 @@ Layout today: `tests/{unit,e2e}/`. Stack: pytest · FastAPI `TestClient` · **Hy
 Run them:
 
 ```bash
-pytest                      # everything (76 tests, ~1s)
+pytest                      # everything (91 tests, ~1s)
 pytest tests/unit           # fast unit pass
 pytest tests/e2e -v         # end-to-end smoke
 pytest --cov=standup --cov-report=term-missing
 ruff check .                # lint
 lint-imports                # enforce the dependency rule
+mypy src                    # strict type check
+python -m scripts.verify_integrity   # audit chain + stored-text hashes
 ```
 
-Current: **76 passing, 95% coverage overall.** The gate that matters is `summarize/` and `privacy/` at >=90% — those are the modules where a silent regression is a correctness or compliance failure rather than a bug. `normalizer.py`, `summarize/base.py`, `logging_conf.py` and `main.py` sit at 100%; `validator.py` at 99%.
+CI (`.github/workflows/ci.yml`) runs all of the above with `STANDUP_VALIDATOR_STRICT=true`, gates `summarize/` and `privacy/` at 90% coverage, runs migrations plus the integration and e2e tests against Postgres 16, and builds the Docker image.
+
+Current: **91 passing, 95% coverage overall.** The gate that matters is `summarize/` and `privacy/` at >=90% — those are the modules where a silent regression is a correctness or compliance failure rather than a bug. `normalizer.py`, `summarize/base.py`, `logging_conf.py` and `main.py` sit at 100%; `validator.py` at 99%.
 
 > `lint-imports` must be run as the console script. `python -m importlinter.cli` exits 0 *without reading* `pyproject.toml`, so it reports success while enforcing nothing — confirmed by adding a deliberate boundary violation and watching it pass.
 
@@ -295,7 +299,7 @@ What you should see, and why each part matters:
 |---|---|
 | Blockers section comes first | The digest is ordered by what needs attention, not by who submitted |
 | Bruno's "No blockers today" is absent | Negation handling — the commonest false positive in this category |
-| Chen's line appears **under Blockers** | Misfiled blockers are promoted, tagged `promoted:marker:stuck` |
+| Chen's line appears **under Blockers**, with "Moved to Blockers … it says “stuck”" beneath it | Misfiled blockers are promoted, and the reason (`promoted:marker:stuck`) is stored and shown |
 | Every line has a **source** link | No claim ships uncited |
 | The evidence page highlights the exact span | The citation is a real offset into stored text, not a vague pointer |
 | "No platform link: webform…" on that page | Missing permalinks state their reason instead of being a silent null |

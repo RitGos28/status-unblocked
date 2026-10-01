@@ -33,6 +33,22 @@ class RenderedSection:
     claims: tuple[Claim, ...]
 
 
+def explain_rule(matched_rule: str) -> str:
+    """Human-readable reason a claim sits in its section, or "" if unremarkable.
+
+    Only promotions need explaining: a line the author filed under Progress or
+    Today that the digest shows under Blockers. The text is never changed, so
+    the explanation is the only visible trace of the move.
+    """
+    if not matched_rule.startswith("promoted:"):
+        return ""
+    _, _, detail = matched_rule.partition(":")
+    _, _, marker = detail.partition(":")
+    if marker:
+        return f'Moved to Blockers: the author filed it elsewhere, but it says "{marker}".'
+    return "Moved to Blockers: the author filed it elsewhere."
+
+
 def group_sections(claims: tuple[Claim, ...]) -> list[RenderedSection]:
     """Blockers first. That ordering is the whole point of the digest."""
     sections: list[RenderedSection] = []
@@ -50,6 +66,7 @@ def render_markdown(
     claims: tuple[Claim, ...],
     evidence_urls: dict[str, str],
     withheld_count: int = 0,
+    truncated_count: int = 0,
 ) -> str:
     """Markdown digest. Every claim carries its evidence link inline."""
     lines: list[str] = [f"# {team_name} - standup {cycle_date}", ""]
@@ -73,6 +90,12 @@ def render_markdown(
         lines.append(
             f"_{withheld_count} item(s) withheld: failed source verification "
             f"or removed by their author._"
+        )
+
+    if truncated_count:
+        lines.append("")
+        lines.append(
+            f"_{truncated_count} more item(s) not shown: a section reached its line limit._"
         )
 
     return "\n".join(lines).strip() + "\n"

@@ -4,11 +4,12 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 from standup.api import digests, evidence, health, web_forms
 from standup.config import get_settings
 from standup.db.session import create_all
+from standup.deps import templates
 from standup.domain.errors import StandupError
 from standup.logging_conf import configure_logging, get_logger
 
@@ -39,8 +40,19 @@ def create_app() -> FastAPI:
     )
 
     @app.exception_handler(StandupError)
-    async def handle_standup_error(_request: Request, exc: StandupError) -> JSONResponse:
-        """RFC-9457 problem+json, so clients get a machine-readable shape."""
+    async def handle_standup_error(request: Request, exc: StandupError) -> Response:
+        """RFC-9457 problem+json, so clients get a machine-readable shape.
+
+        A browser asking for HTML gets the same status as a readable page
+        instead of raw JSON. problem+json stays the default for API clients.
+        """
+        if "text/html" in request.headers.get("accept", ""):
+            return templates.TemplateResponse(
+                request=request,
+                name="error.html",
+                context={"title": exc.title, "detail": str(exc)},
+                status_code=exc.status_code,
+            )
         return JSONResponse(
             status_code=exc.status_code,
             media_type="application/problem+json",

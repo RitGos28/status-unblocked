@@ -16,6 +16,7 @@ dependencies = [
     "pydantic-settings==2.7.0",
     "structlog==24.4.0",
     "jinja2==3.1.5",
+    "tzdata>=2025.2",  # IANA zones for zoneinfo on hosts without a system tz database
     "python-multipart==0.0.20",
     "microsoft-agents-activity==1.5.0",
     "microsoft-agents-hosting-core==1.5.0",
@@ -52,6 +53,11 @@ markers = [
 
 [tool.coverage.run]
 source = ["standup"]
+
+[tool.coverage.report]
+# Overall floor. The gate that matters, >=90% on summarize/ and privacy/, is
+# checked per module in CI with --include.
+fail_under = 90
 
 [tool.ruff]
 line-length = 100

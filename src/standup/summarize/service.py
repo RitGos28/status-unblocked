@@ -8,6 +8,8 @@ It is also the mapping layer between the ORM and the pure domain types, which
 is what keeps ``summarize/`` free of database imports.
 """
 
+from typing import TYPE_CHECKING
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -23,6 +25,9 @@ from standup.summarize.base import (
 )
 from standup.summarize.render import render_markdown
 from standup.summarize.validator import FaithfulnessValidator
+
+if TYPE_CHECKING:
+    from standup.db.models import Digest
 
 log = get_logger(__name__)
 
@@ -89,7 +94,7 @@ def build_digest(
     summarizer: Summarizer,
     base_url: str,
     actor_id: str = "system",
-):
+) -> "Digest":
     """Produce and persist a digest for one cycle.
 
     Returns the persisted ``Digest`` row.
@@ -124,6 +129,7 @@ def build_digest(
         claims=kept,
         evidence_urls=evidence_urls,
         withheld_count=report.withheld,
+        truncated_count=result.truncated,
     )
 
     digest = Digest(
@@ -133,6 +139,7 @@ def build_digest(
         validator_report_json=report.to_dict(),
         body_md=body_md,
         withheld_count=report.withheld,
+        truncated_count=result.truncated,
     )
     session.add(digest)
     session.flush()
@@ -158,6 +165,7 @@ def build_digest(
                     for c in claim.citations
                 ],
                 extractive=claim.extractive,
+                matched_rule=claim.matched_rule,
                 order=order,
             )
         )

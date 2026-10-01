@@ -17,9 +17,12 @@
     {% for claim in section.claims %}
     <div class="claim">
       <span class="who">{{ claim.member_name }}</span>
-      <span style="flex:1">{{ claim.text }}</span>
+      <span style="flex:1">{{ claim.text }}
+        {% set why = claim.matched_rule | explain_rule %}
+        {% if why %}<span class="why">{{ why }}</span>{% endif %}
+      </span>
       {% for c in claim.citations_json %}
-        <a class="cite" href="/evidence/{{ c.source_id }}" title="See the exact words this came from">source</a>
+        <a class="cite" href="/evidence/{{ c.source_id }}" title="See the exact words this came from">source<span class="sr-only"> for this line</span></a>
       {% endfor %}
     </div>
     {% endfor %}
@@ -29,6 +32,12 @@
 {% if digest.withheld_count %}
 <div class="withheld">
   {{ digest.withheld_count }} item(s) withheld: failed source verification, or removed by their author.
+</div>
+{% endif %}
+
+{% if digest.truncated_count %}
+<div class="withheld">
+  {{ digest.truncated_count }} more item(s) not shown: a section reached its line limit.
 </div>
 {% endif %}
 

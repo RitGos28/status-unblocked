@@ -154,3 +154,22 @@ def test_empty_sources_produce_no_claims():
 
 def test_whitespace_only_source_is_skipped():
     assert summarize(source("s1", "   ", ItemKind.BLOCKER)).claims == ()
+
+
+def test_section_cap_reports_how_many_lines_it_cut():
+    """The cap must never drop a line silently: the overflow is counted."""
+    sources = tuple(source(f"s{i}", f"Shipped item {i}.", ItemKind.PROGRESS) for i in range(5))
+    req = SummaryRequest(
+        cycle_date=NOW.date(),
+        team_name="Core Platform",
+        sources=sources,
+        max_claims_per_section=3,
+    )
+    result = RulesSummarizer().summarize(req)
+    assert len(result.claims) == 3
+    assert result.truncated == 2
+
+
+def test_no_truncation_under_the_cap():
+    result = summarize(source("s1", "Shipped it.", ItemKind.PROGRESS))
+    assert result.truncated == 0

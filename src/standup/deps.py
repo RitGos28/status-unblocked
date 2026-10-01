@@ -17,10 +17,12 @@ from standup.config import Settings, get_settings
 from standup.db.session import get_session_factory
 from standup.domain.models import Clock, SystemClock
 from standup.summarize.base import Summarizer
+from standup.summarize.render import explain_rule
 from standup.summarize.rules import RulesSummarizer
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+templates.env.filters["explain_rule"] = explain_rule
 
 _clock: Clock = SystemClock()
 
