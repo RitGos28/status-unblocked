@@ -47,7 +47,7 @@ It reports `built 2 digest(s)`: yesterday's and today's. Then open **Digests** a
 
 ## 5. Evidence, and proving nothing was edited
 - Click a **source** link: the stored update, with the cited words highlighted and their character offsets.
-- `python -m scripts.verify_integrity` → "audit chain intact; every stored update matches its pinned hash".
+- `python -m scripts.verify_integrity` → "audit chain intact; every stored update matches its pinned hash". This holds under load too: the demo check opens the same evidence 20 times at once first, and every view is recorded on one unbroken chain.
 - Edit any stored update in a *copy* of the database and run it against the copy: it names the tampered update and exits 1. (`scripts/demo_check.sh` does exactly this.)
 
 ## 6. Ops

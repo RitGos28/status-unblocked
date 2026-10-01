@@ -231,6 +231,10 @@ class AuditLog(Base):
     """
 
     __tablename__ = "audit_log"
+    # A second row naming the same predecessor would be a fork. The append
+    # path serialises on AuditChainHead so this never fires; if it ever does,
+    # the write fails loudly instead of silently forking the chain.
+    __table_args__ = (UniqueConstraint("prev_hash", name="uq_audit_log_prev_hash"),)
 
     # seq is the primary key because the chain is strictly ordered; a uuid
     # would not give us a deterministic "previous row".
@@ -245,6 +249,21 @@ class AuditLog(Base):
     purpose: Mapped[str] = mapped_column(String(200), default="")
     prev_hash: Mapped[str] = mapped_column(String(64), default="")
     row_hash: Mapped[str] = mapped_column(String(64), default="")
+
+
+class AuditChainHead(Base):
+    """One row (id=1) that every audit append locks before reading the chain.
+
+    Appending reads the last row's hash and inserts the next row. Without a
+    lock, two requests can read the same last row and fork the chain. Updating
+    this row first makes concurrent appends queue up, on SQLite and Postgres
+    alike, without SAVEPOINT (which pysqlite does not support by default).
+    """
+
+    __tablename__ = "audit_chain_head"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    seq: Mapped[int] = mapped_column(Integer, default=0)
 
 
 class IngestRejection(Base):
