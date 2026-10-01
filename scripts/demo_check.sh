@@ -116,7 +116,8 @@ EV="$(curl -s -b "$WORK/ada.jar" "$BASE$EVIDENCE")"
 grep -q "<mark>" <<<"$EV" || fail "evidence page highlights the cited span"
 pass "evidence page shows the stored words with the span highlighted"
 
-$PY -m scripts.verify_integrity >/dev/null || fail "verify_integrity passes on the live database"
+seq 20 | xargs -P 20 -I{} curl -s -o /dev/null -b "$WORK/ada.jar" "$BASE$EVIDENCE"
+$PY -m scripts.verify_integrity >/dev/null || fail "verify_integrity passes after 20 simultaneous evidence views"
 cp "$WORK/demo.db" "$WORK/tampered.db"
 $PY - "$WORK/tampered.db" <<'EOF'
 import sqlite3, sys
@@ -127,7 +128,7 @@ EOF
 if STANDUP_DATABASE_URL="sqlite:///$WORK/tampered.db" $PY -m scripts.verify_integrity >/dev/null; then
     fail "verify_integrity catches edited stored text"
 fi
-pass "audit chain intact; an edited update is caught by verify_integrity"
+pass "20 simultaneous evidence views leave the audit chain intact; an edited update is caught"
 
 # --- another team cannot see it ----------------------------------------------
 [ "$(status -c "$WORK/dana.jar" "$DANA")" = 303 ] || fail "Dana's login link"

@@ -15,8 +15,9 @@ import json
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.expression import Executable
 
 from standup.domain.enums import AuditAction
 
@@ -69,6 +70,42 @@ def compute_row_hash(prev_hash: str, canonical: str) -> str:
     return hashlib.sha256(f"{prev_hash}{canonical}".encode()).hexdigest()
 
 
+def _lock_chain(session: Session) -> None:
+    """Serialise appends: UPDATE the chain-head row before reading the chain.
+
+    The UPDATE takes SQLite's write lock or Postgres's row lock and holds it
+    until commit, so a concurrent appender waits, then sees this one's row.
+    The insert creates the head row the first time (or after create_all).
+    """
+    from standup.db.models import AuditChainHead
+
+    dialect = session.get_bind().dialect.name
+    create_head: Executable
+    if dialect == "postgresql":
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+        create_head = (
+            pg_insert(AuditChainHead)
+            .values(id=1, seq=0)
+            .on_conflict_do_nothing(index_elements=["id"])
+        )
+    elif dialect == "sqlite":
+        from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+
+        create_head = (
+            sqlite_insert(AuditChainHead)
+            .values(id=1, seq=0)
+            .on_conflict_do_nothing(index_elements=["id"])
+        )
+    else:
+        raise RuntimeError(f"audit chain locking is not implemented for {dialect!r}")
+
+    session.execute(create_head)
+    session.execute(
+        update(AuditChainHead).where(AuditChainHead.id == 1).values(seq=AuditChainHead.seq + 1)
+    )
+
+
 def record_audit(
     session: Session,
     *,
@@ -79,9 +116,14 @@ def record_audit(
     object_ids: dict[str, Any] | None = None,
     purpose: str = "",
 ) -> "AuditLog":
-    """Append one row to the chain. Flushes so ``seq`` is assigned immediately."""
+    """Append one row to the chain. Flushes so ``seq`` is assigned immediately.
+
+    Takes the chain lock first, so the "last row" read below is the real last
+    row even when other requests are appending at the same moment.
+    """
     from standup.db.models import AuditLog
 
+    _lock_chain(session)
     last = session.execute(
         select(AuditLog).order_by(AuditLog.seq.desc()).limit(1)
     ).scalar_one_or_none()
@@ -168,10 +210,10 @@ def verify_evidence(session: Session) -> list[str]:
             pinned[ids["update_id"]] = ids["content_sha256"]
 
     tampered: list[str] = []
-    for update in session.execute(select(Update)).scalars():
-        if update.raw_text is None:
+    for stored in session.execute(select(Update)).scalars():
+        if stored.raw_text is None:
             continue
-        actual = hashlib.sha256(update.raw_text.encode("utf-8")).hexdigest()
-        if pinned.get(update.id) != actual:
-            tampered.append(update.id)
+        actual = hashlib.sha256(stored.raw_text.encode("utf-8")).hexdigest()
+        if pinned.get(stored.id) != actual:
+            tampered.append(stored.id)
     return tampered
