@@ -17,6 +17,14 @@ TEAMS_REQUIRED_ENV = (
     "CONNECTIONS__SERVICE_CONNECTION__SETTINGS__CLIENTSECRET",
     "CONNECTIONS__SERVICE_CONNECTION__SETTINGS__TENANTID",
 )
+# Lets the bot accept unsigned requests, which is what Agents Playground sends.
+# Only ever honoured in a local or test environment.
+TEAMS_ANONYMOUS_ENV = "CONNECTIONS__SERVICE_CONNECTION__SETTINGS__ANONYMOUS_ALLOWED"
+LOCAL_ENVS = frozenset({"local", "test"})
+
+
+def teams_anonymous_allowed() -> bool:
+    return os.environ.get(TEAMS_ANONYMOUS_ENV, "").strip().lower() in {"1", "true", "yes"}
 
 
 class DatabaseSettings(BaseSettings):
@@ -76,7 +84,12 @@ class Settings(DatabaseSettings):
     @model_validator(mode="after")
     def _integration_credentials_present(self) -> "Settings":
         missing: list[str] = []
-        if self.teams_enabled:
+        if teams_anonymous_allowed() and self.env not in LOCAL_ENVS:
+            raise ValueError(
+                f"{TEAMS_ANONYMOUS_ENV} is only allowed when STANDUP_ENV is local or test; "
+                "a deployed bot must verify every request's token"
+            )
+        if self.teams_enabled and not teams_anonymous_allowed():
             missing += [key for key in TEAMS_REQUIRED_ENV if not os.environ.get(key)]
         if self.tracker == "github" and not self.github_token:
             missing.append("STANDUP_GITHUB_TOKEN")

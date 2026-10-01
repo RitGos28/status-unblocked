@@ -12,7 +12,10 @@ dependencies = [
     "uvicorn[standard]==0.34.0",
     "sqlalchemy==2.0.36",
     "alembic==1.14.0",
-    "pydantic==2.10.4",
+    # >=2.11 is required: the Agents SDK sets validate_by_name, which 2.10
+    # silently ignores, breaking its snake_case constructors (send_activity,
+    # CardFactory). The SDK's own metadata says >=2.10.4, which is wrong.
+    "pydantic==2.13.5",
     "pydantic-settings==2.7.0",
     "structlog==24.4.0",
     "jinja2==3.1.5",
@@ -23,6 +26,7 @@ dependencies = [
     "microsoft-agents-hosting-core==1.5.0",
     "microsoft-agents-hosting-fastapi==1.5.0",
     "microsoft-agents-hosting-msteams==1.5.0",  # verified via PyPI 2026-09-17; see CLAUDE.md Teams invariant
+    "microsoft-agents-authentication-msal==1.5.0",  # matches the 1.5.0 SDK; signs outbound replies
 ]
 
 [project.optional-dependencies]
@@ -83,6 +87,8 @@ strict = false
 # The dependency rule from CLAUDE.md, enforced.
 [tool.importlinter]
 root_package = "standup"
+# Lets a contract name third-party packages (the Agents SDK contract below).
+include_external_packages = true
 
 [[tool.importlinter.contracts]]
 name = "domain is pure (imports nothing from the project)"
@@ -121,3 +127,17 @@ forbidden_modules = [
     "standup.config",
     "standup.auth",
 ]
+
+# Invariant 9: a breaking Agents SDK release must touch two files, no more.
+# Direct imports only: standup.main mounting the Teams router is fine.
+[[tool.importlinter.contracts]]
+name = "the Microsoft 365 Agents SDK is confined to two files"
+type = "forbidden"
+source_modules = ["standup"]
+forbidden_modules = ["microsoft_agents"]
+allow_indirect_imports = true
+ignore_imports = [
+    "standup.api.teams_router -> microsoft_agents",
+    "standup.ingestion.teams_adapter -> microsoft_agents",
+]
+

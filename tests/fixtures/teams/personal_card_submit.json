@@ -1,0 +1,4 @@
+{"type": "message", "id": "1002", "serviceUrl": "https://smba.trafficmanager.net/teams/", "channelId": "msteams", "recipient": {"id": "28:bot-id", "name": "Status Unblocked"},
+ "from": {"id": "29:user-ada", "name": "Ada Okafor", "aadObjectId": "aad-ada"},
+ "conversation": {"id": "a:1on1-ada", "conversationType": "personal"},
+ "value": {"progress": "Shipped the retry logic.", "blockers": "Waiting on staging credentials from infra.", "plan": "Finish the migration."}}

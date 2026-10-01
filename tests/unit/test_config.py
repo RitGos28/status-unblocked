@@ -10,7 +10,12 @@ KEY = "k" * 40
 
 @pytest.fixture(autouse=True)
 def clean_env(monkeypatch):
-    for name in ("STANDUP_SECRET_KEY", "STANDUP_GITHUB_TOKEN", *TEAMS_REQUIRED_ENV):
+    for name in (
+        "STANDUP_SECRET_KEY",
+        "STANDUP_GITHUB_TOKEN",
+        "CONNECTIONS__SERVICE_CONNECTION__SETTINGS__ANONYMOUS_ALLOWED",
+        *TEAMS_REQUIRED_ENV,
+    ):
         monkeypatch.delenv(name, raising=False)
 
 
@@ -41,3 +46,15 @@ def test_every_missing_integration_key_is_named_together():
 def test_github_tracker_with_token_is_accepted():
     settings = Settings(_env_file=None, secret_key=KEY, tracker="github", github_token="ghp_x")
     assert settings.github_token is not None
+
+
+def test_anonymous_teams_mode_is_refused_outside_local(monkeypatch):
+    monkeypatch.setenv("CONNECTIONS__SERVICE_CONNECTION__SETTINGS__ANONYMOUS_ALLOWED", "True")
+    with pytest.raises(ValidationError, match="only allowed when STANDUP_ENV is local or test"):
+        Settings(_env_file=None, secret_key=KEY, env="production", teams_enabled=True)
+
+
+def test_anonymous_teams_mode_needs_no_credentials_locally(monkeypatch):
+    monkeypatch.setenv("CONNECTIONS__SERVICE_CONNECTION__SETTINGS__ANONYMOUS_ALLOWED", "True")
+    settings = Settings(_env_file=None, secret_key=KEY, env="local", teams_enabled=True)
+    assert settings.teams_enabled is True

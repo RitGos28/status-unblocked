@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Link Teams{% endblock %}
+{% block content %}
+<h1>Link your Teams account</h1>
+<p class="sub">So the bot knows which member you are, without asking Microsoft who anyone is.</p>
+
+{% if not teams_enabled %}
+<div class="card"><p style="margin:0">The Teams bot is not switched on for this deployment. The web form works without it.</p></div>
+{% else %}
+<div class="card">
+  {% if linked %}<p style="margin-top:0">A Teams account is already linked. Linking again replaces it.</p>{% endif %}
+  <p style="margin-top:0">In a 1:1 chat with the bot, send:</p>
+  <pre class="raw">link {{ code }}</pre>
+  <p class="muted" style="margin-bottom:0">This code works once you send it, for {{ minutes }} minutes, and only links to {{ viewer.display_name }}.</p>
+</div>
+{% endif %}
+{% endblock %}

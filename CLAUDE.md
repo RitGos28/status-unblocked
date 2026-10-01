@@ -115,7 +115,9 @@ POST /digests/build/{cycle_id}       api/digests.py
   -> render_markdown() + persist Digest/DigestClaim
 ```
 
-Teams enters at the same seam: `TeamsAdapter` (`ingestion/teams_adapter.py`) turns an `Action.Submit` activity into the same `RawSubmission`. No route calls it yet — `api/teams_router.py` is still to be written.
+Teams enters at the same seam. `POST /api/messages` (`api/teams_router.py`, mounted only when `STANDUP_TEAMS_ENABLED=true`) runs `StandupAgent.on_turn`: `classify_scope()` (in `ingestion/teams_adapter.py`) decides whether an activity is a 1:1 card submit, a 1:1 command, a channel @mention, an ignorable system event, or out of scope. A card submit becomes a `RawSubmission` via `TeamsAdapter` and goes through the same `ingest()`. The member comes from `Member.teams_aad_id`, set by `link <code>` with a code from `/me/teams`. Out-of-scope messages become content-free `IngestRejection` rows, counted at `GET /scope`.
+
+Local bot testing: `STANDUP_TEAMS_ENABLED=true` plus `CONNECTIONS__SERVICE_CONNECTION__SETTINGS__ANONYMOUS_ALLOWED=True` accepts unsigned Playground requests. Config refuses anonymous mode unless `STANDUP_ENV` is `local` or `test`. `python -m scripts.make_teams_zip --bot-id ... --base-url ...` builds the sideload package.
 
 ### Validator rules
 
@@ -160,10 +162,10 @@ src/standup/
   config.py        pydantic-settings, STANDUP_ prefix
   deps.py          DI: get_db, get_clock, get_summarizer; Jinja templates
   logging_conf.py  structlog + secret scrubbing
-  api/             health, auth, web_forms, evidence, digests
+  api/             health (+ /scope), auth, me, web_forms, evidence, digests, teams_router
   auth/            tokens (signed, expiring per-member login links)
   domain/          enums, errors, models (Clock, SystemClock, FakeClock), timezones   (pure, zero I/O)
-  ingestion/       base, web_adapter, teams_adapter, normalizer, service (the one ingest() path)
+  ingestion/       base, web_adapter, teams_adapter (+ scope gate, card), permalink, normalizer, service (the one ingest() path)
   summarize/       base, rules, validator, render, service
   privacy/         audit  (hash-chained log)
   db/              models, session
@@ -173,7 +175,7 @@ src/standup/
 
 Planned but **not yet written** — do not import these, and do not assume they exist:
 
-`api/teams_router.py`, `api/privacy.py`, `api/admin.py`, `ingestion/permalink.py`, `summarize/llm.py`, `summarize/prompts.py`, all of `tracker/`, all of `scheduling/`, and `privacy/{consent,visibility,redaction,retention,export}.py`.
+`api/privacy.py`, `api/admin.py`, `summarize/llm.py`, `summarize/prompts.py`, all of `tracker/`, all of `scheduling/`, and `privacy/{consent,visibility,redaction,retention,export}.py`.
 
 **Auth is per-member magic links, and team scoping is enforced.** `deps.CurrentMember` resolves the signed-in member from the session cookie (401 otherwise). Every route that touches a team's data checks `deps.ensure_same_team()`, which answers 404 for another team's resources. A new route that reads digests, evidence or updates must do the same.
 
@@ -181,7 +183,7 @@ Planned but **not yet written** — do not import these, and do not assume they 
 
 ## The dependency rule
 
-Partly enforced by import-linter. `pyproject.toml` has exactly two contracts: `domain` is pure, and the summarizer core (`base/rules/validator/render`) is pure. The `scheduling/` row and invariant 9 (Agents SDK confinement) have no contract yet; add one when that code lands. Neither contract forbids `standup.deps`, `standup.main` or `standup.logging_conf`, so check those imports by eye.
+Partly enforced by import-linter. `pyproject.toml` has three contracts: `domain` is pure; the summarizer core (`base/rules/validator/render`) is pure; and `microsoft_agents` may be imported directly only by `api/teams_router.py` and `ingestion/teams_adapter.py` (invariant 9; `include_external_packages = true` makes that checkable). The `scheduling/` row has no contract yet; add one when that code lands. Neither contract forbids `standup.deps`, `standup.main` or `standup.logging_conf`, so check those imports by eye.
 
 | Layer | May import |
 |---|---|
@@ -227,7 +229,8 @@ Wanting to import a SQLAlchemy model into `summarize/` is the signal you are abo
 
 - **Injected `Clock`, never `freezegun`.** Time comes from `deps.get_clock()`; tests pass a `FakeClock`. No `sleep` anywhere.
 - **No network.** `respx` will mock httpx once `tracker/` lands (it is not yet in `[dev]` — add it with the first tracker test). The one exception is `@pytest.mark.live_github`, excluded from CI.
-- **Teams will be tested from recorded fixtures** captured once from Agents Playground, so the Teams path stays CI-testable with no tenant.
+- **Teams is tested from fixtures in `tests/fixtures/teams/`**, loaded with `tests/teams_fixtures.activity(name)`. They are hand-written today; replace them with Agents Playground recordings when available, keeping the names. Bot tests drive `StandupAgent.on_turn` with a `FakeTurnContext`, so they need no network.
+- **Keep pydantic >= 2.11.** The Agents SDK's models rely on `validate_by_name`; on 2.10 its own constructors fail. `tests/unit/test_teams_sdk_compat.py` guards this.
 - **The validator suite is parametrized over every summarizer implementation.** When you add one, add it to that list — do not write it a softer test.
 - Tests run on a throwaway SQLite file by default. Set `STANDUP_TEST_DATABASE_URL` to a Postgres URL to run them there (CI does, for `tests/integration` and `tests/e2e`); each test then creates and drops its tables.
 - `tests/e2e/test_smoke_cycle.py` is both the regression net and the demo script. Keep it under 10 seconds.

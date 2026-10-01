@@ -7,7 +7,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response
 from starlette.middleware.sessions import SessionMiddleware
 
-from standup.api import auth, digests, evidence, health, web_forms
+from standup.api import auth, digests, evidence, health, me, web_forms
 from standup.config import get_settings
 from standup.db.session import create_all
 from standup.deps import templates
@@ -82,6 +82,12 @@ def create_app() -> FastAPI:
     app.include_router(web_forms.router)
     app.include_router(digests.router)
     app.include_router(evidence.router)
+    app.include_router(me.router)
+    if settings.teams_enabled:
+        # Imported only when switched on, so the SDK is not loaded otherwise.
+        from standup.api.teams_router import mount_teams
+
+        mount_teams(app)
     return app
 
 

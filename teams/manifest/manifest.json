@@ -1,0 +1,43 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/teams/v1.17/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.17",
+  "version": "0.1.0",
+  "id": "${BOT_ID}",
+  "developer": {
+    "name": "Status Unblocked",
+    "websiteUrl": "${BASE_URL}",
+    "privacyUrl": "${BASE_URL}",
+    "termsOfUseUrl": "${BASE_URL}"
+  },
+  "name": {
+    "short": "Status Unblocked",
+    "full": "Status Unblocked: async standups with cited digests"
+  },
+  "description": {
+    "short": "File your standup in a card; read a digest where every line is cited.",
+    "full": "Type standup in a 1:1 chat to file a short update. The team digest quotes each update verbatim and links every line to its source. The bot reads only what is sent to it directly, requests no Microsoft Graph permissions, and has no manager view."
+  },
+  "icons": {
+    "color": "color.png",
+    "outline": "outline.png"
+  },
+  "accentColor": "#8A5A2B",
+  "bots": [
+    {
+      "botId": "${BOT_ID}",
+      "scopes": ["personal", "team"],
+      "isNotificationOnly": false,
+      "supportsFiles": false,
+      "commandLists": [
+        {
+          "scopes": ["personal"],
+          "commands": [
+            {"title": "standup", "description": "File today's update"},
+            {"title": "link", "description": "Link this Teams account using a code from /me/teams"}
+          ]
+        }
+      ]
+    }
+  ],
+  "validDomains": []
+}

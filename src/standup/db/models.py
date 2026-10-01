@@ -70,6 +70,12 @@ class Member(Base):
     tz: Mapped[str] = mapped_column(String(64), default="UTC")
     # Maps an external identity (Teams aadObjectId, web form handle) to this row.
     source_keys: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    # The member's Teams identity (aadObjectId), set when they link their
+    # account with a code from the web app. Unique: one Teams account can
+    # speak for exactly one member.
+    teams_aad_id: Mapped[str | None] = mapped_column(
+        String(64), unique=True, index=True, nullable=True, default=None
+    )
     active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     team: Mapped[Team] = relationship(back_populates="members")
@@ -228,3 +234,20 @@ class AuditLog(Base):
     purpose: Mapped[str] = mapped_column(String(200), default="")
     prev_hash: Mapped[str] = mapped_column(String(64), default="")
     row_hash: Mapped[str] = mapped_column(String(64), default="")
+
+
+class IngestRejection(Base):
+    """One message the bot refused to ingest because it was out of scope.
+
+    This is the ``scope_violation`` counter. Deliberately content-free: no
+    text, no sender, no conversation id. Recording *what* was refused would be
+    the very collection the refusal exists to prevent.
+    """
+
+    __tablename__ = "ingest_rejection"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    source: Mapped[str] = mapped_column(String(16))
+    reason: Mapped[str] = mapped_column(String(64))
+    conversation_type: Mapped[str] = mapped_column(String(32), default="")

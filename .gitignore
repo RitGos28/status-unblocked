@@ -16,3 +16,6 @@ htmlcov/
 .idea/
 .vscode/
 .hypothesis/
+
+# Generated Teams app package
+teams/build/

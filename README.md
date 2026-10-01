@@ -1,9 +1,9 @@
 # Status Unblocked — Team Task & Standup Bot
 
-> An async standup bot for distributed teams. Collects short updates through a web form (Microsoft Teams is in progress) and produces a **faithful, citation-backed** digest — without becoming a surveillance tool. Writing blockers back to GitHub Issues as durable tracked objects is the week-3 milestone; see [Roadmap](#roadmap) for what exists today.
+> An async standup bot for distributed teams. Collects short updates through a web form or a Microsoft Teams bot and produces a **faithful, citation-backed** digest — without becoming a surveillance tool. Writing blockers back to GitHub Issues as durable tracked objects is the week-3 milestone; see [Roadmap](#roadmap) for what exists today.
 
 **Stack:** Python 3.13 · FastAPI · SQLAlchemy 2.0 + Alembic · Postgres (SQLite in dev) · Docker
-**Status:** Week 1 complete — the walking skeleton runs end to end: submit → digest → click through to the verbatim source, behind per-member sign-in with team-scoped access. 108 tests green. See [Roadmap](#roadmap).
+**Status:** Week 1 complete — the walking skeleton runs end to end: submit → digest → click through to the verbatim source, behind per-member sign-in with team-scoped access, from the web form or the Teams bot. 140 tests green. See [Roadmap](#roadmap).
 
 ---
 
@@ -85,7 +85,7 @@ Because workers must be able to see how a tool classified their activity and con
 - No retention past the stated window
 - No third-party model sees anyone's text without that person's separate opt-in
 
-Planned for the Teams bot (week 2, not built yet): it will request **zero Microsoft Graph permissions** (checkable by an admin from the manifest), ingest only card submissions / 1:1 messages / explicit mentions, and reject anything else with a `scope_violation` counter. Today the only ingestion path is the web form. What is enforced now: every page except `/` and `/healthz` requires sign-in through a personal, signed, expiring link (no passwords, no roles); a member sees only their own team's digests and evidence, and another team's resources answer 404 so their existence is not disclosed; who submitted an update comes from the session, never the form, so nobody can file as someone else; and every evidence view is audited under the viewing member's id.
+Backed by code: the Teams app manifest (`teams/manifest/manifest.json`) requests **zero Microsoft Graph or resource-specific permissions**, which an admin can confirm by reading it and a test asserts. The bot ingests only standup-card submissions in a 1:1 chat. Typed commands there (`standup`, `link`) are answered, and a channel message that @mentions it gets a pointer to the 1:1 chat. Any other message is refused before ingestion and counted as a content-free `scope_violation` row (reason and conversation type only: no text, no sender), with the totals at `GET /scope`. Who a Teams user is comes from a short-lived link code they get from `/me/teams` while signed in, never from a Graph lookup. Also enforced: every page except `/` and `/healthz` requires sign-in through a personal, signed, expiring link (no passwords, no roles); a member sees only their own team's digests and evidence, and another team's resources answer 404 so their existence is not disclosed; who submitted an update comes from the session, never the form, so nobody can file as someone else; and every evidence view is audited under the viewing member's id.
 
 ---
 
@@ -185,7 +185,7 @@ Walking-skeleton first. **Something demoable at the end of every week.** Risky A
 - Alembic initial migration; Dockerfile (multi-stage, non-root, healthcheck); compose with Postgres
 - 72 tests at the end of week 1, 95% coverage, ruff clean, both import-linter contracts kept
 
-**Still open:** the Teams tenant go/no-go (check **Teams admin → Setup policies → Upload custom apps**), and a `docker build` — the image is written but unbuilt, since Docker Desktop was not running.
+**Still open after week 1:** the Teams tenant go/no-go (check **Teams admin → Setup policies → Upload custom apps**), and a `docker build` — the image is written but unbuilt, since Docker Desktop was not running.
 
 **Cut line:** Postgres — stay on SQLite.
 
@@ -198,6 +198,8 @@ Walking-skeleton first. **Something demoable at the end of every week.** Risky A
 > The validator was pulled forward into week 1 — it is only ~150 lines and having it early lets the end-to-end test assert zero violations rather than hand-wave. Week 2 therefore adds V7's groundwork and the Teams work, not the validator itself.
 
 **Done when** — in Agents Playground: type `standup`, get a card, submit, digest updates with citations. And the validator rejects a fabricated-citation summarizer **100%** of the time.
+
+**Shipped:** `api/teams_router.py` (bot route, mounted only when `STANDUP_TEAMS_ENABLED=true`) · the scope gate and Adaptive Card in `ingestion/teams_adapter.py` · Teams submissions through the same `ingest()` as the web form · account linking via `/me/teams` + `link <code>` · `ingestion/permalink.py` (deep link for `19:` threads, a stated reason for `a:` 1:1 chats) · `teams/manifest/` + `scripts/make_teams_zip.py` · the content-free `ingest_rejection` counter at `GET /scope` · an import-linter contract confining the SDK to two files. **Not yet:** a run in Agents Playground or a real tenant. The Teams tests use hand-written activity fixtures, not Playground recordings, and `scripts/devtunnel.ps1` and the consent card are not written.
 
 **Cut line — enforce ruthlessly:** if real Teams is still blocked at end of week 2, **freeze it**. Ship the Playground demo + fixtures + documented blocker, and do not touch Teams in week 3.
 
@@ -237,7 +239,7 @@ Layout today: `tests/{unit,integration,e2e}/`. Stack: pytest · FastAPI `TestCli
 
 | What | Status | How |
 |---|---|---|
-| **Teams adapter, no tenant** | built (adapter only) | Activity JSON built inline in the test, `Activity.model_validate(json)`, assert canonical `RawSubmission`. Playground-recorded fixtures and a `FakeTurnContext` for card rendering come with `api/teams_router.py`. |
+| **Teams bot, no tenant** | built | Hand-written activity fixtures in `tests/fixtures/teams/` (not yet recorded from Playground) drive the scope gate and `StandupAgent.on_turn` with a `FakeTurnContext` that records replies, against a real database. The HTTP route is exercised in anonymous mode. A manifest test asserts zero Graph permissions, and an SDK-compat test builds real replies. |
 | **Faithfulness** | partial | Negation and misfiled-blocker cases are parametrized tests in `tests/unit/test_rules_summarizer.py`. Planned: a `tests/fixtures/golden/*.yaml` set parametrized over `[RulesSummarizer, FakeLLMSummarizer]`, adding sarcasm, a number appearing nowhere, near-identical text from two members, and a **prompt-injection** string. |
 | **Validator** | built | `HallucinatingSummarizer` double, assert 100% rejection. Hypothesis mutation properties (flip a digit, swap a `source_id`, shift an offset by 1) and example tests for paraphrase-as-quote and cross-attribution, each asserting the mutation is rejected. |
 | **GitHub** | planned (week 3) | respx with recorded fixtures. `ensure_blocker_issue` twice gives exactly one POST; a 403 secondary-rate-limit schedules an outbox retry with the digest unaffected; reconcile rebuilds `tracker_link`. One `@pytest.mark.live_github` test, excluded from CI. |
@@ -247,7 +249,7 @@ Layout today: `tests/{unit,integration,e2e}/`. Stack: pytest · FastAPI `TestCli
 Run them:
 
 ```bash
-pytest                      # everything (108 tests, a few seconds)
+pytest                      # everything (140 tests, a few seconds)
 pytest tests/unit           # fast unit pass
 pytest tests/e2e -v         # end-to-end smoke
 pytest --cov=standup --cov-report=term-missing
@@ -259,7 +261,7 @@ python -m scripts.verify_integrity   # audit chain + stored-text hashes
 
 CI (`.github/workflows/ci.yml`) runs all of the above with `STANDUP_VALIDATOR_STRICT=true`, gates `summarize/` and `privacy/` at 90% coverage, runs migrations plus the integration and e2e tests against Postgres 16, and builds the Docker image.
 
-Current: **108 passing, 96% coverage overall.** The gate that matters is `summarize/` and `privacy/` at >=90% — those are the modules where a silent regression is a correctness or compliance failure rather than a bug. `normalizer.py`, `summarize/base.py`, `logging_conf.py` and `main.py` sit at 100%; `validator.py` at 99%.
+Current: **140 passing, 97% coverage overall.** The gate that matters is `summarize/` and `privacy/` at >=90% — those are the modules where a silent regression is a correctness or compliance failure rather than a bug. `normalizer.py`, `summarize/base.py`, `logging_conf.py` and `main.py` sit at 100%; `validator.py` at 99%.
 
 > `lint-imports` must be run as the console script. `python -m importlinter.cli` exits 0 *without reading* `pyproject.toml`, so it reports success while enforcing nothing — confirmed by adding a deliberate boundary violation and watching it pass.
 
@@ -323,8 +325,8 @@ Then check the digest's `validator_report_json` — `checked: 8, passed: 8, with
 Do not trust these from memory — confirm each at build time:
 
 - Exact Teams extension package name: `microsoft-agents-hosting-msteams` vs `microsoft-agents-hosting-teams` — Microsoft's repo and migration doc **disagree**; check with `pip index versions`
-- Agents SDK version pins and the exact `CloudAdapter` / `start_agent_process` signatures for FastAPI
-- The `manifestVersion` / `$schema` pair your Teams client accepts (v1.23 current per the toolkit changelog)
+- ~~Agents SDK version pins and the exact `CloudAdapter` / `start_agent_process` signatures for FastAPI~~ Verified against the installed 1.5.0 source: `CloudAdapter(connection_manager=MsalConnectionManager(**load_configuration_from_env(os.environ)))`, then `adapter.process(request, agent)`. **Found:** the SDK needs pydantic >= 2.11 (it sets `validate_by_name`) although its metadata says >= 2.10.4; on 2.10 every reply fails to build. Pinned to 2.13.5, with a regression test.
+- The `manifestVersion` / `$schema` pair your Teams client accepts. The manifest uses 1.17; the toolkit changelog says 1.23 is current. Not yet checked against a tenant.
 - Whether your tenant surfaces a `19:`-form chat ID anywhere in a 1:1 bot payload (design assumes **no**; the fallback covers either)
 - GitHub `/search/issues` current rate limit; whether issue `type` is enabled on your repo
 - Config env-var shape: `CONNECTIONS__SERVICE_CONNECTION__SETTINGS__CLIENTID` etc., and `...__ANONYMOUS_ALLOWED=True` for local

@@ -1,0 +1,4 @@
+{"type": "conversationUpdate", "id": "1006", "serviceUrl": "https://smba.trafficmanager.net/teams/", "channelId": "msteams", "recipient": {"id": "28:bot-id", "name": "Status Unblocked"},
+ "from": {"id": "29:user-ada", "name": "Ada Okafor", "aadObjectId": "aad-ada"},
+ "conversation": {"id": "a:1on1-ada", "conversationType": "personal"},
+ "membersAdded": [{"id": "28:bot-id"}]}

@@ -6,10 +6,11 @@ that is the signal for "send this instance traffic".
 """
 
 from fastapi import APIRouter
-from sqlalchemy import text
+from sqlalchemy import func, select, text
 
 from standup.config import get_settings
-from standup.db.session import get_engine
+from standup.db.models import IngestRejection
+from standup.db.session import get_engine, session_scope
 
 router = APIRouter(tags=["ops"])
 
@@ -37,3 +38,18 @@ def version() -> dict[str, str]:
         "env": settings.env,
         "summarizer": settings.summarizer,
     }
+
+
+@router.get("/scope")
+def scope() -> dict[str, object]:
+    """How many messages the bot refused as out of scope, by reason.
+
+    Counts only. Nothing about what was refused, or from whom, is stored, so
+    there is nothing more to show.
+    """
+    with session_scope() as session:
+        rows = session.execute(
+            select(IngestRejection.reason, func.count()).group_by(IngestRejection.reason)
+        ).all()
+    by_reason: dict[str, int] = {reason: count for reason, count in rows}  # noqa: C416
+    return {"scope_violations": sum(by_reason.values()), "by_reason": by_reason}
