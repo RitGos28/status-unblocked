@@ -123,3 +123,40 @@ def test_normalized_key_separates_different_blockers():
     a = normalized_key("waiting on staging credentials")
     b = normalized_key("flaky test in the payment module")
     assert not set(a.split()) & set(b.split())
+
+
+@pytest.mark.parametrize(
+    "progress",
+    [
+        "Did a thing.\nBlockers:\nnot really",
+        "Blockers:\nToday:\nProgress:\nall headings, typed by hand",
+    ],
+)
+def test_typed_headings_cannot_shift_the_real_spans(progress: str):
+    """A user typing a section heading into another box must not move offsets.
+
+    Found by an adversarial review: the heading was located with str.index,
+    which matched the user's text first, and the span check failed with a 500.
+    """
+    submission = make_submission(
+        progress=progress, blockers="Waiting on infra.", plan="Finish the migration."
+    )
+    normalized = normalize(submission)
+    for item in normalized.items:
+        assert normalized.raw_text[item.span_start : item.span_end] == item.text
+    blockers = [i.text for i in normalized.items if i.kind is ItemKind.BLOCKER]
+    assert blockers == ["Waiting on infra."]
+
+
+_HEADING_SOUP = st.lists(
+    st.sampled_from(["Progress:", "Blockers:", "Today:", "Plan:", "\n", "\n\n", "x", " ", ". "]),
+    max_size=12,
+).map("".join)
+
+
+@given(progress=_HEADING_SOUP, blockers=_HEADING_SOUP, plan=_HEADING_SOUP)
+def test_spans_round_trip_whatever_headings_users_type(progress, blockers, plan):
+    """Any field may contain any heading text; every span must still round-trip."""
+    normalized = normalize(make_submission(progress=progress, blockers=blockers, plan=plan))
+    for item in normalized.items:
+        assert normalized.raw_text[item.span_start : item.span_end] == item.text

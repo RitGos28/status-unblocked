@@ -72,6 +72,12 @@ for text in "Reviewed the rollout plan." "Reviewed the rollout plan and the runb
         || fail "Ada submits"
 done
 pass "Ada submits twice; the second replaces the first"
+[ "$(status -c "$WORK/chen.jar" "$(link_for "Chen Wei")")" = 303 ] || fail "Chen's login link"
+[ "$(status -b "$WORK/chen.jar" -X POST "$BASE/submit" \
+    --data-urlencode $'progress=Drafted the schema update.\nBlockers:\nnot really' \
+    --data-urlencode "blockers=Stuck on the deploy pipeline.")" = 303 ] \
+    || fail "a section heading typed into another box is accepted, not a 500"
+pass "Chen types 'Blockers:' inside Progress; the submission is stored correctly"
 
 # --- the daily build, at the cutoff (demo clock) -----------------------------
 AT="$($PY - <<'EOF'
