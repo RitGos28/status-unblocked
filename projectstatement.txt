@@ -1,0 +1,17 @@
+14. The Status-Update Tax
+
+Based on the Student Edition challenge: Team Task & Standup Bot
+
+Scenario — You’re on a distributed team where daily standups and status-chasing eat everyone’s morning.
+
+Solve this — A bot that collects short async updates from each member and summarises progress and blockers into one daily digest.
+
+Data & free tools — Made-up daily updates; a bot on Teams / Slack / Discord, or a web form + spreadsheet.
+
+Make it enterprise-grade:
+
+• Make summaries faithful and link each blocker back to its source message.
+
+• Write structured output back to a task tracker.
+
+• Respect channel and privacy boundaries — don’t become surveillance.
