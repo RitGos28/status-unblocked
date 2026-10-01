@@ -143,3 +143,24 @@ ignore_imports = [
     "standup.ingestion.teams_adapter -> microsoft_agents",
 ]
 
+
+# The scheduler's decision is a pure function of (now, snapshot): it may use
+# domain types and nothing that does I/O. scheduling.jobs is the I/O half.
+[[tool.importlinter.contracts]]
+name = "the scheduler's tick() is pure"
+type = "forbidden"
+source_modules = ["standup.scheduling.tick"]
+forbidden_modules = [
+    "standup.api",
+    "standup.auth",
+    "standup.config",
+    "standup.db",
+    "standup.deps",
+    "standup.ingestion",
+    "standup.logging_conf",
+    "standup.main",
+    "standup.privacy",
+    "standup.scheduling.jobs",
+    "standup.summarize",
+    "standup.tracker",
+]

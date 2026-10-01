@@ -56,6 +56,8 @@ ruff check .
 ruff check --fix .
 mypy src                                  # strict; clean as of Phase 1, keep it that way
 python -m scripts.verify_integrity        # audit chain + stored-text hashes; exits 1 on tampering
+python -m scripts.tick                    # one scheduler pass: build due digests, notify, drain the outbox
+python -m scripts.drain_outbox            # retry queued GitHub writes now
 
 alembic revision --autogenerate -m "description"
 alembic upgrade head
@@ -169,6 +171,7 @@ src/standup/
   summarize/       base, rules, validator, render, service
   privacy/         audit  (hash-chained log)
   tracker/         base (TrackerAdapter protocol), github, noop, idempotency, outbox
+  scheduling/      tick (pure: what is due), jobs (runs it: build, notify, drain)
   db/              models, session
   templates/       base, index, submit, digests, digest, evidence, error
   migrations/      alembic
@@ -176,7 +179,7 @@ src/standup/
 
 Planned but **not yet written** — do not import these, and do not assume they exist:
 
-`api/privacy.py`, `api/admin.py`, `summarize/llm.py`, `summarize/prompts.py`, the tracker reconcile job, all of `scheduling/`, and `privacy/{consent,visibility,redaction,retention,export}.py`.
+`api/privacy.py`, `api/admin.py`, `summarize/llm.py`, `summarize/prompts.py`, the tracker reconcile job, proactive "time to file" prompts, and `privacy/{consent,visibility,redaction,retention,export}.py`.
 
 **Auth is per-member magic links, and team scoping is enforced.** `deps.CurrentMember` resolves the signed-in member from the session cookie (401 otherwise). Every route that touches a team's data checks `deps.ensure_same_team()`, which answers 404 for another team's resources. A new route that reads digests, evidence or updates must do the same.
 
@@ -184,14 +187,14 @@ Planned but **not yet written** — do not import these, and do not assume they 
 
 ## The dependency rule
 
-Partly enforced by import-linter. `pyproject.toml` has three contracts: `domain` is pure; the summarizer core (`base/rules/validator/render`) is pure; and `microsoft_agents` may be imported directly only by `api/teams_router.py` and `ingestion/teams_adapter.py` (invariant 9; `include_external_packages = true` makes that checkable). The `scheduling/` row has no contract yet; add one when that code lands. Neither contract forbids `standup.deps`, `standup.main` or `standup.logging_conf`, so check those imports by eye.
+Partly enforced by import-linter. `pyproject.toml` has four contracts: `domain` is pure; the summarizer core (`base/rules/validator/render`) is pure; and `microsoft_agents` may be imported directly only by `api/teams_router.py` and `ingestion/teams_adapter.py` (invariant 9; `include_external_packages = true` makes that checkable); and `scheduling.tick` imports nothing that does I/O. Neither contract forbids `standup.deps`, `standup.main` or `standup.logging_conf`, so check those imports by eye.
 
 | Layer | May import |
 |---|---|
 | `domain/` | **nothing from this project** |
 | `summarize/{base,rules,validator,render}.py` | `domain/` only — the prompt boundary |
 | `summarize/service.py` | anything — the orchestrator, does the I/O the pure modules must not |
-| `scheduling/tick.py` (planned) | `domain/` only; `tick()` is a pure function |
+| `scheduling/tick.py` | `domain/` only; `tick()` is a pure function (contract enforced) |
 | `ingestion/`, `tracker/`, `privacy/`, `db/`, `api/` | anything — the I/O layers |
 
 Wanting to import a SQLAlchemy model into `summarize/` is the signal you are about to break the seam. Map it to a domain dataclass in `service.py` instead.

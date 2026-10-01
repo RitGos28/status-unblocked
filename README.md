@@ -1,9 +1,9 @@
 # Status Unblocked — Team Task & Standup Bot
 
-> An async standup bot for distributed teams. Collects short updates through a web form or a Microsoft Teams bot and produces a **faithful, citation-backed** digest — without becoming a surveillance tool. Each blocker is written back to GitHub Issues as a durable tracked object; see [Roadmap](#roadmap) for what exists today.
+> An async standup bot for distributed teams. Collects short updates through a web form or a Microsoft Teams bot and produces a **faithful, citation-backed** digest each day at the team's cutoff — without becoming a surveillance tool. Each blocker is written back to GitHub Issues as a durable tracked object; see [Roadmap](#roadmap) for what exists today.
 
 **Stack:** Python 3.13 · FastAPI · SQLAlchemy 2.0 + Alembic · Postgres (SQLite in dev) · Docker
-**Status:** Week 1 complete — the walking skeleton runs end to end: submit → digest → click through to the verbatim source, behind per-member sign-in with team-scoped access, from the web form or the Teams bot, with blockers written back to GitHub Issues. 162 tests green. See [Roadmap](#roadmap).
+**Status:** Week 1 complete — the walking skeleton runs end to end: submit → digest → click through to the verbatim source, behind per-member sign-in with team-scoped access, from the web form or the Teams bot, with blockers written back to GitHub Issues and the digest built daily at each team's cutoff. 179 tests green. See [Roadmap](#roadmap).
 
 ---
 
@@ -116,7 +116,7 @@ src/standup/
 | `summarize/base.py` | `Summarizer` protocol (`SummaryRequest`/`SummaryResult`/`Claim`/`Citation`). The **prompt boundary**: a summarizer receives no ORM objects, no DB session, no emails, no unredacted text, and (once the consent model lands in week 4) nothing from members who have not opted into external processing. |
 | `summarize/validator.py` | Runs in `service.py` **after** any summarizer so it cannot be bypassed. Failing claims are dropped; the digest reports "*N withheld*". |
 | `tracker/base.py` | `TrackerAdapter` with `GitHubTracker` + `NoopTracker`. All writes go through `tracker_outbox` with backoff — **a GitHub outage must never lose a standup update.** |
-| `scheduling/tick.py` *(planned)* | One per-minute job calling a **pure** `tick(now, teams, members) -> [Action]`. Pure function + injected clock = zero flaky tests; "simulate three days" is a loop in a test. |
+| `scheduling/tick.py` | A **pure** `tick(now, cycles) -> [BuildDigest | DrainOutbox]`, enforced by an import-linter contract. `scheduling/jobs.py` runs it: each team's digest builds once its local cutoff passes, rebuilds quietly after a late update, notifies linked Teams users with a link and a blocker count (never anyone's words) on the first build, and drains the tracker outbox. It runs in-app every 60s with `STANDUP_SCHEDULER=true`, or once per call with `python -m scripts.tick` for cron. Pure function + injected clock = zero flaky tests; "simulate three days" is a loop in a test, and there is one. |
 
 ### The faithfulness validator
 
@@ -217,7 +217,7 @@ Walking-skeleton first. **Something demoable at the end of every week.** Risky A
 
 **Cut lines:** Projects v2 board sync, GitHub App auth, proactive scheduled prompts.
 
-**Shipped so far:** `tracker/{base,github,noop,idempotency,outbox}.py` · `tracker_link` + `tracker_outbox` tables · blocker-to-Issue with body marker and label · links both ways (issue → evidence and digest; digest → issue with age) · background drain with backoff · respx-mocked tests including a two-day recurrence that comments instead of duplicating. **Not yet:** the scheduler, the reconcile job, carry-over detection in `rules.py`, and a run against a real scratch repo (a read-only live test exists and is skipped without credentials).
+**Shipped so far:** `tracker/{base,github,noop,idempotency,outbox}.py` · `tracker_link` + `tracker_outbox` tables · blocker-to-Issue with body marker and label · links both ways (issue → evidence and digest; digest → issue with age) · background drain with backoff · respx-mocked tests including a two-day recurrence that comments instead of duplicating. **Also shipped:** `scheduling/{tick,jobs}.py` with a pure `tick()`, the in-app loop and `scripts/tick.py`, and Teams "digest ready" notices sent through the stored 1:1 conversation reference. **Not yet:** proactive "time to file" prompts (cut line), the reconcile job, carry-over detection in `rules.py`, and a run against a real scratch repo (a read-only live test exists and is skipped without credentials).
 
 ### Week 4 — Privacy, deployment, docs, and the LLM seam
 
@@ -255,7 +255,7 @@ Layout today: `tests/{unit,integration,e2e}/`. Stack: pytest · FastAPI `TestCli
 Run them:
 
 ```bash
-pytest                      # everything (162 tests, a few seconds)
+pytest                      # everything (179 tests, a few seconds)
 pytest tests/unit           # fast unit pass
 pytest tests/e2e -v         # end-to-end smoke
 pytest --cov=standup --cov-report=term-missing
@@ -267,7 +267,7 @@ python -m scripts.verify_integrity   # audit chain + stored-text hashes
 
 CI (`.github/workflows/ci.yml`) runs all of the above with `STANDUP_VALIDATOR_STRICT=true`, gates `summarize/` and `privacy/` at 90% coverage, runs migrations plus the integration and e2e tests against Postgres 16, and builds the Docker image.
 
-Current: **162 passing, 97% coverage overall.** The gate that matters is `summarize/` and `privacy/` at >=90% — those are the modules where a silent regression is a correctness or compliance failure rather than a bug. `normalizer.py`, `summarize/base.py`, `logging_conf.py` and `main.py` sit at 100%; `validator.py` at 99%.
+Current: **179 passing, 97% coverage overall.** The gate that matters is `summarize/` and `privacy/` at >=90% — those are the modules where a silent regression is a correctness or compliance failure rather than a bug. `normalizer.py`, `summarize/base.py`, `logging_conf.py` and `main.py` sit at 100%; `validator.py` at 99%.
 
 > `lint-imports` must be run as the console script. `python -m importlinter.cli` exits 0 *without reading* `pyproject.toml`, so it reports success while enforcing nothing — confirmed by adding a deliberate boundary violation and watching it pass.
 

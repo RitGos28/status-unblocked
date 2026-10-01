@@ -79,6 +79,11 @@ class Settings(DatabaseSettings):
     # it is switched on, and the error names every missing key at once.
     teams_enabled: bool = False
     tracker: str = "noop"
+    # Build each team's digest at its cutoff, notify, and drain the tracker
+    # outbox, from a loop inside the app. Off by default; scripts/tick does the
+    # same once, for cron.
+    scheduler: bool = False
+    scheduler_interval_seconds: int = Field(default=60, ge=10)
     github_token: SecretStr | None = None
 
     @model_validator(mode="after")
@@ -93,6 +98,10 @@ class Settings(DatabaseSettings):
             missing += [key for key in TEAMS_REQUIRED_ENV if not os.environ.get(key)]
         if self.tracker == "github" and not self.github_token:
             missing.append("STANDUP_GITHUB_TOKEN")
+        if self.scheduler and not self.base_url:
+            # Scheduled digests and notices carry links, and there is no
+            # request to take the address from.
+            missing.append("STANDUP_BASE_URL")
         if missing:
             raise ValueError("missing required settings: " + ", ".join(missing))
         return self

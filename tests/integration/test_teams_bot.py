@@ -165,3 +165,52 @@ def test_link_page_shows_a_code_for_the_signed_in_member(teams_client, team_with
     page = teams_client.get("/me/teams")
     assert page.status_code == 200
     assert "link " in page.text
+
+
+def test_a_linked_member_turn_saves_the_conversation_for_notices(
+    session, clock, team_with_members
+):
+    _team, (ada, *_rest) = team_with_members
+    link(session, clock, ada)
+    session.refresh(ada)
+    assert ada.teams_conversation_ref["conversation"]["id"] == "a:1on1-ada"
+    assert ada.teams_conversation_ref["serviceUrl"].startswith("https://smba")
+
+
+def test_channel_turns_never_save_a_conversation(session, clock, team_with_members):
+    _team, (ada, *_rest) = team_with_members
+    link(session, clock, ada)
+    session.refresh(ada)
+    before = dict(ada.teams_conversation_ref)
+    run_turn(session, clock, activity("channel_mention"))
+    session.refresh(ada)
+    assert ada.teams_conversation_ref == before
+
+
+def test_notifier_continues_the_saved_conversation():
+    from standup.api.teams_router import TeamsNotifier
+
+    class FakeAdapter:
+        def __init__(self):
+            self.calls = []
+
+        async def continue_conversation(self, app_id, continuation, callback):
+            context = FakeTurnContext(continuation)
+            await callback(context)
+            self.calls.append((app_id, continuation, context.sent))
+
+    adapter = FakeAdapter()
+    reference = {
+        "user": {"id": "29:user-ada"},
+        "agent": {"id": "28:bot-id"},
+        "conversation": {"id": "a:1on1-ada"},
+        "serviceUrl": "https://smba.trafficmanager.net/teams/",
+        "channelId": "msteams",
+    }
+    asyncio.run(TeamsNotifier(adapter, "app-id").notify(reference, "Digest ready"))
+
+    ((app_id, continuation, sent),) = adapter.calls
+    assert app_id == "app-id"
+    assert continuation.conversation.id == "a:1on1-ada"
+    assert continuation.service_url == "https://smba.trafficmanager.net/teams/"
+    assert sent == ["Digest ready"]

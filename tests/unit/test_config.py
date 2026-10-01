@@ -58,3 +58,9 @@ def test_anonymous_teams_mode_needs_no_credentials_locally(monkeypatch):
     monkeypatch.setenv("CONNECTIONS__SERVICE_CONNECTION__SETTINGS__ANONYMOUS_ALLOWED", "True")
     settings = Settings(_env_file=None, secret_key=KEY, env="local", teams_enabled=True)
     assert settings.teams_enabled is True
+
+
+def test_scheduler_requires_a_base_url_for_its_links():
+    with pytest.raises(ValidationError, match="STANDUP_BASE_URL"):
+        Settings(_env_file=None, secret_key=KEY, scheduler=True, base_url="")
+    assert Settings(_env_file=None, secret_key=KEY, scheduler=True, base_url="https://x").scheduler

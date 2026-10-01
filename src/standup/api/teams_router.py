@@ -24,7 +24,7 @@ import os
 from typing import Any, Protocol
 
 from fastapi import APIRouter, FastAPI, Request, Response
-from microsoft_agents.activity import Activity, load_configuration_from_env
+from microsoft_agents.activity import Activity, ConversationReference, load_configuration_from_env
 from microsoft_agents.authentication.msal import MsalConnectionManager
 from microsoft_agents.hosting.core import CardFactory, MessageFactory
 from microsoft_agents.hosting.fastapi import CloudAdapter, jwt_authorization_decorator
@@ -32,6 +32,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from standup.auth.tokens import read_teams_link_code
+from standup.config import TEAMS_REQUIRED_ENV
 from standup.db.models import IngestRejection, Member
 from standup.deps import AppClock, AppSettings, DbSession
 from standup.domain.errors import EmptySubmissionError
@@ -91,6 +92,7 @@ class StandupAgent:
         if decision.kind == "mention":
             await context.send_activity(MENTION_REPLY)
             return
+        self._remember_conversation(activity)
         if decision.kind == "card_submit":
             await self._handle_submit(context, activity)
             return
@@ -106,6 +108,7 @@ class StandupAgent:
             await context.send_activity(MessageFactory.attachment(card))
         elif command == "link":
             await context.send_activity(self._link(activity, argument.strip()))
+            self._remember_conversation(activity)
         else:
             await context.send_activity(HELP_TEXT)
 
@@ -171,6 +174,17 @@ class StandupAgent:
             select(Member).where(Member.teams_aad_id == user_key).where(Member.active.is_(True))
         ).scalar_one_or_none()
 
+    def _remember_conversation(self, activity: Activity) -> None:
+        """Keep the latest 1:1 conversation reference for a linked member, so
+        the scheduler can tell them their digest is ready."""
+        member = self._member_for(activity)
+        if member is None:
+            return
+        reference = activity.get_conversation_reference()
+        member.teams_conversation_ref = reference.model_dump(
+            mode="json", by_alias=True, exclude_none=True
+        )
+
     def _record_rejection(self, decision: ScopeDecision) -> None:
         self._session.add(
             IngestRejection(
@@ -204,11 +218,41 @@ async def messages(
     return response or Response(status_code=202)
 
 
-def mount_teams(app: FastAPI) -> None:
-    """Wire the SDK from its CONNECTIONS__ environment variables and add the route."""
+class TeamsNotifier:
+    """Sends a proactive 1:1 message, for the scheduler's digest notice."""
+
+    def __init__(self, adapter: CloudAdapter, app_id: str):
+        self._adapter = adapter
+        self._app_id = app_id
+
+    async def notify(self, conversation_ref: dict[str, Any], text: str) -> None:
+        reference = ConversationReference.model_validate(conversation_ref)
+
+        async def send(context: Any) -> None:
+            await context.send_activity(text)
+
+        await self._adapter.continue_conversation(
+            self._app_id, reference.get_continuation_activity(), send
+        )
+
+
+def _build_adapter() -> tuple[CloudAdapter, Any]:
     config = load_configuration_from_env(os.environ)
     connection_manager = MsalConnectionManager(**config)
-    app.state.teams_adapter = CloudAdapter(connection_manager=connection_manager)
+    return CloudAdapter(connection_manager=connection_manager), connection_manager
+
+
+def build_teams_notifier() -> TeamsNotifier:
+    """A notifier with its own adapter, for use outside the web app (scripts/tick)."""
+    adapter, _ = _build_adapter()
+    return TeamsNotifier(adapter, os.environ.get(TEAMS_REQUIRED_ENV[0], ""))
+
+
+def mount_teams(app: FastAPI) -> None:
+    """Wire the SDK from its CONNECTIONS__ environment variables and add the route."""
+    adapter, connection_manager = _build_adapter()
+    app.state.teams_adapter = adapter
+    app.state.teams_notifier = TeamsNotifier(adapter, os.environ.get(TEAMS_REQUIRED_ENV[0], ""))
     # Read by jwt_authorization_decorator to validate inbound tokens.
     app.state.agent_configuration = connection_manager.get_default_connection_configuration()
     app.include_router(router)

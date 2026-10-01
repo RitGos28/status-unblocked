@@ -1,5 +1,6 @@
 """FastAPI application factory."""
 
+import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -28,8 +29,25 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         create_all()
 
     log.info("app.started", env=settings.env, summarizer=settings.summarizer)
+    scheduler = None
+    if settings.scheduler:
+        scheduler = asyncio.create_task(_scheduler_loop(_app, settings.scheduler_interval_seconds))
     yield
+    if scheduler is not None:
+        scheduler.cancel()
     log.info("app.stopped")
+
+
+async def _scheduler_loop(app: FastAPI, interval_seconds: int) -> None:
+    """Run a scheduler pass every interval. A failing pass is logged, never fatal."""
+    from standup.scheduling.jobs import run_once
+
+    while True:
+        try:
+            await run_once(getattr(app.state, "teams_notifier", None))
+        except Exception:  # noqa: BLE001 - the next pass retries
+            log.exception("scheduler.tick_failed")
+        await asyncio.sleep(interval_seconds)
 
 
 def create_app() -> FastAPI:

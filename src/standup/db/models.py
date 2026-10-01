@@ -76,6 +76,14 @@ class Member(Base):
     teams_aad_id: Mapped[str | None] = mapped_column(
         String(64), unique=True, index=True, nullable=True, default=None
     )
+    # Where to reach this member proactively in Teams: the conversation
+    # reference from their latest 1:1 turn with the bot. Only the scheduler's
+    # "digest is ready" notice uses it.
+    # none_as_null: store SQL NULL, not JSON 'null', so "IS NOT NULL" means
+    # "has a conversation".
+    teams_conversation_ref: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON(none_as_null=True), nullable=True, default=None
+    )
     active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     team: Mapped[Team] = relationship(back_populates="members")
