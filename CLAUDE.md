@@ -56,7 +56,8 @@ ruff check .
 ruff check --fix .
 mypy src                                  # strict; clean as of Phase 1, keep it that way
 python -m scripts.verify_integrity        # audit chain + stored-text hashes; exits 1 on tampering
-python -m scripts.tick                    # one scheduler pass: build due digests, notify, drain the outbox
+python -m scripts.tick [--at ISO]         # one scheduler pass: build due digests, notify, drain the outbox
+scripts/demo_check.sh                     # the whole docs/DEMO.md flow against a real server; also a CI job
 python -m scripts.drain_outbox            # retry queued GitHub writes now
 
 alembic revision --autogenerate -m "description"
@@ -72,7 +73,7 @@ alembic upgrade head
 ```bash
 export STANDUP_SECRET_KEY=$(python -c "import secrets; print(secrets.token_urlsafe(48))")
 alembic upgrade head
-python -m scripts.seed_demo      # team "Core Platform", 3 members; prints a login link each
+python -m scripts.seed_demo --days 2   # Core Platform (3) + Mobile (1), 2 days of updates; prints login links
 uvicorn standup.main:app --reload
 python -m scripts.issue_links    # fresh links any time
 ```
@@ -237,7 +238,7 @@ Wanting to import a SQLAlchemy model into `summarize/` is the signal you are abo
 - **Keep pydantic >= 2.11.** The Agents SDK's models rely on `validate_by_name`; on 2.10 its own constructors fail. `tests/unit/test_teams_sdk_compat.py` guards this.
 - **The validator suite is parametrized over every summarizer implementation.** When you add one, add it to that list — do not write it a softer test.
 - Tests run on a throwaway SQLite file by default. Set `STANDUP_TEST_DATABASE_URL` to a Postgres URL to run them there (CI does, for `tests/integration` and `tests/e2e`); each test then creates and drops its tables.
-- `tests/e2e/test_smoke_cycle.py` is both the regression net and the demo script. Keep it under 10 seconds.
+- `tests/e2e/test_smoke_cycle.py` is the regression net; `scripts/demo_check.sh` is the demo, run in CI. **Every feature must be demoable without accounts:** a new feature adds its steps to `docs/DEMO.md` and `scripts/demo_check.sh` in the same change.
 - Two test doubles carry most of the weight: `HallucinatingSummarizer` (fluent, plausible, entirely unsourced — must be rejected 100%) and Hypothesis mutation properties (shift an offset by one, swap a source id, inject a digit — every mutation must be caught).
 
 Ruff excludes `src/standup/migrations/versions/` — Alembic writes those.
