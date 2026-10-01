@@ -66,6 +66,11 @@ def create_all() -> None:
     Base.metadata.create_all(bind=get_engine())
 
 
+def drop_all() -> None:
+    """Drop every table. Tests use it to isolate runs on a shared Postgres."""
+    Base.metadata.drop_all(bind=get_engine())
+
+
 def reset_engine() -> None:
     """Drop cached engine/session factory. Tests call this after changing the URL."""
     global _engine, _SessionLocal

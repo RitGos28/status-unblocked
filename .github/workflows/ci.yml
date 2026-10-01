@@ -1,0 +1,68 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: pip install -e ".[dev]"
+      - run: ruff check .
+      - run: mypy src
+      # The console script, never "python -m importlinter.cli": the module
+      # form exits 0 without reading pyproject.toml (see CLAUDE.md).
+      - run: lint-imports
+      - name: tests (strict faithfulness)
+        env:
+          STANDUP_VALIDATOR_STRICT: "true"
+        run: pytest --cov=standup --cov-report=term-missing
+      - name: coverage gate on summarize/ and privacy/
+        run: >
+          coverage report --fail-under=90
+          --include='src/standup/summarize/*,src/standup/privacy/*'
+
+  postgres:
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: standup
+          POSTGRES_PASSWORD: standup
+          POSTGRES_DB: standup
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U standup"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      PG_URL: postgresql+psycopg://standup:standup@localhost:5432/standup
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: pip install -e ".[dev,postgres]"
+      - name: migrations apply cleanly to Postgres
+        env:
+          STANDUP_DATABASE_URL: ${{ env.PG_URL }}
+        run: alembic upgrade head && alembic check
+      - name: integration and end-to-end tests on Postgres
+        env:
+          STANDUP_TEST_DATABASE_URL: ${{ env.PG_URL }}
+          STANDUP_VALIDATOR_STRICT: "true"
+        run: pytest tests/integration tests/e2e
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t status-unblocked:ci .

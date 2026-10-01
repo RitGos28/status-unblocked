@@ -4,6 +4,7 @@ Time is injected, never faked with freezegun, and nothing sleeps. Each test
 gets its own SQLite file so runs are isolated and parallelisable.
 """
 
+import os
 from datetime import UTC, datetime
 
 import pytest
@@ -24,9 +25,14 @@ def clock() -> FakeClock:
 
 @pytest.fixture
 def app_env(tmp_path, monkeypatch, clock):
-    """Point the app at a throwaway database and a frozen clock."""
-    db_file = tmp_path / "test.db"
-    monkeypatch.setenv("STANDUP_DATABASE_URL", f"sqlite:///{db_file}")
+    """Point the app at a throwaway database and a frozen clock.
+
+    SQLite in a temp file by default. CI sets STANDUP_TEST_DATABASE_URL to a
+    Postgres instance, and each test then gets freshly created tables.
+    """
+    shared_url = os.environ.get("STANDUP_TEST_DATABASE_URL")
+    db_url = shared_url or f"sqlite:///{tmp_path / 'test.db'}"
+    monkeypatch.setenv("STANDUP_DATABASE_URL", db_url)
     monkeypatch.setenv("STANDUP_BASE_URL", "http://testserver")
     monkeypatch.setenv("STANDUP_ENV", "test")
 
@@ -38,6 +44,8 @@ def app_env(tmp_path, monkeypatch, clock):
     yield
 
     set_clock(SystemClock())
+    if shared_url:
+        db_session.drop_all()
     db_session.reset_engine()
     get_settings.cache_clear()
 
