@@ -5,13 +5,16 @@ above all. "No blockers" being reported as a blocker is the single most common
 false positive in this category of tool.
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from standup.domain.enums import ClaimKind, ItemKind
+from standup.ingestion.normalizer import normalized_key
 from standup.summarize.base import SourceDoc, SummaryRequest
+from standup.summarize.render import explain_rule
 from standup.summarize.rules import RulesSummarizer, looks_like_blocker
+from standup.summarize.validator import FaithfulnessValidator
 
 NOW = datetime(2026, 9, 15, 9, 30, tzinfo=UTC)
 
@@ -210,3 +213,67 @@ def test_a_line_that_is_only_a_section_heading_is_not_a_claim(text: str, kind: I
 def test_a_heading_followed_by_content_is_still_a_claim():
     (claim,) = summarize(source("s1", "Blockers: waiting on infra", ItemKind.PROGRESS)).claims
     assert claim.kind is ClaimKind.BLOCKER
+
+
+# --- carry-over: a blocker reported again is "Still blocked" ----------------
+
+def keyed(id_, text, kind=ItemKind.BLOCKER, member_id="m1", days_ago=0):
+    return SourceDoc(
+        id=id_,
+        member_id=member_id,
+        member_name="Ada Okafor",
+        kind=kind,
+        text=text,
+        captured_at=NOW - timedelta(days=days_ago),
+        evidence_url=f"http://testserver/evidence/{id_}",
+        normalized_key=normalized_key(text),
+    )
+
+
+def carry(today, *prior):
+    req = SummaryRequest(
+        cycle_date=NOW.date(),
+        team_name="Core Platform",
+        sources=(today,),
+        prior_open_blockers=prior,
+    )
+    return req, RulesSummarizer().summarize(req)
+
+
+def test_a_blocker_reported_again_is_still_blocked_and_cites_both_days():
+    today = keyed("t1", "Waiting on staging credentials from infra.")
+    earlier = keyed("p1", "Waiting on staging credentials from infra.", days_ago=1)
+    req, result = carry(today, earlier)
+
+    (claim,) = result.claims
+    assert claim.kind is ClaimKind.CARRYOVER
+    assert claim.text == today.text  # today's words, verbatim (invariant 4)
+    assert [c.source_id for c in claim.citations] == ["t1", "p1"]
+    assert "carryover:2026-09-14" in claim.matched_rule
+    kept, report = FaithfulnessValidator().validate(result, req)
+    assert kept == (claim,) and report.violations == []
+
+
+def test_the_earliest_earlier_report_is_the_one_cited():
+    today = keyed("t1", "Waiting on staging credentials from infra.")
+    two_days = keyed("p2", "Waiting on staging credentials from infra.", days_ago=2)
+    one_day = keyed("p1", "Waiting on staging credentials from infra.", days_ago=1)
+    _req, result = carry(today, one_day, two_days)
+    assert [c.source_id for c in result.claims[0].citations] == ["t1", "p2"]
+
+
+def test_someone_elses_identical_blocker_is_not_a_carryover():
+    today = keyed("t1", "Waiting on staging credentials from infra.")
+    earlier = keyed("p1", "Waiting on staging credentials from infra.", member_id="m2", days_ago=1)
+    _req, result = carry(today, earlier)
+    assert result.claims[0].kind is ClaimKind.BLOCKER
+
+
+def test_a_promoted_blocker_can_also_be_carried_over_and_says_both():
+    today = keyed("t1", "Stuck on the deploy pipeline.", kind=ItemKind.PROGRESS)
+    earlier = keyed("p1", "Stuck on the deploy pipeline.", days_ago=1)
+    _req, result = carry(today, earlier)
+    (claim,) = result.claims
+    assert claim.kind is ClaimKind.CARRYOVER
+    why = explain_rule(claim.matched_rule)
+    assert "Moved to Blockers" in why and "Also reported on 2026-09-14" in why

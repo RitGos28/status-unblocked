@@ -18,6 +18,7 @@ from standup.domain.enums import ClaimKind, ItemKind
 from standup.summarize.base import (
     Citation,
     Claim,
+    SourceDoc,
     SummaryRequest,
     SummaryResult,
 )
@@ -110,6 +111,20 @@ def looks_like_blocker(text: str) -> tuple[bool, str]:
     return False, negation_rule
 
 
+def _earliest_same_blocker(
+    source: SourceDoc, prior: tuple[SourceDoc, ...]
+) -> SourceDoc | None:
+    """The earliest earlier blocker by the same member with the same key."""
+    if not source.normalized_key:
+        return None
+    matches = [
+        p
+        for p in prior
+        if p.member_id == source.member_id and p.normalized_key == source.normalized_key
+    ]
+    return min(matches, key=lambda p: p.captured_at) if matches else None
+
+
 class RulesSummarizer:
     """Deterministic extractive summarizer. No network, no model, no cost."""
 
@@ -148,6 +163,25 @@ class RulesSummarizer:
             # quote == source.text[start:end] holds trivially.
             start = source.text.index(text)
             end = start + len(text)
+            citations = [Citation(source_id=source.id, quote=text, start=start, end=end)]
+
+            # Carry-over: the same person reported the same blocker on an
+            # earlier day. The claim keeps today's words verbatim (invariant 4)
+            # and also cites the earliest earlier report, so both days resolve.
+            if claim_kind is ClaimKind.BLOCKER:
+                earlier = _earliest_same_blocker(source, req.prior_open_blockers)
+                if earlier is not None:
+                    quote = earlier.text.strip()
+                    offset = earlier.text.index(quote)
+                    citations.append(
+                        Citation(
+                            source_id=earlier.id, quote=quote, start=offset, end=offset + len(quote)
+                        )
+                    )
+                    claim_kind = ClaimKind.CARRYOVER
+                    matched_rule = (
+                        f"{matched_rule};carryover:{earlier.captured_at.date().isoformat()}"
+                    )
 
             claims.append(
                 Claim(
@@ -155,14 +189,7 @@ class RulesSummarizer:
                     member_id=source.member_id,
                     member_name=source.member_name,
                     text=text,
-                    citations=(
-                        Citation(
-                            source_id=source.id,
-                            quote=text,
-                            start=start,
-                            end=end,
-                        ),
-                    ),
+                    citations=tuple(citations),
                     extractive=True,
                     matched_rule=matched_rule,
                 )

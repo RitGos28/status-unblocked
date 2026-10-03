@@ -174,6 +174,11 @@ DIGEST_ID="$(curl -s -b "$WORK/ada.jar" "$BASE/digests" | grep -o 'href="/digest
 [ -n "$DIGEST_ID" ] || fail "today's digest is listed"
 PAGE="$(curl -s -b "$WORK/ada.jar" "$BASE/digest/$DIGEST_ID")"
 grep -q "Waiting on staging credentials from infra." <<<"$PAGE" || fail "Ada's blocker is in the digest"
+STILL="$(sed -n '/## Still blocked/,/## Blockers/p' <<<"$(curl -s -b "$WORK/ada.jar" "$BASE/digest/$DIGEST_ID.md")")"
+grep -q "Ada Okafor\*\* - Waiting on staging credentials" <<<"$STILL" || fail "Ada's two-day blocker is under Still blocked"
+[ "$(grep -o '\[source\]' <<<"$(grep 'Ada Okafor' <<<"$STILL" | head -1)" | wc -l | tr -d ' ')" = 2 ] \
+    || fail "the carried-over blocker cites both days"
+grep -q "Also reported on" <<<"$PAGE" || fail "the page says when it was first reported"
 grep -q "Moved to Blockers" <<<"$PAGE" || fail "Chen's misfiled blocker is promoted, with the reason"
 grep -q "runbook" <<<"$PAGE" || fail "the resubmission is the one in the digest"
 MD="$(curl -s -b "$WORK/ada.jar" "$BASE/digest/$DIGEST_ID.md")"
@@ -184,10 +189,11 @@ grep -q "waiting on review for the DB migration" <<<"$(sed -n '/## Blockers/,/##
 grep -q "$BASE/evidence/" <<<"$MD" || fail "every line links to its evidence"
 grep -q "Moved to Blockers" <<<"$MD" || fail "the Markdown digest explains a promoted blocker, like the page"
 ! grep -q '\[\[source\]\]' <<<"$MD" || fail "the Markdown digest's links are ordinary links"
-BLOCKER_LINES="$(sed -n '/## Blockers/,/## Progress/p' <<<"$MD" | grep -c '^- ')"
+# Blockers and carried-over blockers ("Still blocked") both get an issue link.
+BLOCKER_LINES="$(sed -n '/## Still blocked/,/## Progress/p' <<<"$MD" | grep -c '^- ')"
 ISSUE_LINKS="$(grep -o "href=\"$GH/demo/core/issues/[0-9]*\"" <<<"$PAGE" | wc -l | tr -d ' ')"
 [ "$ISSUE_LINKS" = "$BLOCKER_LINES" ] || fail "every blocker links to its issue ($ISSUE_LINKS links, $BLOCKER_LINES blockers)"
-pass "digest: blockers first, promotion explained, negation honoured, every line cited, every blocker linked to its issue"
+pass "digest: Ada's repeat blocker is 'Still blocked' citing both days; promotion explained, negation honoured, every line cited, every blocker linked to its issue"
 
 replay personal_card_submit || fail "the bot accepts a card submission"
 grep -q "Recorded for Core Platform" <<<"$(bot_said)" || fail "a card submission is recorded"
