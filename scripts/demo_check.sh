@@ -221,5 +221,7 @@ curl -s "$BASE/scope" | grep -q '"scope_violations":1' || fail "/scope counts th
 ERR_TYPE="$(curl -s -o /dev/null -w '%{content_type}' -H 'accept: text/html' -b "$WORK/ada.jar" "$BASE/digest/nope")"
 [[ "$ERR_TYPE" == text/html* ]] || fail "browser errors render as HTML (got $ERR_TYPE)"
 pass "/scope counts the refused channel message (content-free); browser errors are HTML pages"
+! grep -Eq '/login/[A-Za-z0-9]' "$WORK/server.log" || fail "no login token appears in the server's access log"
+pass "the server's access log shows /login/[redacted], never a login token"
 
 echo "All $STEP demo steps passed."

@@ -95,3 +95,29 @@ def test_scrub_is_idempotent():
     once = scrub_secrets(None, "info", {"note": f"x {KNOWN_SECRET}"})
     twice = scrub_secrets(None, "info", dict(once))
     assert once == twice
+
+
+def test_login_tokens_are_redacted_from_the_access_log():
+    """Login links carry the token in the path; uvicorn's access log prints
+    paths. Anyone with the logs could otherwise sign in as anyone."""
+    import logging
+
+    configure_logging("INFO")
+    buffer = io.StringIO()
+    handler = logging.StreamHandler(buffer)
+    access = logging.getLogger("uvicorn.access")
+    previous_level = access.level
+    access.setLevel(logging.INFO)  # as uvicorn sets it when it serves
+    access.addHandler(handler)
+    try:
+        # Exactly how uvicorn's access logger formats a request line.
+        access.info(
+            '%s - "%s %s HTTP/%s" %d',
+            "127.0.0.1:5000", "GET", "/login/eyJsecret.token-value_123", "1.1", 303,
+        )
+    finally:
+        access.removeHandler(handler)
+        access.setLevel(previous_level)
+    line = buffer.getvalue()
+    assert "eyJsecret.token-value_123" not in line
+    assert "/login/[redacted]" in line

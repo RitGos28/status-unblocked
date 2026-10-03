@@ -64,8 +64,37 @@ def scrub_secrets(
     return event_dict
 
 
+_LOGIN_PATH = re.compile(r"(/login/)[^\s?\"]+")
+
+
+class RedactLoginTokens(logging.Filter):
+    """Blank the token out of /login/<token> in stdlib log records.
+
+    Personal login links carry a signed token in the path, and uvicorn's
+    access log prints every path. Whoever can read the logs could otherwise
+    sign in as anyone whose link appears there.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if isinstance(record.msg, str):
+            record.msg = _LOGIN_PATH.sub(r"\1[redacted]", record.msg)
+        if isinstance(record.args, tuple):
+            record.args = tuple(
+                _LOGIN_PATH.sub(r"\1[redacted]", arg) if isinstance(arg, str) else arg
+                for arg in record.args
+            )
+        return True
+
+
+def _redact_access_log() -> None:
+    access = logging.getLogger("uvicorn.access")
+    if not any(isinstance(f, RedactLoginTokens) for f in access.filters):
+        access.addFilter(RedactLoginTokens())
+
+
 def configure_logging(level: str = "INFO", json_output: bool = False) -> None:
     logging.basicConfig(format="%(message)s", stream=sys.stdout, level=level.upper())
+    _redact_access_log()
 
     renderer: Any = (
         structlog.processors.JSONRenderer()
