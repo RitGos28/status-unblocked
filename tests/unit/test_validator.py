@@ -331,3 +331,51 @@ def test_shipped_summarizers_produce_fully_valid_output(summarizer):
 
     assert report.ok, f"{summarizer.name} emitted violations: {report.violations}"
     assert len(kept) == len(result.claims)
+
+
+def _abstractive(src: SourceDoc, text: str) -> Claim:
+    return Claim(
+        ClaimKind.BLOCKER,
+        src.member_id,
+        src.member_name,
+        text,
+        citations=(Citation(src.id, src.text, 0, len(src.text)),),
+        extractive=False,
+    )
+
+
+@pytest.mark.parametrize(
+    ("evidence", "claim_text", "rule"),
+    [
+        ("Waiting 10 days on credentials.", "Waiting 1 day on credentials.", "V4"),
+        ("Deploy failed 25 times today.", "Deploy failed 5 times today.", "V4"),
+        ("Blocked on #12 for the deploy.", "Blocked on #1 for the deploy.", "V5"),
+        ("Waiting on @anabel for review.", "Waiting on @ana for review.", "V5"),
+        ("Blocked by ABC-12 in the tracker.", "Blocked by ABC-1 in the tracker.", "V5"),
+        ("See https://x.io/abcdef for logs.", "See https://x.io/abc for logs.", "V5"),
+    ],
+)
+def test_numbers_and_references_must_match_whole_not_as_a_substring(evidence, claim_text, rule):
+    """Found by the robustness review: '1' passed against '10' because V4 (and
+    V5) checked substrings of the evidence instead of whole tokens."""
+    src = source(text=evidence)
+    kept, report = FaithfulnessValidator().validate(
+        result_with(_abstractive(src, claim_text)), request_with(src)
+    )
+    assert kept == ()
+    assert rule in {v.rule for v in report.violations}
+
+
+@pytest.mark.parametrize(
+    ("evidence", "claim_text"),
+    [
+        ("Waiting 10 days on credentials.", "Waiting 10 days on credentials, still."),
+        ("Blocked on #12 by @anabel.", "Blocked on #12 by @anabel, still."),
+    ],
+)
+def test_exact_numbers_and_references_still_pass(evidence, claim_text):
+    src = source(text=evidence)
+    kept, _ = FaithfulnessValidator().validate(
+        result_with(_abstractive(src, claim_text)), request_with(src)
+    )
+    assert len(kept) == 1
