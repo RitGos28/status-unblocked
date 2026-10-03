@@ -28,7 +28,7 @@ uvicorn standup.main:app --port 8000
 
 ## 1. Sign-in and team boundaries
 - Open `/digests` without signing in: **401**, "Sign in with your personal link".
-- Open **Ada's** link from the seed output: you land on Core Platform's digests. Mobile's are not listed.
+- Open **Ada's** link from the seed output: you land on **Digests**, which lists only Core Platform's days. Mobile also has a day today (Dana filed an update), and it is not listed; the header shows who you are signed in as.
 - Later (step 6), open **Dana's** link (team Mobile) and paste a Core Platform digest or evidence URL: **404**. Another team's pages are not just forbidden; they do not exist for her.
 
 ## 1b. The Teams bot (no tenant needed)
@@ -41,25 +41,27 @@ Activities are replayed to the bot as Teams would send them (`scripts/teams_repl
 - `python -m scripts.teams_replay personal_card_submit` → "Recorded for Core Platform": a card submission goes through the same ingest path as the web form.
 
 ## 2. Submit, and resubmit
-- As Ada, **Submit update**. Submit again with a change: the second replaces the first in the digest (the first is kept unedited, because stored text is never rewritten).
+- As Ada, **Submit update**. The seed already gave her an update today, so this one replaces it in the digest; so does every later one (the earlier ones are kept unedited, because stored text is never rewritten). Double-clicking Submit is safe.
+- On **Digests**, each day also has a **Build digest** (or **Rebuild**) button: anyone on the team can build the digest by hand before the scheduler does. The scheduler still announces it at the cutoff, once.
 
 ## 3. The daily digest, built by the scheduler
 The digest builds itself at each team's cutoff (11:00 UTC for the demo teams). To show it at any hour, run one scheduler pass on a demo clock:
 
 ```bash
-python -m scripts.tick --at 2026-10-01T11:06:00Z     # today's date, just after the cutoff
+python -m scripts.tick                                   # after 11:00 UTC: the real clock is past the cutoff
+python -m scripts.tick --at <today>T11:06:00Z           # before 11:00 UTC: today's date, just after the cutoff
 ```
 
-It reports `built 2 digest(s)`: yesterday's and today's. Then open **Digests** and today's digest.
+It reports `built 3 digest(s)`: Core Platform's yesterday and today, and Mobile's today. Then open **Digests** and today's digest. If you use `--at` with a time earlier than your submissions, the digest's "built" time will read earlier than the updates it contains; that is the demo clock, not the app.
 
 Run it again, or twice at once: nothing is built twice and no one is told twice, because only one pass may run at a time (a database lease) and each cycle is announced once. Run it with `STANDUP_BASE_URL` unset and it refuses, because its links go into GitHub issues and Teams messages.
 
 ## 4. What the digest shows
 - **Blockers come first.** Ada: "Waiting on staging credentials from infra."
-- **Chen's misfiled blocker:** he typed "Stuck on the deploy pipeline." under Progress; it is under Blockers with "Moved to Blockers: the author filed it elsewhere, but it says 'stuck'". The text itself is unchanged.
+- **Chen's misfiled blocker:** he typed "Stuck on the deploy pipeline." under Progress; it is under Blockers with 'Moved to Blockers: the author filed it elsewhere, but it says "stuck".' The text itself is unchanged.
 - **Negation:** Bruno wrote "No blockers today." It is not reported as a blocker. Answers like "None", "N/A" or "-" are not blockers either.
 - **Clauses:** a sentence such as "Merged the API changes, but waiting on review for the DB migration." is promoted: each clause is judged on its own, so "no blockers on X, but stuck on Y" still reports Y.
-- Every line has a **source** link. The **Markdown** link at the bottom gives the same digest as text.
+- Every line has a **source** link. The **Markdown** link at the bottom gives the same digest as text, including the "Moved to Blockers" notes.
 
 ## 4b. Blockers become GitHub issues
 The scheduler pass in step 3 also delivered the blockers to the (fake) GitHub, through the same client the app uses against github.com.
@@ -73,7 +75,7 @@ The scheduler pass in step 3 also delivered the blockers to the (fake) GitHub, t
 - Edit any stored update in a *copy* of the database and run it against the copy: it names the tampered update and exits 1. (`scripts/demo_check.sh` does exactly this.)
 
 ## 6. Ops
-- `/scope`: how many out-of-scope Teams messages were refused (counts only; nothing about them is stored).
+- `/scope`: a JSON count of out-of-scope Teams messages the bot refused, by reason. It is an ops endpoint like `/healthz`, open without sign-in, because it holds counts only: nothing about the refused messages is stored.
 - `/healthz`, `/readyz`.
 - Any error opened in a browser is an HTML page; API clients get `application/problem+json`.
 

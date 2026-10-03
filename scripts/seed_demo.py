@@ -4,7 +4,7 @@ Run: python -m scripts.seed_demo [--with-updates] [--days N]
 
 - Always: team "Core Platform" (3 members) and team "Mobile" (1 member), so
   the cross-team 404 can be shown. Safe to re-run.
-- --with-updates: today's made-up updates for Core Platform.
+- --with-updates: today's made-up updates (Core Platform, and one for Mobile).
 - --days N: N days of made-up updates, ending today (implies --with-updates).
   Earlier days are filed at 09:00 UTC, before the 11:00 cutoff, through the
   same ingest() path the web form uses. Ada's blocker repeats every day, and
@@ -32,6 +32,15 @@ DEMO_MEMBERS = [
     ("Chen Wei", "Asia/Singapore"),
 ]
 OTHER_MEMBERS = [("Dana Park", "UTC")]
+# Mobile files one update today, so its day exists and visibly does not appear
+# for Core Platform's members (and Core Platform's does not appear for Dana).
+OTHER_UPDATES = {
+    "Dana Park": {
+        "progress": "Released the offline mode beta to testers.",
+        "blockers": "",
+        "plan": "Triage the beta feedback.",
+    },
+}
 
 
 DEMO_UPDATES = {
@@ -148,11 +157,12 @@ def seed(*, with_updates: bool = False, days: int = 0, now: datetime | None = No
 
     with session_scope() as session:
         team = _ensure_team(session, DEMO_TEAM_SLUG, "Core Platform", DEMO_MEMBERS)
-        _ensure_team(session, OTHER_TEAM_SLUG, "Mobile", OTHER_MEMBERS)
+        other = _ensure_team(session, OTHER_TEAM_SLUG, "Mobile", OTHER_MEMBERS)
 
         for offset in range(days - 1, -1, -1):
             if offset == 0:
                 _file_day(session, team, now, DEMO_UPDATES)
+                _file_day(session, other, now, OTHER_UPDATES)
             else:
                 day = (now - timedelta(days=offset)).date()
                 when = datetime.combine(day, EARLIER_DAY_TIME, tzinfo=UTC)

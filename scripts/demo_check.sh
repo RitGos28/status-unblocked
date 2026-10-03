@@ -66,7 +66,7 @@ $PY -m scripts.seed_demo --days 2 >"$WORK/seed.txt" || fail "seed_demo --days 2"
 link_for() { grep -F " / $1: " "$WORK/seed.txt" | awk '{print $NF}'; }
 ADA="$(link_for "Ada Okafor")"; DANA="$(link_for "Dana Park")"
 [ -n "$ADA" ] && [ -n "$DANA" ] || fail "seed printed login links"
-pass "seeded Core Platform (2 days of updates) and Mobile; login links printed"
+pass "seeded Core Platform (2 days of updates) and Mobile (today); login links printed"
 
 $PY -m scripts.set_github_repo --team core --repo demo/core >/dev/null || fail "point Core Platform at a repo"
 $PY -m scripts.fake_github --port "$GH_PORT" >"$WORK/github.log" 2>&1 &
@@ -150,7 +150,8 @@ TICK2=$!
 wait "$TICK1" "$TICK2"
 TICK="$(cat "$WORK/tick1.txt") / $(cat "$WORK/tick2.txt")"
 BUILT=$(grep -Eho "built [0-9]+" "$WORK/tick1.txt" "$WORK/tick2.txt" | awk '{s += $2} END {print s}')
-[ "$BUILT" = 2 ] || fail "two simultaneous passes build each day's digest exactly once (got: $TICK)"
+# Core Platform has two days and Mobile one: three digests, each built once.
+[ "$BUILT" = 3 ] || fail "two simultaneous passes build each day's digest exactly once (got: $TICK)"
 pass "two scheduler passes at once ($AT) build each digest once; no base URL refuses"
 
 ISSUES="$(curl -s -H 'authorization: Bearer demo-token' "$GH/repos/demo/core/issues?labels=standup-blocker&state=all")"

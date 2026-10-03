@@ -28,10 +28,17 @@ def test_seed_days_files_one_cycle_per_day_with_a_misfiled_blocker(session, app_
     seed(days=2, now=NOW)
     seed(days=2, now=NOW)  # re-running adds nothing
 
-    dates = sorted(str(c.local_date) for c in session.execute(select(StandupCycle)).scalars())
-    assert dates == ["2026-09-14", "2026-09-15"]
+    by_team = {
+        (c.team_id, str(c.local_date)) for c in session.execute(select(StandupCycle)).scalars()
+    }
+    teams = {t.slug: t.id for t in session.execute(select(Team)).scalars()}
+    assert by_team == {
+        (teams["core"], "2026-09-14"),
+        (teams["core"], "2026-09-15"),
+        (teams["mobile"], "2026-09-15"),
+    }
     updates = session.execute(select(Update)).scalars().all()
-    assert len(updates) == 6
+    assert len(updates) == 7
     today = [u.raw_text for u in updates if u.captured_at.replace(tzinfo=UTC) == NOW]
     assert any("Stuck on the deploy pipeline." in text for text in today)
     # The earlier day is filed before the 11:00 cutoff, so the scheduler builds it.
@@ -41,7 +48,8 @@ def test_seed_days_files_one_cycle_per_day_with_a_misfiled_blocker(session, app_
 
 def test_with_updates_means_today_only(session, app_env):
     seed(with_updates=True, now=NOW)
-    assert len(session.execute(select(StandupCycle)).scalars().all()) == 1
+    dates = {str(c.local_date) for c in session.execute(select(StandupCycle)).scalars()}
+    assert dates == {"2026-09-15"}  # one day, for each team
 
 
 @pytest.mark.parametrize(
