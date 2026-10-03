@@ -195,3 +195,18 @@ def test_a_mixed_sentence_in_progress_is_promoted():
     (claim,) = summarize(source("s1", text, ItemKind.PROGRESS)).claims
     assert claim.kind is ClaimKind.BLOCKER
     assert claim.text == text
+
+
+@pytest.mark.parametrize(
+    "text", ["Blockers:", "blockers", "Progress:", "Today:", "Plan:", "BLOCKER:"]
+)
+@pytest.mark.parametrize("kind", [ItemKind.PROGRESS, ItemKind.BLOCKER, ItemKind.PLAN])
+def test_a_line_that_is_only_a_section_heading_is_not_a_claim(text: str, kind: ItemKind):
+    """Found by the demo: 'Blockers:' typed alone inside Progress became a
+    blocker claim, and was filed as a GitHub issue titled 'Blocker: Blockers:'."""
+    assert summarize(source("s1", text, kind)).claims == ()
+
+
+def test_a_heading_followed_by_content_is_still_a_claim():
+    (claim,) = summarize(source("s1", "Blockers: waiting on infra", ItemKind.PROGRESS)).claims
+    assert claim.kind is ClaimKind.BLOCKER

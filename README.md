@@ -139,7 +139,7 @@ People put blockers in the wrong box. Someone types "Stuck on the deploy pipelin
 
 So a progress or plan line carrying a blocker marker (`blocked`, `waiting on`, `stuck`, `cannot`, `needs review`, …) is promoted into the Blockers section, and the claim records *why* as `matched_rule` — e.g. `promoted:marker:stuck`. The reason is stored with the digest and shown under the line ("Moved to Blockers: the author filed it elsewhere, but it says “stuck”."). Promotion never rewrites the text; the claim is still the verbatim span, so V3 holds and the citation still resolves.
 
-Negations are checked first and win: `no blockers`, `not blocked`, `no longer blocked`, `unblocked` never produce a blocker, and neither do empty answers such as `None`, `N/A` or `-` in the Blockers box. Negation is judged per clause, so "no blockers on the API, but stuck on the migration" still reports the migration. That false positive — "No blockers today" reported as a blocker — is the most common failure in this category of tool, and it has its own parametrized test.
+Negations are checked first and win: `no blockers`, `not blocked`, `no longer blocked`, `unblocked` never produce a blocker, and neither do empty answers such as `None`, `N/A` or `-` in the Blockers box. A line that is only a section heading ("Blockers:" typed inside another box) is never a claim. Negation is judged per clause, so "no blockers on the API, but stuck on the migration" still reports the migration. That false positive — "No blockers today" reported as a blocker — is the most common failure in this category of tool, and it has its own parametrized test.
 
 ### Blocker to Issue idempotency (three layers)
 
@@ -255,7 +255,7 @@ Layout today: `tests/{unit,integration,e2e}/`. Stack: pytest · FastAPI `TestCli
 Run them:
 
 ```bash
-pytest                      # everything (215 tests, a few seconds)
+pytest                      # everything (234 tests, a few seconds)
 pytest tests/unit           # fast unit pass
 pytest tests/e2e -v         # end-to-end smoke
 pytest --cov=standup --cov-report=term-missing
@@ -267,7 +267,7 @@ python -m scripts.verify_integrity   # audit chain + stored-text hashes
 
 CI (`.github/workflows/ci.yml`) runs all of the above with `STANDUP_VALIDATOR_STRICT=true`, gates `summarize/` and `privacy/` at 90% coverage, runs migrations plus the integration and e2e tests against Postgres 16, and builds the Docker image.
 
-Current: **215 passing, 97% coverage overall.** The gate that matters is `summarize/` and `privacy/` at >=90% — those are the modules where a silent regression is a correctness or compliance failure rather than a bug. `normalizer.py`, `summarize/base.py`, `logging_conf.py` and `main.py` sit at 100%; `validator.py` at 99%.
+Current: **234 passing, 97% coverage overall.** The gate that matters is `summarize/` and `privacy/` at >=90% — those are the modules where a silent regression is a correctness or compliance failure rather than a bug. `normalizer.py`, `summarize/base.py`, `logging_conf.py` and `main.py` sit at 100%; `validator.py` at 99%.
 
 > `lint-imports` must be run as the console script. `python -m importlinter.cli` exits 0 *without reading* `pyproject.toml`, so it reports success while enforcing nothing — confirmed by adding a deliberate boundary violation and watching it pass.
 

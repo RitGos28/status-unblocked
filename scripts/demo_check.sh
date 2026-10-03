@@ -135,6 +135,7 @@ for issue in json.load(sys.stdin):
     if "staging credentials" in issue["title"]:
         print(issue["number"], issue["comments"])' <<<"$ISSUES")"
 [ "$(wc -l <<<"$ADA_ISSUES" | tr -d ' ')" = 1 ] || fail "Ada's blocker, reported on both days, is a single issue"
+! grep -q '"title":"Blocker: Blockers:' <<<"$ISSUES" || fail "a heading typed on its own line is not filed as a blocker"
 [ "$(cut -d' ' -f2 <<<"$ADA_ISSUES")" = 1 ] || fail "the second day added one comment to it"
 grep -q "Still blocked on" <<<"$(curl -s "$GH/demo/core/issues/$(cut -d' ' -f1 <<<"$ADA_ISSUES")")" \
     || fail "the second day's comment says 'Still blocked on'"

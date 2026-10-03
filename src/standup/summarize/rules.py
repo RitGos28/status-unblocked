@@ -75,6 +75,16 @@ _EMPTY_ANSWERS = frozenset(
 _CLAUSE_SPLIT = re.compile(r"[,;]|\b(?:but|however|although|though)\b")
 
 
+# A line that is only a section heading ("Blockers:", "Today") carries no
+# content. People type them when pasting notes into one box; they must not
+# become claims, and above all must not be promoted to blockers.
+_BARE_HEADING = re.compile(r"^\s*(?:progress|blockers?|today|plan)\s*:?\s*$", re.IGNORECASE)
+
+
+def is_bare_heading(text: str) -> bool:
+    return bool(_BARE_HEADING.match(text))
+
+
 def is_empty_answer(text: str) -> bool:
     """True for answers like "None", "N/A" or "-" that mean "no blocker"."""
     cleaned = re.sub(r"[^\w/\-\s]", "", text.lower())
@@ -111,7 +121,7 @@ class RulesSummarizer:
 
         for source in req.sources:
             text = source.text.strip()
-            if not text:
+            if not text or is_bare_heading(text):
                 continue
 
             claim_kind = _KIND_TO_CLAIM[source.kind]
