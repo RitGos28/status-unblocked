@@ -70,7 +70,9 @@ def get_summarizer(settings: Annotated[Settings, Depends(get_settings)]) -> Summ
 def tracker_from_settings(settings: Settings) -> TrackerAdapter:
     """GitHub when configured (config.py guarantees the token), else no-op."""
     if settings.tracker == "github" and settings.github_token is not None:
-        return GitHubTracker(settings.github_token.get_secret_value())
+        return GitHubTracker(
+            settings.github_token.get_secret_value(), api_url=settings.github_api_url
+        )
     return NoopTracker()
 
 

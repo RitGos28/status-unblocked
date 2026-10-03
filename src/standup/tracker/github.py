@@ -17,8 +17,10 @@ _MAX_PAGES = 10  # 1,000 labelled issues; beyond that, the link table is the sou
 class GitHubTracker:
     name = "github"
 
-    def __init__(self, token: str, *, client: httpx.Client | None = None):
-        self._client = client or httpx.Client(base_url=API, timeout=10.0)
+    def __init__(self, token: str, *, api_url: str = API, client: httpx.Client | None = None):
+        # api_url points at GitHub, or at scripts/fake_github.py for an
+        # accountless demo that still exercises this exact client.
+        self._client = client or httpx.Client(base_url=api_url, timeout=10.0)
         self._headers = {
             "Authorization": f"Bearer {token}",
             "Accept": "application/vnd.github+json",
