@@ -27,12 +27,13 @@ from fastapi import APIRouter, FastAPI, Request, Response
 from microsoft_agents.activity import Activity, ConversationReference, load_configuration_from_env
 from microsoft_agents.authentication.msal import MsalConnectionManager
 from microsoft_agents.hosting.core import CardFactory, MessageFactory
+from microsoft_agents.hosting.core.authorization import ClaimsIdentity
 from microsoft_agents.hosting.fastapi import CloudAdapter, jwt_authorization_decorator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from standup.auth.tokens import read_teams_link_code
-from standup.config import TEAMS_REQUIRED_ENV
+from standup.config import TEAMS_REQUIRED_ENV, teams_anonymous_allowed
 from standup.db.models import IngestRejection, Member
 from standup.deps import AppClock, AppSettings, DbSession
 from standup.domain.errors import EmptySubmissionError
@@ -221,19 +222,27 @@ async def messages(
 class TeamsNotifier:
     """Sends a proactive 1:1 message, for the scheduler's digest notice."""
 
-    def __init__(self, adapter: CloudAdapter, app_id: str):
+    def __init__(self, adapter: CloudAdapter, app_id: str, *, anonymous: bool = False):
         self._adapter = adapter
         self._app_id = app_id
+        self._anonymous = anonymous
 
     async def notify(self, conversation_ref: dict[str, Any], text: str) -> None:
         reference = ConversationReference.model_validate(conversation_ref)
+        continuation = reference.get_continuation_activity()
 
         async def send(context: Any) -> None:
             await context.send_activity(text)
 
-        await self._adapter.continue_conversation(
-            self._app_id, reference.get_continuation_activity(), send
-        )
+        if self._anonymous:
+            # Local demo / Agents Playground: an identity with no claims makes
+            # the SDK use its anonymous token provider. The default path below
+            # adds app-id claims, so MSAL insists on a tenant id and fails.
+            await self._adapter.continue_conversation_with_claims(
+                ClaimsIdentity(), continuation, send
+            )
+        else:
+            await self._adapter.continue_conversation(self._app_id, continuation, send)
 
 
 def _build_adapter() -> tuple[CloudAdapter, Any]:
@@ -242,17 +251,23 @@ def _build_adapter() -> tuple[CloudAdapter, Any]:
     return CloudAdapter(connection_manager=connection_manager), connection_manager
 
 
+def _notifier(adapter: CloudAdapter) -> TeamsNotifier:
+    return TeamsNotifier(
+        adapter, os.environ.get(TEAMS_REQUIRED_ENV[0], ""), anonymous=teams_anonymous_allowed()
+    )
+
+
 def build_teams_notifier() -> TeamsNotifier:
     """A notifier with its own adapter, for use outside the web app (scripts/tick)."""
     adapter, _ = _build_adapter()
-    return TeamsNotifier(adapter, os.environ.get(TEAMS_REQUIRED_ENV[0], ""))
+    return _notifier(adapter)
 
 
 def mount_teams(app: FastAPI) -> None:
     """Wire the SDK from its CONNECTIONS__ environment variables and add the route."""
     adapter, connection_manager = _build_adapter()
     app.state.teams_adapter = adapter
-    app.state.teams_notifier = TeamsNotifier(adapter, os.environ.get(TEAMS_REQUIRED_ENV[0], ""))
+    app.state.teams_notifier = _notifier(adapter)
     # Read by jwt_authorization_decorator to validate inbound tokens.
     app.state.agent_configuration = connection_manager.get_default_connection_configuration()
     app.include_router(router)

@@ -59,6 +59,8 @@ python -m scripts.verify_integrity        # audit chain + stored-text hashes; ex
 python -m scripts.tick [--at ISO]         # one scheduler pass: build due digests, notify, drain the outbox
 scripts/demo_check.sh                     # the whole docs/DEMO.md flow against a real server; also a CI job
 python -m scripts.fake_github             # local GitHub Issues API stand-in (demo; STANDUP_GITHUB_API_URL)
+python -m scripts.fake_teams_connector    # local stand-in for Teams; records what the bot sends
+python -m scripts.teams_replay <fixture>  # post a tests/fixtures/teams activity to /api/messages
 python -m scripts.drain_outbox            # retry queued GitHub writes now
 
 alembic revision --autogenerate -m "description"
@@ -121,7 +123,7 @@ POST /digests/build/{cycle_id}       api/digests.py
 
 Teams enters at the same seam. `POST /api/messages` (`api/teams_router.py`, mounted only when `STANDUP_TEAMS_ENABLED=true`) runs `StandupAgent.on_turn`: `classify_scope()` (in `ingestion/teams_adapter.py`) decides whether an activity is a 1:1 card submit, a 1:1 command, a channel @mention, an ignorable system event, or out of scope. A card submit becomes a `RawSubmission` via `TeamsAdapter` and goes through the same `ingest()`. The member comes from `Member.teams_aad_id`, set by `link <code>` with a code from `/me/teams`. Out-of-scope messages become content-free `IngestRejection` rows, counted at `GET /scope`.
 
-Local bot testing: `STANDUP_TEAMS_ENABLED=true` plus `CONNECTIONS__SERVICE_CONNECTION__SETTINGS__ANONYMOUS_ALLOWED=True` accepts unsigned Playground requests. Config refuses anonymous mode unless `STANDUP_ENV` is `local` or `test`. `python -m scripts.make_teams_zip --bot-id ... --base-url ...` builds the sideload package.
+Local bot testing: `STANDUP_TEAMS_ENABLED=true` plus `CONNECTIONS__SERVICE_CONNECTION__SETTINGS__ANONYMOUS_ALLOWED=True` accepts unsigned Playground requests. Config refuses anonymous mode unless `STANDUP_ENV` is `local` or `test`. In anonymous mode `TeamsNotifier` sends proactive notices through `continue_conversation_with_claims(ClaimsIdentity(), …)`: the default `continue_conversation` adds app-id claims and MSAL then demands a tenant id. `python -m scripts.make_teams_zip --bot-id ... --base-url ...` builds the sideload package.
 
 ### Validator rules
 

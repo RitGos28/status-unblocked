@@ -61,7 +61,7 @@ So the ordering is deliberate: build the extractive pipeline **and the validator
 
 **1. `botbuilder-python` is dead.** Bot Framework SDK v4 for Python stopped being serviced 31 Dec 2025; the repo was **archived 5 Jan 2026**. Nearly every tutorial online still uses it. We use the **Microsoft 365 Agents SDK for Python** (GA, Python 3.10–3.14, Pydantic-validated `Activity` objects, first-party `microsoft-agents-hosting-fastapi` package). Versions are pinned — the surface is about a year old and still moving.
 
-**2. Bot Framework Emulator is dead too — and its replacement de-risks the project.** The **Microsoft 365 Agents Playground** (`teamsapptester start`) emulates the Teams client and Bot Framework service locally with **no tenant, no tunnel, and no bot registration**, and renders Adaptive Cards with the same renderer Teams uses. The Teams *experience* is therefore buildable and demoable regardless of tenant sideloading policy.
+**2. Bot Framework Emulator is dead too — and its replacement de-risks the project.** The **Microsoft 365 Agents Playground** (`npm install -g @microsoft/m365agentsplayground`, then `agentsplayground`) emulates the Teams client and Bot Framework service locally with **no tenant, no tunnel, and no bot registration**, and renders Adaptive Cards with the same renderer Teams uses. The Teams *experience* is therefore buildable and demoable regardless of tenant sideloading policy.
 
 **3. True per-message Teams permalinks are not constructible from a 1:1 bot chat.** Message deep links require a `19:`-form chat ID; Microsoft's docs state that 1:1 bot payloads carry the conversation ID in **`a:xxx`** format. This is a hard constraint, not an unknown.
 
@@ -255,7 +255,7 @@ Layout today: `tests/{unit,integration,e2e}/`. Stack: pytest · FastAPI `TestCli
 Run them:
 
 ```bash
-pytest                      # everything (234 tests, a few seconds)
+pytest                      # everything (238 tests, a few seconds)
 pytest tests/unit           # fast unit pass
 pytest tests/e2e -v         # end-to-end smoke
 pytest --cov=standup --cov-report=term-missing
@@ -267,7 +267,7 @@ python -m scripts.verify_integrity   # audit chain + stored-text hashes
 
 CI (`.github/workflows/ci.yml`) runs all of the above with `STANDUP_VALIDATOR_STRICT=true`, gates `summarize/` and `privacy/` at 90% coverage, runs migrations plus the integration and e2e tests against Postgres 16, and builds the Docker image.
 
-Current: **234 passing, 97% coverage overall.** The gate that matters is `summarize/` and `privacy/` at >=90% — those are the modules where a silent regression is a correctness or compliance failure rather than a bug. `normalizer.py`, `summarize/base.py`, `logging_conf.py` and `main.py` sit at 100%; `validator.py` at 99%.
+Current: **238 passing, 97% coverage overall.** The gate that matters is `summarize/` and `privacy/` at >=90% — those are the modules where a silent regression is a correctness or compliance failure rather than a bug. `normalizer.py`, `summarize/base.py`, `logging_conf.py` and `main.py` sit at 100%; `validator.py` at 99%.
 
 > `lint-imports` must be run as the console script. `python -m importlinter.cli` exits 0 *without reading* `pyproject.toml`, so it reports success while enforcing nothing — confirmed by adding a deliberate boundary violation and watching it pass.
 
