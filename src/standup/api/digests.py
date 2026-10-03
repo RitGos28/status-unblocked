@@ -112,7 +112,9 @@ def build(
     return RedirectResponse(url=f"/digest/{digest.id}", status_code=303)
 
 
-@router.get("/digest/{digest_id}.md", response_class=PlainTextResponse)
+@router.api_route(
+    "/digest/{digest_id}.md", methods=["GET", "HEAD"], response_class=PlainTextResponse
+)
 def view_digest_markdown(digest_id: str, session: DbSession, member: CurrentMember) -> str:
     """Registered before the HTML route: Starlette matches in declaration
     order, and ``{digest_id}`` would otherwise swallow the ``.md`` suffix."""

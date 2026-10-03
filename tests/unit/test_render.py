@@ -51,3 +51,38 @@ def test_no_truncation_notice_when_nothing_was_cut():
         evidence_urls={},
     )
     assert "not shown" not in body
+
+
+def _promoted(text: str = "Stuck on the deploy pipeline.") -> Claim:
+    return Claim(
+        kind=ClaimKind.BLOCKER,
+        member_id="m1",
+        member_name="Chen Wei",
+        text=text,
+        citations=(Citation("s1", text, 0, len(text)),),
+        matched_rule="promoted:marker:stuck",
+    )
+
+
+def _markdown(*claims: Claim) -> str:
+    return render_markdown(
+        team_name="Core Platform",
+        cycle_date="2026-09-15",
+        claims=claims,
+        evidence_urls={"s1": "http://testserver/evidence/s1"},
+    )
+
+
+def test_markdown_links_are_ordinary_links():
+    """Found by the browser pass: '[[source]](url)' rendered with doubled brackets."""
+    body = _markdown(claim())
+    assert "[source](http://testserver/evidence/s1)" in body
+    assert "[[source]]" not in body
+
+
+def test_markdown_explains_a_promoted_blocker_like_the_page_does():
+    assert "Moved to Blockers" in _markdown(_promoted())
+
+
+def test_markdown_carries_the_verbatim_footer_like_the_page_does():
+    assert "verbatim quote" in _markdown(claim())

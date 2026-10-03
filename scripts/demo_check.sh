@@ -181,6 +181,8 @@ MD="$(curl -s -b "$WORK/ada.jar" "$BASE/digest/$DIGEST_ID.md")"
 grep -q "waiting on review for the DB migration" <<<"$(sed -n '/## Blockers/,/## Progress/p' <<<"$MD")" \
     || fail "a blocker in one clause survives a negation-free sentence and is promoted"
 grep -q "$BASE/evidence/" <<<"$MD" || fail "every line links to its evidence"
+grep -q "Moved to Blockers" <<<"$MD" || fail "the Markdown digest explains a promoted blocker, like the page"
+! grep -q '\[\[source\]\]' <<<"$MD" || fail "the Markdown digest's links are ordinary links"
 BLOCKER_LINES="$(sed -n '/## Blockers/,/## Progress/p' <<<"$MD" | grep -c '^- ')"
 ISSUE_LINKS="$(grep -o "href=\"$GH/demo/core/issues/[0-9]*\"" <<<"$PAGE" | wc -l | tr -d ' ')"
 [ "$ISSUE_LINKS" = "$BLOCKER_LINES" ] || fail "every blocker links to its issue ($ISSUE_LINKS links, $BLOCKER_LINES blockers)"
