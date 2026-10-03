@@ -92,8 +92,8 @@ def build(
 ) -> RedirectResponse:
     cycle = session.get(StandupCycle, cycle_id)
     if cycle is None:
-        raise NotFoundError(f"cycle {cycle_id} not found")
-    ensure_same_team(member, cycle.team_id, f"cycle {cycle_id}")
+        raise NotFoundError("That standup day does not exist, or it belongs to another team.")
+    ensure_same_team(member, cycle.team_id, "standup day")
 
     digest = build_digest(
         session,
@@ -129,8 +129,8 @@ def _visible_digest(
     digest = session.get(Digest, digest_id)
     cycle = session.get(StandupCycle, digest.cycle_id) if digest else None
     if digest is None or cycle is None:
-        raise NotFoundError(f"digest {digest_id} not found")
-    ensure_same_team(member, cycle.team_id, f"digest {digest_id}")
+        raise NotFoundError("That digest does not exist, or it belongs to another team.")
+    ensure_same_team(member, cycle.team_id, "digest")
     return digest, cycle
 
 

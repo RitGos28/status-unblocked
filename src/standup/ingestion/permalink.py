@@ -11,6 +11,18 @@ canonical citation target either way.
 from urllib.parse import quote
 
 
+def describe_missing_permalink(reason: str | None) -> str:
+    """The stored permalink_reason, in words a reader of the evidence page knows."""
+    reason = reason or ""
+    if reason.startswith("webform"):
+        return "Submitted through the web form, so there is no chat message to link to."
+    if "a:-form" in reason:
+        return "Sent in a 1:1 Teams chat; Teams offers no link to individual messages there."
+    if reason:
+        return f"No link to the original message: {reason.split(': ', 1)[-1]}."
+    return "No link to the original message."
+
+
 def teams_permalink(conversation_id: str, message_id: str) -> tuple[str | None, str]:
     """Return ``(url, "")`` when constructible, else ``(None, reason)``."""
     if not message_id:

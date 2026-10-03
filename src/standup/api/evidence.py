@@ -33,9 +33,9 @@ def view_evidence(
     update = session.get(Update, item.update_id) if item else None
     cycle = session.get(StandupCycle, update.cycle_id) if update else None
     if item is None or update is None or cycle is None:
-        raise NotFoundError(f"evidence {item_id} not found")
+        raise NotFoundError("That evidence does not exist, or it belongs to another team.")
     # Checked before the audit row is written: a refused read is not a read.
-    ensure_same_team(member, cycle.team_id, f"evidence {item_id}")
+    ensure_same_team(member, cycle.team_id, "evidence")
 
     record_audit(
         session,

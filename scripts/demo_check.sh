@@ -196,6 +196,7 @@ pass "Teams: Ada files her update through the card, through the same ingest path
 EVIDENCE="$(grep -o 'href="/evidence/[0-9a-f-]*"' <<<"$PAGE" | head -1 | cut -d'"' -f2)"
 EV="$(curl -s -b "$WORK/ada.jar" "$BASE$EVIDENCE")"
 grep -q "<mark>" <<<"$EV" || fail "evidence page highlights the cited span"
+grep -q "web form" <<<"$EV" || fail "the evidence page says in words why there is no message link"
 pass "evidence page shows the stored words with the span highlighted"
 
 seq 20 | xargs -P 20 -I{} curl -s -o /dev/null -b "$WORK/ada.jar" "$BASE$EVIDENCE"
@@ -216,6 +217,9 @@ pass "20 simultaneous evidence views leave the audit chain intact; an edited upd
 [ "$(status -c "$WORK/dana.jar" "$DANA")" = 303 ] || fail "Dana's login link"
 [ "$(status -b "$WORK/dana.jar" "$BASE/digest/$DIGEST_ID")" = 404 ] || fail "Dana gets 404 on Core's digest"
 [ "$(status -b "$WORK/dana.jar" "$BASE$EVIDENCE")" = 404 ] || fail "Dana gets 404 on Core's evidence"
+NOTFOUND="$(curl -s -H 'accept: text/html' -b "$WORK/dana.jar" "$BASE/digest/$DIGEST_ID")"
+grep -q "Dana Park" <<<"$NOTFOUND" || fail "the 404 page keeps Dana's signed-in header"
+! grep -q "$DIGEST_ID" <<<"$NOTFOUND" || fail "the 404 page does not echo the digest id"
 pass "Dana (Mobile) gets 404 on Core Platform's digest and evidence"
 
 # --- ops and error pages -----------------------------------------------------

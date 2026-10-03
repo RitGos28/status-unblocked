@@ -60,5 +60,5 @@ def index(request: Request, viewer: OptionalMember) -> HTMLResponse:
     return templates.TemplateResponse(
         request=request,
         name="index.html",
-        context={"viewer": viewer},
+        context={"viewer": viewer, "signed_out": bool(request.query_params.get("signed_out"))},
     )
