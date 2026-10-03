@@ -8,14 +8,14 @@ It is also the mapping layer between the ORM and the pure domain types, which
 is what keeps ``summarize/`` free of database imports.
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from standup.config import get_settings
-from standup.domain.enums import AuditAction, CycleState, ItemKind
+from standup.domain.enums import AuditAction, ClaimKind, CycleState, ItemKind
 from standup.domain.errors import NotFoundError, ValidationFailure
 from standup.logging_conf import get_logger
 from standup.privacy.audit import record_audit
@@ -29,9 +29,12 @@ from standup.summarize.validator import FaithfulnessValidator
 from standup.tracker.outbox import enqueue_blocker_issues
 
 if TYPE_CHECKING:
-    from standup.db.models import Digest
+    from standup.db.models import Digest, StandupCycle
 
 log = get_logger(__name__)
+
+# How far back a blocker counts as "reported before" for carry-over.
+CARRYOVER_DAYS = 7
 
 
 def evidence_url(base_url: str, item_id: str) -> str:
@@ -87,7 +90,54 @@ def build_request(session: Session, cycle_id: str, base_url: str) -> SummaryRequ
         cycle_date=cycle.local_date,
         team_name=team_name,
         sources=tuple(sources),
+        prior_open_blockers=_prior_blockers(session, cycle, base_url),
     )
+
+
+def _prior_blockers(
+    session: Session, cycle: "StandupCycle", base_url: str
+) -> tuple[SourceDoc, ...]:
+    """Blockers this team reported in the CARRYOVER_DAYS before ``cycle``.
+
+    Taken from earlier digests' blocker and carry-over claims, so a promoted
+    blocker counts too. Each becomes a citable SourceDoc; the summarizer uses
+    them to mark a blocker reported again as "Still blocked". Items whose text
+    retention has removed are skipped: there is nothing left to cite.
+    """
+    from standup.db.models import Digest, DigestClaim, StandupCycle, Update, UpdateItem
+
+    since = cycle.local_date - timedelta(days=CARRYOVER_DAYS)
+    claims = session.execute(
+        select(DigestClaim)
+        .join(Digest, DigestClaim.digest_id == Digest.id)
+        .join(StandupCycle, Digest.cycle_id == StandupCycle.id)
+        .where(StandupCycle.team_id == cycle.team_id)
+        .where(StandupCycle.local_date < cycle.local_date)
+        .where(StandupCycle.local_date >= since)
+        .where(DigestClaim.kind.in_([ClaimKind.BLOCKER.value, ClaimKind.CARRYOVER.value]))
+    ).scalars()
+
+    item_ids = {c["source_id"] for claim in claims for c in claim.citations_json}
+    prior: list[SourceDoc] = []
+    for item_id in sorted(item_ids):
+        item = session.get(UpdateItem, item_id)
+        update = session.get(Update, item.update_id) if item else None
+        if item is None or update is None or not item.text or update.purged_at is not None:
+            continue
+        prior.append(
+            SourceDoc(
+                id=item.id,
+                member_id=update.member_id,
+                member_name=update.member.display_name,
+                kind=ItemKind(item.kind),
+                text=item.text,
+                captured_at=update.captured_at,
+                evidence_url=evidence_url(base_url, item.id),
+                permalink=update.permalink,
+                normalized_key=item.normalized_key,
+            )
+        )
+    return tuple(prior)
 
 
 def build_digest(
@@ -126,7 +176,9 @@ def build_digest(
                 f"{len(report.violations)} claim(s) failed faithfulness validation"
             )
 
-    evidence_urls = {s.id: s.evidence_url for s in request.sources}
+    evidence_urls = {
+        s.id: s.evidence_url for s in (*request.sources, *request.prior_open_blockers)
+    }
     body_md = render_markdown(
         team_name=request.team_name,
         cycle_date=request.cycle_date.isoformat(),

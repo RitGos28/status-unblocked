@@ -36,17 +36,24 @@ class RenderedSection:
 def explain_rule(matched_rule: str) -> str:
     """Human-readable reason a claim sits in its section, or "" if unremarkable.
 
-    Only promotions need explaining: a line the author filed under Progress or
-    Today that the digest shows under Blockers. The text is never changed, so
-    the explanation is the only visible trace of the move.
+    Two things need explaining, because the text itself never changes:
+    - a promotion: a line filed under Progress or Today shown under Blockers;
+    - a carry-over: a blocker the same person also reported on an earlier day.
+    A rule can carry both, separated by ";".
     """
-    if not matched_rule.startswith("promoted:"):
-        return ""
-    _, _, detail = matched_rule.partition(":")
-    _, _, marker = detail.partition(":")
-    if marker:
-        return f'Moved to Blockers: the author filed it elsewhere, but it says "{marker}".'
-    return "Moved to Blockers: the author filed it elsewhere."
+    reasons: list[str] = []
+    for part in matched_rule.split(";"):
+        if part.startswith("promoted:"):
+            _, _, detail = part.partition(":")
+            _, _, marker = detail.partition(":")
+            reasons.append(
+                f'Moved to Blockers: the author filed it elsewhere, but it says "{marker}".'
+                if marker
+                else "Moved to Blockers: the author filed it elsewhere."
+            )
+        elif part.startswith("carryover:"):
+            reasons.append(f"Also reported on {part.partition(':')[2]}, and still open.")
+    return " ".join(reasons)
 
 
 def group_sections(claims: tuple[Claim, ...]) -> list[RenderedSection]:

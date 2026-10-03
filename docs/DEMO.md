@@ -57,7 +57,8 @@ It reports `built 3 digest(s)`: Core Platform's yesterday and today, and Mobile'
 Run it again, or twice at once: nothing is built twice and no one is told twice, because only one pass may run at a time (a database lease) and each cycle is announced once. Run it with `STANDUP_BASE_URL` unset and it refuses, because its links go into GitHub issues and Teams messages.
 
 ## 4. What the digest shows
-- **Blockers come first.** Ada: "Waiting on staging credentials from infra."
+- **Still blocked comes first.** Ada reported "Waiting on staging credentials from infra." yesterday and again today, so it is under **Still blocked**, with "Also reported on <yesterday>, and still open." It is today's words, verbatim, and it has two **source** links: today's and yesterday's.
+- **Then Blockers**: new ones today.
 - **Chen's misfiled blocker:** he typed "Stuck on the deploy pipeline." under Progress; it is under Blockers with 'Moved to Blockers: the author filed it elsewhere, but it says "stuck".' The text itself is unchanged.
 - **Negation:** Bruno wrote "No blockers today." It is not reported as a blocker. Answers like "None", "N/A" or "-" are not blockers either.
 - **Clauses:** a sentence such as "Merged the API changes, but waiting on review for the DB migration." is promoted: each clause is judged on its own, so "no blockers on X, but stuck on Y" still reports Y.
