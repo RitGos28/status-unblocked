@@ -11,11 +11,14 @@ scripts/demo_check.sh          # about 10 seconds; prints one line per step
 ## Setup (once per demo)
 
 ```bash
+python -m scripts.fake_github --port 8091 &   # a local stand-in for the GitHub API
+export STANDUP_TRACKER=github STANDUP_GITHUB_TOKEN=demo STANDUP_GITHUB_API_URL=http://127.0.0.1:8091
 export STANDUP_DATABASE_URL=sqlite:///./demo.db
 export STANDUP_SECRET_KEY=$(python -c "import secrets; print(secrets.token_urlsafe(48))")
 export STANDUP_BASE_URL=http://127.0.0.1:8000
 alembic upgrade head
 python -m scripts.seed_demo --days 2      # two days of made-up updates; prints a login link per person
+python -m scripts.set_github_repo --team core --repo demo/core
 uvicorn standup.main:app --port 8000
 ```
 
@@ -47,6 +50,12 @@ Run it again, or twice at once: nothing is built twice and no one is told twice,
 - **Clauses:** a sentence such as "Merged the API changes, but waiting on review for the DB migration." is promoted: each clause is judged on its own, so "no blockers on X, but stuck on Y" still reports Y.
 - Every line has a **source** link. The **Markdown** link at the bottom gives the same digest as text.
 
+## 4b. Blockers become GitHub issues
+The scheduler pass in step 3 also delivered the blockers to the (fake) GitHub, through the same client the app uses against github.com.
+- Open `http://127.0.0.1:8091/`: one issue per blocker, labelled `standup-blocker`. Each quotes the blocker and links back to its evidence and digest.
+- Ada reported the same blocker on both days. It is **one** issue, opened for the first day, with a "Still blocked on <today>" comment for the second.
+- On the digest, each blocker shows its issue number (`#1`); click it to open the issue.
+
 ## 5. Evidence, and proving nothing was edited
 - Click a **source** link: the stored update, with the cited words highlighted and their character offsets.
 - `python -m scripts.verify_integrity` → "audit chain intact; every stored update matches its pinned hash". This holds under load too: the demo check opens the same evidence 20 times at once first, and every view is recorded on one unbroken chain.
@@ -58,6 +67,6 @@ Run it again, or twice at once: nothing is built twice and no one is told twice,
 - Any error opened in a browser is an HTML page; API clients get `application/problem+json`.
 
 ## Optional: needs your accounts or tools
-- **GitHub Issues write-back against a real repo:** `STANDUP_TRACKER=github`, `STANDUP_GITHUB_TOKEN` (fine-grained, Issues read/write on one repo), `python -m scripts.set_github_repo --team core --repo owner/name`, then build a digest.
+- **GitHub Issues write-back against a real repo:** leave `STANDUP_GITHUB_API_URL` unset, set `STANDUP_GITHUB_TOKEN` to a fine-grained token with Issues read/write on one repo, and `python -m scripts.set_github_repo --team core --repo owner/name`, then build a digest.
 - **Teams in a real client:** Agents Playground or a tenant; see README "Teams".
 - **Postgres via Docker:** `export STANDUP_SECRET_KEY=...; docker compose up --build` (needs the Docker daemon running).

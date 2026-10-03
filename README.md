@@ -151,7 +151,7 @@ Before creating an issue, the drain looks for an existing one carrying the marke
 
 **Delivery never blocks a digest (invariant 8).** Building a digest only queues `tracker_outbox` rows. A drain then calls GitHub, running in the background after each build, or on demand with `python -m scripts.drain_outbox`. Only one drain runs at a time (a database lease), so concurrent drains cannot create the same issue twice. Rate limits (403 with `x-ratelimit-remaining: 0`, or 429) and 5xx errors back off and retry, honouring `retry-after`, for up to 8 attempts. A bad token or a missing repo fails the row at once with a stated reason. Every write is audited (`tracker.write`).
 
-To switch it on: `STANDUP_TRACKER=github`, `STANDUP_GITHUB_TOKEN` (a fine-grained token with Issues read/write on one repo), then `python -m scripts.set_github_repo --team core --repo owner/name`.
+To try it with no account, run `python -m scripts.fake_github` and point `STANDUP_GITHUB_API_URL` at it (see [docs/DEMO.md](docs/DEMO.md)); the demo exercises the real GitHub client against it. To switch it on: `STANDUP_TRACKER=github`, `STANDUP_GITHUB_TOKEN` (a fine-grained token with Issues read/write on one repo), then `python -m scripts.set_github_repo --team core --repo owner/name`.
 
 ---
 
@@ -255,7 +255,7 @@ Layout today: `tests/{unit,integration,e2e}/`. Stack: pytest · FastAPI `TestCli
 Run them:
 
 ```bash
-pytest                      # everything (212 tests, a few seconds)
+pytest                      # everything (215 tests, a few seconds)
 pytest tests/unit           # fast unit pass
 pytest tests/e2e -v         # end-to-end smoke
 pytest --cov=standup --cov-report=term-missing
@@ -267,7 +267,7 @@ python -m scripts.verify_integrity   # audit chain + stored-text hashes
 
 CI (`.github/workflows/ci.yml`) runs all of the above with `STANDUP_VALIDATOR_STRICT=true`, gates `summarize/` and `privacy/` at 90% coverage, runs migrations plus the integration and e2e tests against Postgres 16, and builds the Docker image.
 
-Current: **212 passing, 97% coverage overall.** The gate that matters is `summarize/` and `privacy/` at >=90% — those are the modules where a silent regression is a correctness or compliance failure rather than a bug. `normalizer.py`, `summarize/base.py`, `logging_conf.py` and `main.py` sit at 100%; `validator.py` at 99%.
+Current: **215 passing, 97% coverage overall.** The gate that matters is `summarize/` and `privacy/` at >=90% — those are the modules where a silent regression is a correctness or compliance failure rather than a bug. `normalizer.py`, `summarize/base.py`, `logging_conf.py` and `main.py` sit at 100%; `validator.py` at 99%.
 
 > `lint-imports` must be run as the console script. `python -m importlinter.cli` exits 0 *without reading* `pyproject.toml`, so it reports success while enforcing nothing — confirmed by adding a deliberate boundary violation and watching it pass.
 

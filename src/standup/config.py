@@ -85,6 +85,8 @@ class Settings(DatabaseSettings):
     scheduler: bool = False
     scheduler_interval_seconds: int = Field(default=60, ge=10)
     github_token: SecretStr | None = None
+    # The GitHub REST API. Point it at scripts/fake_github.py for a demo.
+    github_api_url: str = "https://api.github.com"
 
     @model_validator(mode="after")
     def _integration_credentials_present(self) -> "Settings":

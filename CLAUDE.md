@@ -58,6 +58,7 @@ mypy src                                  # strict; clean as of Phase 1, keep it
 python -m scripts.verify_integrity        # audit chain + stored-text hashes; exits 1 on tampering
 python -m scripts.tick [--at ISO]         # one scheduler pass: build due digests, notify, drain the outbox
 scripts/demo_check.sh                     # the whole docs/DEMO.md flow against a real server; also a CI job
+python -m scripts.fake_github             # local GitHub Issues API stand-in (demo; STANDUP_GITHUB_API_URL)
 python -m scripts.drain_outbox            # retry queued GitHub writes now
 
 alembic revision --autogenerate -m "description"

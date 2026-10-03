@@ -139,9 +139,13 @@ def _drain_rows(
     rows = (
         session.execute(
             select(TrackerOutbox)
+            .join(StandupCycle, TrackerOutbox.cycle_id == StandupCycle.id)
             .where(TrackerOutbox.status == "pending")
             .where(TrackerOutbox.next_attempt_at <= now)
-            .order_by(TrackerOutbox.created_at)
+            # Oldest standup day first: one pass may queue several days (a
+            # backfill), and the first day must open the issue that later days
+            # comment on, not the other way round.
+            .order_by(StandupCycle.local_date, TrackerOutbox.created_at)
             .limit(limit)
         )
         .scalars()

@@ -15,12 +15,17 @@ PY="$BIN/python"
 [ -x "$PY" ] || { echo "Missing $BIN/python (see README), or set VENV_BIN." >&2; exit 1; }
 
 PORT="${DEMO_PORT:-8090}"
+GH_PORT="${DEMO_GITHUB_PORT:-$((PORT + 1))}"
 BASE="http://127.0.0.1:$PORT"
+GH="http://127.0.0.1:$GH_PORT"
 WORK="$(mktemp -d)"
 SERVER_PID=""
+GITHUB_PID=""
 
 cleanup() {
-    if [ -n "$SERVER_PID" ]; then kill "$SERVER_PID" 2>/dev/null || true; wait "$SERVER_PID" 2>/dev/null || true; fi
+    for pid in "$SERVER_PID" "$GITHUB_PID"; do
+        if [ -n "$pid" ]; then kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true; fi
+    done
     rm -rf "$WORK"
 }
 trap cleanup EXIT
@@ -30,6 +35,10 @@ export STANDUP_SECRET_KEY="$($PY -c 'import secrets; print(secrets.token_urlsafe
 export STANDUP_BASE_URL="$BASE"
 export STANDUP_ENV=local
 export STANDUP_LOG_LEVEL=WARNING
+# Blockers go to a local fake GitHub, through the real GitHub client.
+export STANDUP_TRACKER=github
+export STANDUP_GITHUB_TOKEN=demo-token
+export STANDUP_GITHUB_API_URL="$GH"
 
 STEP=0
 pass() { STEP=$((STEP + 1)); printf '  ok %2d  %s\n' "$STEP" "$1"; }
@@ -49,6 +58,12 @@ link_for() { grep -F " / $1: " "$WORK/seed.txt" | awk '{print $NF}'; }
 ADA="$(link_for "Ada Okafor")"; DANA="$(link_for "Dana Park")"
 [ -n "$ADA" ] && [ -n "$DANA" ] || fail "seed printed login links"
 pass "seeded Core Platform (2 days of updates) and Mobile; login links printed"
+
+$PY -m scripts.set_github_repo --team core --repo demo/core >/dev/null || fail "point Core Platform at a repo"
+$PY -m scripts.fake_github --port "$GH_PORT" >"$WORK/github.log" 2>&1 &
+GITHUB_PID=$!
+curl -s --retry 30 --retry-connrefused --retry-delay 1 -o /dev/null "$GH/" || fail "fake GitHub came up"
+pass "fake GitHub is up at $GH; Core Platform's blockers go to demo/core"
 
 "$BIN/uvicorn" standup.main:app --port "$PORT" >"$WORK/server.log" 2>&1 &
 SERVER_PID=$!
@@ -113,6 +128,18 @@ BUILT=$(grep -Eho "built [0-9]+" "$WORK/tick1.txt" "$WORK/tick2.txt" | awk '{s +
 [ "$BUILT" = 2 ] || fail "two simultaneous passes build each day's digest exactly once (got: $TICK)"
 pass "two scheduler passes at once ($AT) build each digest once; no base URL refuses"
 
+ISSUES="$(curl -s -H 'authorization: Bearer demo-token' "$GH/repos/demo/core/issues?labels=standup-blocker&state=all")"
+ADA_ISSUES="$($PY -c '
+import json, sys
+for issue in json.load(sys.stdin):
+    if "staging credentials" in issue["title"]:
+        print(issue["number"], issue["comments"])' <<<"$ISSUES")"
+[ "$(wc -l <<<"$ADA_ISSUES" | tr -d ' ')" = 1 ] || fail "Ada's blocker, reported on both days, is a single issue"
+[ "$(cut -d' ' -f2 <<<"$ADA_ISSUES")" = 1 ] || fail "the second day added one comment to it"
+grep -q "Still blocked on" <<<"$(curl -s "$GH/demo/core/issues/$(cut -d' ' -f1 <<<"$ADA_ISSUES")")" \
+    || fail "the second day's comment says 'Still blocked on'"
+pass "blockers became GitHub issues: Ada's two-day blocker is one issue plus a 'Still blocked' comment"
+
 DIGEST_ID="$(curl -s -b "$WORK/ada.jar" "$BASE/digests" | grep -o 'href="/digest/[0-9a-f-]*"' | head -1 | cut -d/ -f3 | tr -d '"')"
 [ -n "$DIGEST_ID" ] || fail "today's digest is listed"
 PAGE="$(curl -s -b "$WORK/ada.jar" "$BASE/digest/$DIGEST_ID")"
@@ -125,7 +152,10 @@ MD="$(curl -s -b "$WORK/ada.jar" "$BASE/digest/$DIGEST_ID.md")"
 grep -q "waiting on review for the DB migration" <<<"$(sed -n '/## Blockers/,/## Progress/p' <<<"$MD")" \
     || fail "a blocker in one clause survives a negation-free sentence and is promoted"
 grep -q "$BASE/evidence/" <<<"$MD" || fail "every line links to its evidence"
-pass "digest: blockers first, promotion explained, negation honoured, every line cited"
+BLOCKER_LINES="$(sed -n '/## Blockers/,/## Progress/p' <<<"$MD" | grep -c '^- ')"
+ISSUE_LINKS="$(grep -o "href=\"$GH/demo/core/issues/[0-9]*\"" <<<"$PAGE" | wc -l | tr -d ' ')"
+[ "$ISSUE_LINKS" = "$BLOCKER_LINES" ] || fail "every blocker links to its issue ($ISSUE_LINKS links, $BLOCKER_LINES blockers)"
+pass "digest: blockers first, promotion explained, negation honoured, every line cited, every blocker linked to its issue"
 
 # --- evidence and integrity --------------------------------------------------
 EVIDENCE="$(grep -o 'href="/evidence/[0-9a-f-]*"' <<<"$PAGE" | head -1 | cut -d'"' -f2)"
