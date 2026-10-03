@@ -254,7 +254,7 @@ Ruff excludes `src/standup/migrations/versions/` — Alembic writes those.
 
 - `SecretStr` for every credential, declared as a required field so startup fails naming all missing keys. Today `config.py` has no credentials and every setting has a default; the first secrets (Teams app ID/secret, GitHub token) must follow this rule.
 - `.env` is gitignored; **`.env.example` must stay complete** — every key present, no values.
-- `logging_conf.py` scrubs sensitive key names and secret-shaped values (GitHub tokens, AWS keys, JWTs) from every log line. `tests/unit/test_logging.py` asserts a known secret never reaches the stream.
+- `logging_conf.py` scrubs sensitive key names and secret-shaped values (GitHub tokens, AWS keys, JWTs) from every log line. `tests/unit/test_logging.py` asserts a known secret never reaches the stream. It also redacts `/login/<token>` from uvicorn's access log (`RedactLoginTokens`), since a login link is a credential.
 
 ---
 
