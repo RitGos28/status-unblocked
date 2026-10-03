@@ -18,12 +18,15 @@ PORT="${DEMO_PORT:-8090}"
 GH_PORT="${DEMO_GITHUB_PORT:-$((PORT + 1))}"
 BASE="http://127.0.0.1:$PORT"
 GH="http://127.0.0.1:$GH_PORT"
+TEAMS_PORT="${DEMO_TEAMS_PORT:-$((PORT + 2))}"
+TEAMS="http://127.0.0.1:$TEAMS_PORT"
 WORK="$(mktemp -d)"
 SERVER_PID=""
 GITHUB_PID=""
+TEAMS_PID=""
 
 cleanup() {
-    for pid in "$SERVER_PID" "$GITHUB_PID"; do
+    for pid in "$SERVER_PID" "$GITHUB_PID" "$TEAMS_PID"; do
         if [ -n "$pid" ]; then kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true; fi
     done
     rm -rf "$WORK"
@@ -39,6 +42,12 @@ export STANDUP_LOG_LEVEL=WARNING
 export STANDUP_TRACKER=github
 export STANDUP_GITHUB_TOKEN=demo-token
 export STANDUP_GITHUB_API_URL="$GH"
+# The Teams bot, in the anonymous mode Agents Playground uses; its replies go
+# to a local fake connector instead of Microsoft.
+export STANDUP_TEAMS_ENABLED=true
+export CONNECTIONS__SERVICE_CONNECTION__SETTINGS__ANONYMOUS_ALLOWED=True
+replay() { $PY -m scripts.teams_replay "$@" --app "$BASE" --connector "$TEAMS" >/dev/null; }
+bot_said() { curl -s "$TEAMS/messages"; }
 
 STEP=0
 pass() { STEP=$((STEP + 1)); printf '  ok %2d  %s\n' "$STEP" "$1"; }
@@ -64,6 +73,10 @@ $PY -m scripts.fake_github --port "$GH_PORT" >"$WORK/github.log" 2>&1 &
 GITHUB_PID=$!
 curl -s --retry 30 --retry-connrefused --retry-delay 1 -o /dev/null "$GH/" || fail "fake GitHub came up"
 pass "fake GitHub is up at $GH; Core Platform's blockers go to demo/core"
+$PY -m scripts.fake_teams_connector --port "$TEAMS_PORT" >"$WORK/teams.log" 2>&1 &
+TEAMS_PID=$!
+curl -s --retry 30 --retry-connrefused --retry-delay 1 -o /dev/null "$TEAMS/" || fail "fake Teams connector came up"
+pass "fake Teams connector is up at $TEAMS"
 
 "$BIN/uvicorn" standup.main:app --port "$PORT" >"$WORK/server.log" 2>&1 &
 SERVER_PID=$!
@@ -78,6 +91,18 @@ DIGESTS="$(curl -s -b "$WORK/ada.jar" "$BASE/digests")"
 grep -q "Core Platform" <<<"$DIGESTS" || fail "Ada sees Core Platform"
 ! grep -q "Mobile" <<<"$DIGESTS" || fail "Ada does not see Mobile"
 pass "Ada signs in with her link and sees only her team"
+
+# --- Teams: link Ada's account, then talk to the bot -----------------------
+CODE="$(curl -s -b "$WORK/ada.jar" "$BASE/me/teams" | grep -o 'link [A-Za-z0-9._-]*' | head -1 | cut -d' ' -f2)"
+[ -n "$CODE" ] || fail "/me/teams shows Ada a link code"
+replay personal_command --text "link $CODE" || fail "the bot accepts 'link <code>'"
+grep -q "Linked. You're Ada Okafor" <<<"$(bot_said)" || fail "the bot confirms the link"
+replay personal_command --text "standup" || fail "the bot accepts 'standup'"
+grep -q "application/vnd.microsoft.card.adaptive" <<<"$(bot_said)" || fail "'standup' gets the update card"
+replay channel_unaddressed || fail "the bot accepts a channel message"
+replay channel_mention || fail "the bot accepts a channel @mention"
+grep -q "read channel conversations" <<<"$(bot_said)" || fail "a channel @mention gets a pointer to the 1:1 chat"
+pass "Teams: Ada links her account, 'standup' returns the card, a channel mention gets a pointer"
 
 # --- submit, and resubmit to supersede ---------------------------------------
 for text in "Reviewed the rollout plan." "Reviewed the rollout plan and the runbook."; do
@@ -140,6 +165,9 @@ for issue in json.load(sys.stdin):
 grep -q "Still blocked on" <<<"$(curl -s "$GH/demo/core/issues/$(cut -d' ' -f1 <<<"$ADA_ISSUES")")" \
     || fail "the second day's comment says 'Still blocked on'"
 pass "blockers became GitHub issues: Ada's two-day blocker is one issue plus a 'Still blocked' comment"
+NOTICES="$(bot_said | grep -o 'digest is ready' | wc -l | tr -d ' ')"
+[ "$NOTICES" = 2 ] || fail "Ada got one 'digest is ready' notice per day's digest, not one per pass (got $NOTICES)"
+pass "Teams: the scheduler told Ada each digest is ready, once each, with no credentials"
 
 DIGEST_ID="$(curl -s -b "$WORK/ada.jar" "$BASE/digests" | grep -o 'href="/digest/[0-9a-f-]*"' | head -1 | cut -d/ -f3 | tr -d '"')"
 [ -n "$DIGEST_ID" ] || fail "today's digest is listed"
@@ -157,6 +185,10 @@ BLOCKER_LINES="$(sed -n '/## Blockers/,/## Progress/p' <<<"$MD" | grep -c '^- ')
 ISSUE_LINKS="$(grep -o "href=\"$GH/demo/core/issues/[0-9]*\"" <<<"$PAGE" | wc -l | tr -d ' ')"
 [ "$ISSUE_LINKS" = "$BLOCKER_LINES" ] || fail "every blocker links to its issue ($ISSUE_LINKS links, $BLOCKER_LINES blockers)"
 pass "digest: blockers first, promotion explained, negation honoured, every line cited, every blocker linked to its issue"
+
+replay personal_card_submit || fail "the bot accepts a card submission"
+grep -q "Recorded for Core Platform" <<<"$(bot_said)" || fail "a card submission is recorded"
+pass "Teams: Ada files her update through the card, through the same ingest path as the web form"
 
 # --- evidence and integrity --------------------------------------------------
 EVIDENCE="$(grep -o 'href="/evidence/[0-9a-f-]*"' <<<"$PAGE" | head -1 | cut -d'"' -f2)"
@@ -185,9 +217,9 @@ pass "20 simultaneous evidence views leave the audit chain intact; an edited upd
 pass "Dana (Mobile) gets 404 on Core Platform's digest and evidence"
 
 # --- ops and error pages -----------------------------------------------------
-curl -s "$BASE/scope" | grep -q '"scope_violations"' || fail "/scope reports counts"
+curl -s "$BASE/scope" | grep -q '"scope_violations":1' || fail "/scope counts the one refused channel message"
 ERR_TYPE="$(curl -s -o /dev/null -w '%{content_type}' -H 'accept: text/html' -b "$WORK/ada.jar" "$BASE/digest/nope")"
 [[ "$ERR_TYPE" == text/html* ]] || fail "browser errors render as HTML (got $ERR_TYPE)"
-pass "/scope counter answers; browser errors are HTML pages"
+pass "/scope counts the refused channel message (content-free); browser errors are HTML pages"
 
 echo "All $STEP demo steps passed."

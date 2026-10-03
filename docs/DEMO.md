@@ -13,6 +13,8 @@ scripts/demo_check.sh          # about 10 seconds; prints one line per step
 ```bash
 python -m scripts.fake_github --port 8091 &   # a local stand-in for the GitHub API
 export STANDUP_TRACKER=github STANDUP_GITHUB_TOKEN=demo STANDUP_GITHUB_API_URL=http://127.0.0.1:8091
+python -m scripts.fake_teams_connector --port 8092 &   # a local stand-in for Teams; records what the bot sends
+export STANDUP_TEAMS_ENABLED=true CONNECTIONS__SERVICE_CONNECTION__SETTINGS__ANONYMOUS_ALLOWED=True
 export STANDUP_DATABASE_URL=sqlite:///./demo.db
 export STANDUP_SECRET_KEY=$(python -c "import secrets; print(secrets.token_urlsafe(48))")
 export STANDUP_BASE_URL=http://127.0.0.1:8000
@@ -28,6 +30,15 @@ uvicorn standup.main:app --port 8000
 - Open `/digests` without signing in: **401**, "Sign in with your personal link".
 - Open **Ada's** link from the seed output: you land on Core Platform's digests. Mobile's are not listed.
 - Later (step 6), open **Dana's** link (team Mobile) and paste a Core Platform digest or evidence URL: **404**. Another team's pages are not just forbidden; they do not exist for her.
+
+## 1b. The Teams bot (no tenant needed)
+Activities are replayed to the bot as Teams would send them (`scripts/teams_replay.py`); the bot's replies land at the fake connector. Open `http://127.0.0.1:8092/` to watch them.
+- As Ada, open **Teams** in the header: it shows `link <code>`. Send it: `python -m scripts.teams_replay personal_command --text "link <code>"` → "Linked. You're Ada Okafor on Core Platform".
+- `python -m scripts.teams_replay personal_command` (the text `standup`) → the bot replies with the update card.
+- `python -m scripts.teams_replay channel_unaddressed` → no reply, nothing read; `/scope` counts one refusal.
+- `python -m scripts.teams_replay channel_mention` → "I don't read channel conversations…".
+- After the scheduler pass in step 3, the connector shows a "digest is ready" message for Ada for each day's digest, sent with no credentials.
+- `python -m scripts.teams_replay personal_card_submit` → "Recorded for Core Platform": a card submission goes through the same ingest path as the web form.
 
 ## 2. Submit, and resubmit
 - As Ada, **Submit update**. Submit again with a change: the second replaces the first in the digest (the first is kept unedited, because stored text is never rewritten).
@@ -68,5 +79,6 @@ The scheduler pass in step 3 also delivered the blockers to the (fake) GitHub, t
 
 ## Optional: needs your accounts or tools
 - **GitHub Issues write-back against a real repo:** leave `STANDUP_GITHUB_API_URL` unset, set `STANDUP_GITHUB_TOKEN` to a fine-grained token with Issues read/write on one repo, and `python -m scripts.set_github_repo --team core --repo owner/name`, then build a digest.
-- **Teams in a real client:** Agents Playground or a tenant; see README "Teams".
+- **The rendered card in a real Teams client, without a tenant:** Microsoft 365 Agents Playground. Install it with `npm install -g @microsoft/m365agentsplayground` (checked on npm: version 0.2.28; the older `@microsoft/teams-app-test-tool` is deprecated in its favour), run the app with the two Teams variables above, then run `agentsplayground` and set its bot endpoint to `http://127.0.0.1:8000/api/messages` (see `agentsplayground --help` for the option). Type `standup` to get the card.
+- **A real Teams tenant:** register an Entra app and Azure Bot, set the three `CONNECTIONS__…` variables and leave `ANONYMOUS_ALLOWED` unset, then sideload `python -m scripts.make_teams_zip --bot-id <app id> --base-url <public URL>`.
 - **Postgres via Docker:** `export STANDUP_SECRET_KEY=...; docker compose up --build` (needs the Docker daemon running).
