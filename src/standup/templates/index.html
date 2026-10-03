@@ -2,6 +2,9 @@
 {% block content %}
 <h1>Status Unblocked</h1>
 <p class="sub">Async standup updates, summarised faithfully. Every line links back to the words its author wrote.</p>
+{% if signed_out and not viewer %}
+<div class="card" style="border-color:var(--accent)"><p style="margin:0">You are signed out.</p></div>
+{% endif %}
 <div class="card">
   {% if viewer %}
   <p style="margin-top:0"><a href="/submit">Submit today's update</a> or <a href="/digests">read your team's digests</a>.</p>

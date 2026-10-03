@@ -24,10 +24,11 @@
     {% if update.permalink %}
       <a href="{{ update.permalink }}">Open in {{ update.source_kind }}</a>
     {% else %}
-      No platform link: {{ update.permalink_reason }}
+      {{ update.permalink_reason | describe_missing_permalink }}
     {% endif %}
   </p>
 {% endif %}
 
 <p class="muted">This view was recorded in the audit trail.</p>
+<p><a href="/digests">Back to digests</a></p>
 {% endblock %}

@@ -18,6 +18,7 @@ from standup.db.models import Member
 from standup.db.session import get_session_factory
 from standup.domain.errors import NotFoundError, UnauthorizedError
 from standup.domain.models import Clock, SystemClock
+from standup.ingestion.permalink import describe_missing_permalink
 from standup.summarize.base import Summarizer
 from standup.summarize.render import explain_rule
 from standup.summarize.rules import RulesSummarizer
@@ -28,6 +29,7 @@ from standup.tracker.noop import NoopTracker
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 templates.env.filters["explain_rule"] = explain_rule
+templates.env.filters["describe_missing_permalink"] = describe_missing_permalink
 
 _clock: Clock = SystemClock()
 
@@ -95,9 +97,9 @@ def get_current_member(
 ) -> Member:
     if member is None:
         raise UnauthorizedError(
-            "Open the personal link your team gave you to sign in. "
-            "Each link is for one person and expires; ask a teammate to run "
-            "'python -m scripts.issue_links' if yours has."
+            "Open the personal link your team gave you to sign in. Each link is "
+            "for one person and expires; if yours has expired, ask your team for "
+            "a new one."
         )
     return member
 
@@ -109,7 +111,7 @@ def ensure_same_team(member: Member, team_id: str, what: str) -> None:
     disclosed. There is no override and no admin role (invariant 7).
     """
     if member.team_id != team_id:
-        raise NotFoundError(f"{what} not found")
+        raise NotFoundError(f"That {what} does not exist, or it belongs to another team.")
 AppSettings = Annotated[Settings, Depends(get_settings)]
 AppClock = Annotated[Clock, Depends(get_clock)]
 AppSummarizer = Annotated[Summarizer, Depends(get_summarizer)]

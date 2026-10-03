@@ -10,7 +10,8 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from standup.api import auth, digests, evidence, health, me, web_forms
 from standup.config import get_settings
-from standup.db.session import create_all
+from standup.db.models import Member
+from standup.db.session import create_all, session_scope
 from standup.deps import templates
 from standup.domain.errors import StandupError
 from standup.logging_conf import configure_logging, get_logger
@@ -36,6 +37,22 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     if scheduler is not None:
         scheduler.cancel()
     log.info("app.stopped")
+
+
+def _viewer(request: Request) -> Member | None:
+    """The signed-in member, for the header on error pages. Never raises."""
+    member_id = request.session.get("member_id") if "session" in request.scope else None
+    if not member_id:
+        return None
+    try:
+        with session_scope() as session:
+            member = session.get(Member, member_id)
+            if member is None or not member.active:
+                return None
+            _ = member.team.name  # load it before the session closes
+            return member
+    except Exception:  # noqa: BLE001 - an error page must render even if the DB is down
+        return None
 
 
 async def _scheduler_loop(app: FastAPI, interval_seconds: int) -> None:
@@ -69,7 +86,7 @@ def create_app() -> FastAPI:
             return templates.TemplateResponse(
                 request=request,
                 name="error.html",
-                context={"title": exc.title, "detail": str(exc)},
+                context={"title": exc.title, "detail": str(exc), "viewer": _viewer(request)},
                 status_code=exc.status_code,
             )
         return JSONResponse(
