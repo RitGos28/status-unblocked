@@ -30,6 +30,12 @@ from standup.summarize.base import Claim, SummaryRequest, SummaryResult
 DERIVED_METRICS = frozenset({"days_open", "source_count"})
 
 _NUMBER = re.compile(r"\b\d+(?:[.,]\d+)?\b")
+def _entity_token(entity: str) -> str:
+    """An entity as written, minus sentence punctuation the pattern swallowed:
+    "@anabel." at the end of a sentence is the handle "@anabel"."""
+    return entity.rstrip(".,;:!?)")
+
+
 _ENTITY = re.compile(r"(?:\b[\w.-]+/[\w.-]+)?#\d+|https?://\S+|@[\w.-]+|\b[A-Z][A-Z0-9]{1,9}-\d+\b")
 
 # How much longer a claim may be than the evidence supporting it.
@@ -137,16 +143,21 @@ class FaithfulnessValidator:
         evidence = " ".join(_canonical(q) for q in cited_quotes)
         canonical_text = _canonical(text)
 
+        # V4 and V5 compare whole tokens, never substrings: "1" must not pass
+        # because the evidence says "10", nor "#1" because it says "#12".
+        evidence_numbers = set(_NUMBER.findall(evidence))
+        evidence_entities = {_entity_token(e) for e in _ENTITY.findall(evidence)}
+
         # V4 - every number is supported by the evidence.
         for number in _NUMBER.findall(canonical_text):
-            if number not in evidence:
+            if number not in evidence_numbers:
                 violations.append(
                     Violation("V4", text, f"number {number!r} appears in no cited source")
                 )
 
         # V5 - every entity reference is supported by the evidence.
         for entity in _ENTITY.findall(canonical_text):
-            if entity not in evidence:
+            if _entity_token(entity) not in evidence_entities:
                 violations.append(
                     Violation("V5", text, f"entity {entity!r} appears in no cited source")
                 )
