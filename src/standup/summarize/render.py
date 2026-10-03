@@ -79,10 +79,13 @@ def render_markdown(
             lines.append("")
             for claim in section.claims:
                 links = " ".join(
-                    f"[[source]]({evidence_urls.get(c.source_id, '#')})"
+                    f"[source]({evidence_urls.get(c.source_id, '#')})"
                     for c in claim.citations
                 )
                 lines.append(f"- **{claim.member_name}** - {claim.text} {links}")
+                why = explain_rule(claim.matched_rule)
+                if why:
+                    lines.append(f"  - _{why}_")
             lines.append("")
 
     if withheld_count:
@@ -98,4 +101,9 @@ def render_markdown(
             f"_{truncated_count} more item(s) not shown: a section reached its line limit._"
         )
 
+    lines.append("")
+    lines.append(
+        "_Every line above is a verbatim quote, checked against its stored source "
+        "before this digest was written._"
+    )
     return "\n".join(lines).strip() + "\n"

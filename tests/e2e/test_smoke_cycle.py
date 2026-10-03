@@ -159,3 +159,13 @@ def test_health_endpoints(client, app_env):
     assert client.get("/healthz").json() == {"status": "ok"}
     assert client.get("/readyz").json()["status"] == "ok"
     assert client.get("/version").json()["summarizer"] == "rules"
+
+
+def test_markdown_digest_answers_head_requests(client, session, team_with_members):
+    _team, members = team_with_members
+    submit(client, members[0].id, blockers="Blocked on the deploy pipeline.")
+    cycle = session.execute(select(StandupCycle)).scalars().one()
+    client.post(f"/digests/build/{cycle.id}", follow_redirects=False)
+    session.expire_all()
+    digest = session.execute(select(Digest)).scalars().one()
+    assert client.head(f"/digest/{digest.id}.md").status_code == 200
