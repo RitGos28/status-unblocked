@@ -97,6 +97,8 @@ CODE="$(curl -s -b "$WORK/ada.jar" "$BASE/me/teams" | grep -o '<pre class="raw">
 [ -n "$CODE" ] || fail "/me/teams shows Ada a link code"
 replay personal_command --text "link $CODE" || fail "the bot accepts 'link <code>'"
 grep -q "Linked. You're Ada Okafor" <<<"$(bot_said)" || fail "the bot confirms the link"
+replay personal_command --text "link $CODE" --as aad-someone-else || fail "the bot accepts a reused code"
+grep -q "invalid or has expired" <<<"$(bot_said)" || fail "a used link code is refused from another account"
 replay personal_command --text "standup" || fail "the bot accepts 'standup'"
 grep -q "application/vnd.microsoft.card.adaptive" <<<"$(bot_said)" || fail "'standup' gets the update card"
 replay channel_unaddressed || fail "the bot accepts a channel message"
