@@ -45,7 +45,7 @@ Activities are replayed to the bot as Teams would send them (`scripts/teams_repl
 
 ## 2. Submit, and resubmit
 - As Ada, **Submit update**. The seed already gave her an update today, so this one replaces it in the digest; so does every later one (the earlier ones are kept unedited, because stored text is never rewritten). Double-clicking Submit is safe.
-- On **Digests**, each day also has a **Build digest** (or **Rebuild**) button: anyone on the team can build the digest by hand before the scheduler does. The scheduler still announces it at the cutoff, once.
+- On **Digests**, each day also has a **Build digest** (or **Rebuild**) button: anyone on the team can build the digest by hand before the scheduler does. The scheduler still announces it at the cutoff, once. Builds of one day run one at a time, and a Rebuild with nothing new returns the same digest, so double-clicking it is harmless. The list always links the most recent build, even after a scheduler pass on a demo clock set later in the day.
 
 ## 2b. Made-up updates from a spreadsheet
 `docs/sample_updates.csv` shows the format: `date,team,member,progress,blockers,plan` (and an optional `time`, default 09:00). Dates are UTC; `team` is a slug; `member` a display name. Copy it, and change the copy's dates to the two days before today (the tracked file's dates are fixed, and old dates would load into old days):

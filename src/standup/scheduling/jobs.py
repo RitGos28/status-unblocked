@@ -34,7 +34,7 @@ from standup.scheduling.tick import (
     tick,
 )
 from standup.summarize.base import Summarizer
-from standup.summarize.service import build_digest
+from standup.summarize.service import build_digest, latest_digest
 from standup.tracker.base import TrackerAdapter
 from standup.tracker.outbox import drain
 
@@ -215,13 +215,7 @@ def _notice(
 ) -> tuple[str, list[tuple[str, dict[str, Any]]]]:
     cycle = session.get(StandupCycle, cycle_id)
     team = session.get(Team, cycle.team_id) if cycle else None
-    digest = (
-        session.execute(
-            select(Digest).where(Digest.cycle_id == cycle_id).order_by(Digest.generated_at.desc())
-        )
-        .scalars()
-        .first()
-    )
+    digest = latest_digest(session, cycle_id)
     if cycle is None or team is None or digest is None:
         return "", []
     # Carried-over blockers are blockers too: the page shows them first.

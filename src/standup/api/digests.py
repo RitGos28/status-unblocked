@@ -27,7 +27,7 @@ from standup.domain.errors import NotFoundError
 from standup.domain.timezones import as_utc
 from standup.privacy.retention import day_was_purged
 from standup.summarize.render import SECTION_TITLES, group_sections
-from standup.summarize.service import build_digest
+from standup.summarize.service import build_digest, latest_digest
 from standup.tracker.outbox import drain
 
 router = APIRouter(tags=["digest"])
@@ -51,12 +51,7 @@ def list_digests(
 
     rows = []
     for cycle in cycles:
-        digest = session.execute(
-            select(Digest)
-            .where(Digest.cycle_id == cycle.id)
-            .order_by(Digest.generated_at.desc())
-            .limit(1)
-        ).scalar_one_or_none()
+        digest = latest_digest(session, cycle.id)
         update_count = len(
             session.execute(
                 select(Update)
