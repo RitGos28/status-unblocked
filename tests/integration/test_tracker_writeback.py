@@ -255,3 +255,42 @@ def test_each_later_day_adds_a_comment_with_the_running_count(
     assert [json_block(c)["standup_blocker_update"]["days_reported"] for c in comments] == [2, 3]
     assert json_block(comments[-1])["standup_blocker_update"]["date"] == "2026-09-17"
     assert session.execute(select(TrackerLink.days_reported)).scalar_one() == 3
+
+
+def test_blockers_skipped_before_a_repo_was_set_are_filed_once_it_is(
+    client, session, clock, monkeypatch, team_with_members, github
+):
+    """Found by the round-2 review (B): rows skipped for 'no github_repo' were
+    final, so connecting the repo afterwards never filed that day's blockers."""
+    from standup.deps import tracker_from_settings
+    from standup.tracker.outbox import drain, requeue_skipped
+
+    monkeypatch.setenv("STANDUP_TRACKER", "github")
+    monkeypatch.setenv("STANDUP_GITHUB_TOKEN", "test-token")
+    get_settings.cache_clear()
+    _team, (ada, *_rest) = team_with_members
+    submit(client, ada.id, blockers=BLOCKER)
+    build_today(client, session)  # no repo yet: the background drain skips it
+    row = session.execute(select(TrackerOutbox)).scalar_one()
+    assert row.status == "skipped"
+
+    team = session.get(Team, team_with_members[0].id)
+    team.github_repo = REPO
+    assert requeue_skipped(session, team.id, clock.now()) == 1
+    session.commit()
+    report = drain(session, tracker_from_settings(get_settings()), clock.now())
+    assert report.done == 1
+    assert len(calls(github, "POST", ISSUES)) == 1
+    session.expire_all()
+    assert session.execute(select(TrackerOutbox)).scalar_one().status == "done"
+
+
+def test_requeue_leaves_old_skipped_rows_alone(
+    client, session, clock, monkeypatch, team_with_members
+):
+    from standup.tracker.outbox import requeue_skipped
+
+    _team, (ada, *_rest) = team_with_members
+    submit(client, ada.id, blockers=BLOCKER)
+    build_today(client, session)
+    assert requeue_skipped(session, team_with_members[0].id, clock.now() + timedelta(days=30)) == 0

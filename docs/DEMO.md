@@ -85,6 +85,7 @@ The scheduler pass in step 3 also delivered the blockers to the (fake) GitHub, t
 - Open `http://127.0.0.1:8091/`: one issue per blocker, labelled `standup-blocker`. Each quotes the blocker and links back to its evidence and digest.
 - Ada reported the same blocker on both days. It is **one** issue, opened for the first day, with a "Still blocked on <today>" comment for the second.
 - On the digest, each blocker shows its issue number (`#1`); click it to open the issue.
+- Mobile has no repository yet, so its blockers were **skipped**, not lost. Connect one: `python -m scripts.set_github_repo --team mobile --repo demo/mobile` → "requeued N blocker(s)…", then `python -m scripts.drain_outbox`: Mobile's blockers from this week appear on the fake GitHub under `demo/mobile`.
 - The output is **structured**, not just prose: each issue is labelled `standup-blocker` and `team:core`, and ends with a `json` block (fingerprint, team, who reported it, the quote, first reported, days reported, evidence and digest links). Each later day's comment carries a `json` update with the running `days_reported`.
 
 ## 5. Evidence, and proving nothing was edited
