@@ -65,6 +65,7 @@ Run it again, or twice at once: nothing is built twice and no one is told twice,
 - **Negation:** Bruno wrote "No blockers today." It is not reported as a blocker. Answers like "None", "N/A" or "-" are not blockers either.
 - **Clauses:** a sentence such as "Merged the API changes, but waiting on review for the DB migration." is promoted: each clause is judged on its own, so "no blockers on X, but stuck on Y" still reports Y.
 - Every line has a **source** link. The **Markdown** link at the bottom gives the same digest as text, including the "Moved to Blockers" notes.
+- **Spreadsheet (CSV)** at the bottom downloads the digest: one row per line with its section, who, the verbatim text, the evidence link, the earlier report (for carried-over blockers) and the GitHub issue. Text that would run as a formula in Excel or Sheets (starting with `=`, `+`, `-` or `@`) is prefixed with `'`.
 
 ## 4b. Blockers become GitHub issues
 The scheduler pass in step 3 also delivered the blockers to the (fake) GitHub, through the same client the app uses against github.com.
