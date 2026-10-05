@@ -253,6 +253,23 @@ grep -q "$BASE/evidence/.*,$BASE/evidence/.*,$GH/demo/core/issues/" <<<"$ADA_ROW
     || fail "Ada's carried-over row has today's source, the earlier report and its issue"
 pass "the digest downloads as a spreadsheet: one row per line, with evidence and issue links"
 
+# Ada's card submission above changed today: press Build five times at once.
+TODAY_CYCLE="$($PY - "$WORK/demo.db" "$DIGEST_ID" <<'EOF2'
+import sqlite3, sys
+print(sqlite3.connect(sys.argv[1]).execute("select cycle_id from digest where id=?", (sys.argv[2],)).fetchone()[0])
+EOF2
+)"
+seq 5 | xargs -P 5 -I{} curl -s -o /dev/null -w '%{redirect_url}\n' -b "$WORK/ada.jar" -X POST \
+    "$BASE/digests/build/$TODAY_CYCLE" >"$WORK/builds.txt"
+[ "$(sort -u "$WORK/builds.txt" | wc -l | tr -d ' ')" = 1 ] || fail "five simultaneous builds make one digest"
+REBUILT="$(head -1 "$WORK/builds.txt" | sed 's#.*/digest/##')"
+[ "$REBUILT" != "$DIGEST_ID" ] || fail "the rebuild includes Ada's card submission"
+grep -q "href=\"/digest/$REBUILT\"" <<<"$(curl -s -b "$WORK/ada.jar" "$BASE/digests")" \
+    || fail "the list links the latest build, even though the scheduler's ran on a later demo clock"
+AGAIN="$(curl -s -o /dev/null -w '%{redirect_url}' -b "$WORK/ada.jar" -X POST "$BASE/digests/build/$TODAY_CYCLE")"
+[ "${AGAIN##*/digest/}" = "$REBUILT" ] || fail "rebuilding with nothing new returns the same digest"
+pass "Build pressed five times at once makes one new digest; with nothing new, Rebuild returns it again"
+
 # --- evidence and integrity --------------------------------------------------
 EVIDENCE="$(grep -o 'href="/evidence/[0-9a-f-]*"' <<<"$PAGE" | head -1 | cut -d'"' -f2)"
 EV="$(curl -s -b "$WORK/ada.jar" "$BASE$EVIDENCE")"

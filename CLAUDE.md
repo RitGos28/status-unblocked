@@ -237,6 +237,8 @@ Wanting to import a SQLAlchemy model into `summarize/` is the signal you are abo
 
 13. **Audit appends go through `record_audit`, which locks `audit_chain_head` first.** Never insert `AuditLog` rows directly: reading the last row without that lock is how concurrent requests forked the chain. `UNIQUE(prev_hash)` turns any fork into a loud error.
 
+14. **A day's builds run one at a time, and "latest" means last built.** `build_digest` first bumps `StandupCycle.build_seq` (a row lock until commit), stamps the digest with it, and returns the current digest when its `inputs_sha256` matches. Pick a day's digest with `summarize.service.latest_digest()`, never by `generated_at`: a demo clock can put a scheduler build later in the day than a real rebuild.
+
 ---
 
 ## Testing conventions

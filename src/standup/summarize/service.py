@@ -8,15 +8,18 @@ It is also the mapping layer between the ORM and the pure domain types, which
 is what keeps ``summarize/`` free of database imports.
 """
 
+import json
 from datetime import datetime, timedelta
 
 from sqlalchemy import select
+from sqlalchemy import update as sql_update
 from sqlalchemy.orm import Session
 
 from standup.config import get_settings
 from standup.db.models import Digest, DigestClaim, StandupCycle, Team, Update, UpdateItem
 from standup.domain.enums import AuditAction, ClaimKind, CycleState, ItemKind
 from standup.domain.errors import ConflictError, NotFoundError, ValidationFailure
+from standup.domain.text import content_sha256
 from standup.domain.urls import evidence_url
 from standup.logging_conf import get_logger
 from standup.privacy.audit import record_audit
@@ -155,7 +158,22 @@ def build_digest(
             "This day's updates were removed under the team's retention policy, so there is "
             "nothing to rebuild from. Its digest stays as it was."
         )
+    # One build of a day at a time: bump the day's counter first, which takes
+    # its row lock until commit. A concurrent build waits here, then sees this
+    # one's digest (no SAVEPOINT needed, which pysqlite lacks).
+    session.execute(
+        sql_update(StandupCycle)
+        .where(StandupCycle.id == cycle_id)
+        .values(build_seq=StandupCycle.build_seq + 1)
+    )
+    build_seq = session.execute(
+        select(StandupCycle.build_seq).where(StandupCycle.id == cycle_id)
+    ).scalar_one()
     request = build_request(session, cycle_id, base_url)
+    inputs = _inputs_sha256(request, summarizer)
+    current = latest_digest(session, cycle_id)
+    if current is not None and current.inputs_sha256 == inputs:
+        return current  # nothing changed: a second click is not a second digest
 
     result = summarizer.summarize(request)
 
@@ -188,6 +206,8 @@ def build_digest(
     digest = Digest(
         cycle_id=cycle_id,
         generated_at=now,
+        build_seq=build_seq,
+        inputs_sha256=inputs,
         summarizer_name=result.summarizer_name,
         summarizer_version=result.summarizer_version,
         validator_report_json=report.to_dict(),
@@ -250,3 +270,33 @@ def build_digest(
         summarizer=result.summarizer_name,
     )
     return digest
+
+
+def latest_digest(session: Session, cycle_id: str) -> "Digest | None":
+    """The day's most recently built digest. By build order, never by clock."""
+    return session.execute(
+        select(Digest)
+        .where(Digest.cycle_id == cycle_id)
+        .order_by(Digest.build_seq.desc(), Digest.generated_at.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+
+
+def _inputs_sha256(request: SummaryRequest, summarizer: Summarizer) -> str:
+    """A fingerprint of everything a digest is built from."""
+
+    def doc(s: SourceDoc) -> list[str]:
+        return [s.id, s.kind.value, s.member_id, s.member_name, s.text, str(s.standup_day)]
+
+    return content_sha256(
+        json.dumps(
+            {
+                "summarizer": [summarizer.name, summarizer.version],
+                "day": request.cycle_date.isoformat(),
+                "team": request.team_name,
+                "sources": [doc(s) for s in request.sources],
+                "earlier": [doc(s) for s in request.prior_open_blockers],
+            },
+            sort_keys=True,
+        )
+    )

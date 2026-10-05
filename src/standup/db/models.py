@@ -106,6 +106,9 @@ class StandupCycle(Base):
     opens_at_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     cutoff_at_utc: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     state: Mapped[str] = mapped_column(String(16), default=CycleState.OPEN)
+    # Bumped first by every build: the row lock that makes builds of one day
+    # run one at a time, and the source of Digest.build_seq.
+    build_seq: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     # When the team was told this cycle's digest is ready. Exactly one notice
     # per cycle, whoever built the digest and whenever.
     notified_at: Mapped[datetime | None] = mapped_column(
@@ -203,6 +206,11 @@ class Digest(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     cycle_id: Mapped[str] = mapped_column(ForeignKey("standup_cycle.id"))
     generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    # The cycle's build counter when this digest was built: the latest digest
+    # is the highest, whatever clock generated_at came from.
+    build_seq: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    # What it was built from; a build with the same inputs reuses this digest.
+    inputs_sha256: Mapped[str] = mapped_column(String(64), default="", server_default="")
     summarizer_name: Mapped[str] = mapped_column(String(64))
     summarizer_version: Mapped[str] = mapped_column(String(32))
     validator_report_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
