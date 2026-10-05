@@ -36,8 +36,6 @@ _BLOCKER_MARKERS = (
     "waiting on",
     "waiting for",
     "stuck",
-    "can't",
-    "cannot",
     "need help",
     "needs help",
     "depends on",
@@ -47,18 +45,19 @@ _BLOCKER_MARKERS = (
     "held up",
 )
 
+# "can't" / "cannot" mark a blocker only when the writer is the one who
+# cannot: "I can't deploy", "We cannot ship", or a clause that opens with it
+# ("Cannot access the build server"). "Fixed the bug where users cannot log
+# in" describes the work, not a blocker.
+_FIRST_PERSON_CANNOT = re.compile(r"(?:^\s*|\b(?:i|we)\s+)(?:can't|can’t|cannot|can not)\b")
+
 # Phrases that cancel a marker. Without these, "no blockers" reads as a blocker
 # — the single most common false positive in this class of tool.
-_NEGATIONS = (
-    "no blockers",
-    "no blocker",
-    "not blocked",
-    "nothing blocking",
-    "no issues",
-    "unblocked",
-    "not stuck",
-    "no longer blocked",
-    "nothing is blocking",
+_NEGATION = re.compile(
+    r"\bno (?:blockers?|issues)\b"
+    r"|\b(?:not|no longer) (?:blocked|stuck|waiting)\b"
+    r"|\bnothing (?:is )?blocking\b"
+    r"|\bun(?:blocked|stuck)\b"
 )
 
 
@@ -73,7 +72,11 @@ _EMPTY_ANSWERS = frozenset(
 
 # Clause boundaries. A negation cancels only the markers in its own clause:
 # "no blockers on the API, but stuck on the migration" still has a blocker.
-_CLAUSE_SPLIT = re.compile(r"[,;]|\b(?:but|however|although|though)\b")
+# "No blockers except waiting on review" names one: "except" and its kin open
+# a new clause, so the negation before them does not cancel what follows.
+_CLAUSE_SPLIT = re.compile(
+    r"[,;]|\b(?:but|however|although|though|except|besides|apart from|other than)\b"
+)
 
 
 # A line that is only a section heading ("Blockers:", "Today") carries no
@@ -86,9 +89,13 @@ def is_bare_heading(text: str) -> bool:
     return bool(_BARE_HEADING.match(text))
 
 
+# A heading typed in front of the answer: "Blockers: none".
+_LEADING_HEADING = re.compile(r"^\s*(?:progress|blockers?|today|plan)\s*:\s*", re.IGNORECASE)
+
+
 def is_empty_answer(text: str) -> bool:
-    """True for answers like "None", "N/A" or "-" that mean "no blocker"."""
-    cleaned = re.sub(r"[^\w/\-\s]", "", text.lower())
+    """True for answers like "None", "N/A", "-" or "Blockers: none" that mean "no blocker"."""
+    cleaned = re.sub(r"[^\w/\-\s]", "", _LEADING_HEADING.sub("", text).lower())
     return " ".join(cleaned.split()) in _EMPTY_ANSWERS
 
 
@@ -101,13 +108,16 @@ def looks_like_blocker(text: str) -> tuple[bool, str]:
     """
     negation_rule = ""
     for clause in _CLAUSE_SPLIT.split(text.lower()):
-        negation = next((n for n in _NEGATIONS if n in clause), None)
+        negation = _NEGATION.search(clause)
         if negation is not None:
-            negation_rule = negation_rule or f"negation:{negation}"
+            negation_rule = negation_rule or f"negation:{negation.group(0)}"
             continue
         for marker in _BLOCKER_MARKERS:
             if re.search(rf"\b{re.escape(marker)}", clause):
                 return True, f"marker:{marker}"
+        cannot = _FIRST_PERSON_CANNOT.search(clause)
+        if cannot is not None:
+            return True, f"marker:{cannot.group(0).strip()}"
     return False, negation_rule
 
 
@@ -150,6 +160,10 @@ def classify(kind: ItemKind, text: str) -> tuple[ClaimKind | None, str]:
     is_blocker, rule = looks_like_blocker(text)
     if not is_blocker and rule.startswith("negation:"):
         return None, rule
+    # "Nope, all clear": an empty answer, then only reassurance. Anything with
+    # a marker ("No, but stuck on X") was caught above as a blocker.
+    if not is_blocker and is_empty_answer(_CLAUSE_SPLIT.split(text)[0]):
+        return None, "empty-answer"
     return ClaimKind.BLOCKER, f"field:{kind.value}"
 
 

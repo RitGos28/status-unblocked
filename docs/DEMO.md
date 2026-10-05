@@ -73,7 +73,9 @@ Run it again, or twice at once: nothing is built twice and no one is told twice,
 - **Still blocked comes first.** Ada reported "Waiting on staging credentials from infra." yesterday and again today, so it is under **Still blocked**, with "Also reported on <yesterday>, and still open." It is today's words, verbatim, and it has two **source** links: today's and yesterday's.
 - **Then Blockers**: new ones today.
 - **Chen's misfiled blocker:** he typed "Stuck on the deploy pipeline." under Progress; it is under Blockers with 'Moved to Blockers: the author filed it elsewhere, but it says "stuck".' The text itself is unchanged.
-- **Negation:** Bruno wrote "No blockers today." It is not reported as a blocker. Answers like "None", "N/A" or "-" are not blockers either.
+- **Negation:** Bruno wrote "No blockers today." It is not reported as a blocker. Answers like "None", "N/A", "-", "Blockers: none" or "Nope, all clear" are not blockers either; "No longer stuck on X" is progress.
+- **Not every problem is a blocker:** "Fixed the bug where users cannot log in." stays under Progress: "can't" or "cannot" counts only when the writer is the one who cannot ("I can't deploy until…", "Cannot access the build server").
+- **Exceptions:** "No blockers except waiting on App Store review." *is* a blocker: "except", "apart from", "other than" and "besides" start a new clause.
 - **Clauses:** a sentence such as "Merged the API changes, but waiting on review for the DB migration." is promoted: each clause is judged on its own, so "no blockers on X, but stuck on Y" still reports Y.
 - Every line has a **source** link. The **Markdown** link at the bottom gives the same digest as text, including the "Moved to Blockers" notes.
 - **Spreadsheet (CSV)** at the bottom downloads the digest: one row per line with its section, who, the verbatim text, the evidence link, the earlier report (for carried-over blockers) and the GitHub issue. Text that would run as a formula in Excel or Sheets (starting with `=`, `+`, `-` or `@`) is prefixed with `'`.
