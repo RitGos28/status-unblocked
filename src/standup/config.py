@@ -12,8 +12,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # The Microsoft 365 Agents SDK reads its credentials from these hierarchical
 # variables itself, so they carry no STANDUP_ prefix.
+TEAMS_APP_ID_ENV = "CONNECTIONS__SERVICE_CONNECTION__SETTINGS__CLIENTID"
 TEAMS_REQUIRED_ENV = (
-    "CONNECTIONS__SERVICE_CONNECTION__SETTINGS__CLIENTID",
+    TEAMS_APP_ID_ENV,
     "CONNECTIONS__SERVICE_CONNECTION__SETTINGS__CLIENTSECRET",
     "CONNECTIONS__SERVICE_CONNECTION__SETTINGS__TENANTID",
 )
@@ -65,8 +66,8 @@ class Settings(DatabaseSettings):
     # Send the session cookie over HTTPS only. Turn on behind TLS.
     cookie_secure: bool = False
 
-    # Which Summarizer implementation to use. "rules" is the extractive engine;
-    # "llm" lands in week 4 behind the same protocol and the same validator.
+    # Which Summarizer implementation to use. "rules", the extractive engine,
+    # is the only one; another would sit behind the same protocol and validator.
     summarizer: str = "rules"
 
     # When true, a claim that fails faithfulness validation raises instead of

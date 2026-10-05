@@ -59,8 +59,8 @@ def get_db() -> Iterator[Session]:
 def get_summarizer(settings: Annotated[Settings, Depends(get_settings)]) -> Summarizer:
     """Select the summarizer implementation.
 
-    The LLM implementation lands in week 4 behind this same call, and clears the
-    same validator.
+    "rules" is the only implementation. Any other one plugs in here and must
+    clear the same validator, which runs after it in ``summarize/service.py``.
     """
     if settings.summarizer == "rules":
         return RulesSummarizer()

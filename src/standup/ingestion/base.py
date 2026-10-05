@@ -1,6 +1,6 @@
 """The ingestion seam.
 
-Every source — the web form now, Microsoft Teams in week 2 — normalises to a
+Every source (the web form, Microsoft Teams, a CSV import) normalises to a
 single ``RawSubmission``. Everything downstream (normalizer, summarizer,
 validator, tracker, digest) sees only canonical records and has no idea which
 platform a update arrived from.

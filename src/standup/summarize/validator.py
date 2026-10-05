@@ -6,7 +6,7 @@ that is the point — the bar is set against output that is correct by
 construction, so a future LLM has to meet the same standard rather than a
 softer one written for it.
 
-Rules implemented here (week 1-2):
+Rules implemented here:
 
 * **V1** every claim carries at least one citation
 * **V2** every cited ``source_id`` exists in the request (kills fabricated ids)
@@ -16,20 +16,22 @@ Rules implemented here (week 1-2):
 * **V6** the claim's member matches every cited source (no cross-attribution)
 * **V8** length-inflation guard for abstractive claims
 
-V7 (no source outside consented/visible scope) lands in week 4 with the
-consent and visibility model.
+V7 (no source outside consented/visible scope) is not implemented: it needs a
+consent and visibility model, which does not exist yet.
 """
 
 import re
 import unicodedata
 from dataclasses import dataclass, field
 
-from standup.summarize.base import Claim, SummaryRequest, SummaryResult
+from standup.summarize.base import Claim, SourceDoc, SummaryRequest, SummaryResult
 
 # Derived values a claim may state without them appearing verbatim in a source.
 DERIVED_METRICS = frozenset({"days_open", "source_count"})
 
 _NUMBER = re.compile(r"\b\d+(?:[.,]\d+)?\b")
+
+
 def _entity_token(entity: str) -> str:
     """An entity as written, minus sentence punctuation the pattern swallowed:
     "@anabel." at the end of a sentence is the handle "@anabel"."""
@@ -84,11 +86,7 @@ class ValidationReport:
 class FaithfulnessValidator:
     """Checks a ``SummaryResult`` against the sources it was built from."""
 
-    def validate_claim(
-        self, claim: Claim, sources_by_id: dict[str, object]
-    ) -> list[Violation]:
-        from standup.summarize.base import SourceDoc  # local: keeps the seam narrow
-
+    def validate_claim(self, claim: Claim, sources_by_id: dict[str, SourceDoc]) -> list[Violation]:
         violations: list[Violation] = []
         text = claim.text
 
@@ -180,7 +178,7 @@ class FaithfulnessValidator:
         self, result: SummaryResult, request: SummaryRequest
     ) -> tuple[tuple[Claim, ...], ValidationReport]:
         """Return the claims that survive, plus a report of what did not."""
-        sources_by_id: dict[str, object] = {s.id: s for s in request.sources}
+        sources_by_id: dict[str, SourceDoc] = {s.id: s for s in request.sources}
         for prior in request.prior_open_blockers:
             sources_by_id.setdefault(prior.id, prior)
 

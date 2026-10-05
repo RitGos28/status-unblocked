@@ -104,8 +104,8 @@ def compose_raw_text(submission: RawSubmission) -> str:
 def extract_entities(text: str) -> list[dict[str, str]]:
     """Find issue refs, URLs, tickets and mentions.
 
-    Used for deterministic grouping and, from week 2, for validator rule V5:
-    an entity in a claim must appear in a cited source.
+    Used for deterministic grouping and by validator rule V5: an entity in a
+    claim must appear in a cited source.
     """
     found: list[dict[str, str]] = []
     seen: set[str] = set()
@@ -122,7 +122,7 @@ def normalized_key(text: str) -> str:
     """A stable key for matching the same blocker across days.
 
     Lowercased, punctuation-stripped, stopwords removed, tokens sorted. Crude on
-    purpose — it feeds carry-over detection in week 3, where a false negative
+    purpose — it feeds carry-over detection and the tracker fingerprint, where a false negative
     (a missed carry-over) is far cheaper than a false positive (two people's
     different blockers merged into one).
     """

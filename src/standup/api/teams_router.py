@@ -33,7 +33,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from standup.auth.tokens import read_teams_link_code
-from standup.config import TEAMS_REQUIRED_ENV, teams_anonymous_allowed
+from standup.config import TEAMS_APP_ID_ENV, teams_anonymous_allowed
 from standup.db.models import IngestRejection, Member
 from standup.deps import AppClock, AppSettings, DbSession
 from standup.domain.errors import EmptySubmissionError
@@ -253,7 +253,7 @@ def _build_adapter() -> tuple[CloudAdapter, Any]:
 
 def _notifier(adapter: CloudAdapter) -> TeamsNotifier:
     return TeamsNotifier(
-        adapter, os.environ.get(TEAMS_REQUIRED_ENV[0], ""), anonymous=teams_anonymous_allowed()
+        adapter, os.environ.get(TEAMS_APP_ID_ENV, ""), anonymous=teams_anonymous_allowed()
     )
 
 
