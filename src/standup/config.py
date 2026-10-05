@@ -6,8 +6,9 @@ the first attribute access somewhere deep in a request.
 
 import functools
 import os
+from urllib.parse import urlsplit
 
-from pydantic import Field, SecretStr, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # The Microsoft 365 Agents SDK reads its credentials from these hierarchical
@@ -87,6 +88,23 @@ class Settings(DatabaseSettings):
     github_token: SecretStr | None = None
     # The GitHub REST API. Point it at scripts/fake_github.py for a demo.
     github_api_url: str = "https://api.github.com"
+
+    @field_validator("base_url")
+    @classmethod
+    def _absolute_http_url(cls, value: str) -> str:
+        """Blank means unset. Anything else must be an absolute http(s) URL:
+        these links go into GitHub issues and Teams notices, where
+        "localhost:8000/digest/…" or "   /digest/…" lead nowhere."""
+        value = value.strip()
+        if not value:
+            return ""
+        parts = urlsplit(value)
+        if parts.scheme not in ("http", "https") or not parts.netloc:
+            raise ValueError(
+                f"STANDUP_BASE_URL must be an absolute http(s) URL such as "
+                f"http://127.0.0.1:8000, not {value!r}"
+            )
+        return value
 
     @model_validator(mode="after")
     def _integration_credentials_present(self) -> "Settings":

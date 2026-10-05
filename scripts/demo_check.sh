@@ -160,6 +160,11 @@ if STANDUP_BASE_URL= $PY -m scripts.tick --at "$AT" >/dev/null 2>"$WORK/nobase.e
 fi
 grep -q "STANDUP_BASE_URL is required" "$WORK/nobase.err" && ! grep -q Traceback "$WORK/nobase.err" \
     || fail "the refusal is one clear line, not a traceback"
+if STANDUP_BASE_URL="localhost:$PORT" $PY -m scripts.tick --at "$AT" >/dev/null 2>"$WORK/badbase.err"; then
+    fail "a scheduler pass with a scheme-less STANDUP_BASE_URL refuses"
+fi
+grep -q "must be an absolute http(s) URL" "$WORK/badbase.err" && ! grep -q Traceback "$WORK/badbase.err" \
+    || fail "a bad STANDUP_BASE_URL is named in one line"
 # Wait on these two by PID: a bare `wait` would also wait for the server.
 $PY -m scripts.tick --at "$AT" 2>/dev/null | tail -1 >"$WORK/tick1.txt" &
 TICK1=$!
