@@ -125,6 +125,34 @@ def _earliest_same_blocker(
     return min(matches, key=lambda p: p.captured_at) if matches else None
 
 
+def classify(kind: ItemKind, text: str) -> tuple[ClaimKind | None, str]:
+    """Which digest section a line belongs in, and why; None if it is not reported.
+
+    The one classification policy. RulesSummarizer applies it, and the
+    validator (V10) holds every summarizer to it, so a section can never
+    depend on which implementation built the digest.
+    """
+    text = text.strip()
+    if not text or is_bare_heading(text):
+        return None, "empty"
+    if kind is not ItemKind.BLOCKER:
+        # Secondary path: a line filed under progress/plan that plainly
+        # announces a blocker is promoted, with the reason recorded.
+        is_blocker, rule = looks_like_blocker(text)
+        if is_blocker:
+            return ClaimKind.BLOCKER, f"promoted:{rule}"
+        return _KIND_TO_CLAIM[kind], f"field:{kind.value}"
+    # A blocker field saying "None", or "no blockers", is not a blocker. One
+    # that also names a real blocker in another clause ("no blockers on X, but
+    # stuck on Y") is.
+    if is_empty_answer(text):
+        return None, "empty-answer"
+    is_blocker, rule = looks_like_blocker(text)
+    if not is_blocker and rule.startswith("negation:"):
+        return None, rule
+    return ClaimKind.BLOCKER, f"field:{kind.value}"
+
+
 class RulesSummarizer:
     """Deterministic extractive summarizer. No network, no model, no cost."""
 
@@ -135,29 +163,11 @@ class RulesSummarizer:
         claims: list[Claim] = []
 
         for source in req.sources:
-            text = source.text.strip()
-            if not text or is_bare_heading(text):
+            classified, matched_rule = classify(source.kind, source.text)
+            if classified is None:
                 continue
-
-            claim_kind = _KIND_TO_CLAIM[source.kind]
-            matched_rule = f"field:{source.kind.value}"
-
-            # Secondary path: a line filed under progress/plan that plainly
-            # announces a blocker is promoted, with the reason recorded.
-            if source.kind is not ItemKind.BLOCKER:
-                is_blocker, rule = looks_like_blocker(text)
-                if is_blocker:
-                    claim_kind = ClaimKind.BLOCKER
-                    matched_rule = f"promoted:{rule}"
-            else:
-                # A blocker field saying "None", or "no blockers", is not a
-                # blocker. One that also names a real blocker in another clause
-                # ("no blockers on X, but stuck on Y") is.
-                if is_empty_answer(text):
-                    continue
-                is_blocker, rule = looks_like_blocker(text)
-                if not is_blocker and rule.startswith("negation:"):
-                    continue
+            claim_kind: ClaimKind = classified
+            text = source.text.strip()
 
             # The claim IS the span. start/end index into source.text, so
             # quote == source.text[start:end] holds trivially.

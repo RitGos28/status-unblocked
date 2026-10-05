@@ -139,6 +139,8 @@ Tests and invariants refer to these by number. Defined in the `validator.py` doc
 | V6 | claim's member differs from a cited source's member |
 | V7 | source outside consented/visible scope — **not implemented** (week 4) |
 | V8 | abstractive claim >1.3x the length of its evidence |
+| V9 | extractive claim whose text is not its first cited quote |
+| V10 | claim whose section differs from `rules.classify(source.kind, quote)` for its first citation; a carry-over citing no earlier report |
 
 `STANDUP_VALIDATOR_STRICT=true` makes a failing claim raise instead of being dropped. CI (`.github/workflows/ci.yml`) runs the suite strict. Its jobs: ruff, mypy, `lint-imports`, strict pytest plus the coverage gate; migrations and the integration/e2e tests against Postgres 16; and a Docker build.
 

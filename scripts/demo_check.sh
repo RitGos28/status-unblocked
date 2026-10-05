@@ -253,6 +253,10 @@ if STANDUP_DATABASE_URL="sqlite:///$WORK/tampered.db" $PY -m scripts.verify_inte
     fail "verify_integrity catches edited stored text"
 fi
 pass "20 simultaneous evidence views leave the audit chain intact; an edited update is caught"
+FAITH="$($PY -m scripts.faithfulness_demo)" || fail "faithfulness_demo: every real line passes and every bad claim is withheld"
+grep -q "withheld 7 of 7" <<<"$FAITH" && grep -q "V9 .*says the blocker is solved" <<<"$FAITH" \
+    || fail "faithfulness_demo names the rule for each withheld claim"
+pass "the validator passes every real line and withholds 7 of 7 unfaithful claims, naming each rule"
 
 # --- another team cannot see it ----------------------------------------------
 [ "$(status -c "$WORK/dana.jar" "$DANA")" = 303 ] || fail "Dana's login link"

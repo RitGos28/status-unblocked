@@ -88,6 +88,7 @@ The scheduler pass in step 3 also delivered the blockers to the (fake) GitHub, t
 - Click a **source** link: the stored update, with the cited words highlighted and their character offsets.
 - `python -m scripts.verify_integrity` → "audit chain intact; every stored update matches its pinned hash". This holds under load too: the demo check opens the same evidence 20 times at once first, and every view is recorded on one unbroken chain.
 - Edit any stored update in a *copy* of the database and run it against the copy: it names the tampered update and exits 1. (`scripts/demo_check.sh` does exactly this.)
+- `python -m scripts.faithfulness_demo` → the validator at work on today's Core Platform updates. The rules summarizer's lines all pass; then seven claims an unfaithful summarizer could write, built from the same real updates, are each **withheld**, with the rule that caught it: an invented source (V2), a misquote (V3), "fully unblocked" citing the blocker (V9), the blocker hidden under Progress and progress filed as a blocker (V10), an added number (V4), the wrong person credited (V6). It reads only; nothing is built or stored.
 
 ## 5b. My data
 - As Ada, open **My data** in the header: her updates, everything recorded about her, and **Who has opened your updates**. Open one of Ada's evidence pages as Bruno first, and his name appears there. This is the audit log, readable by the person it is about.

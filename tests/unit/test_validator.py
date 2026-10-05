@@ -379,3 +379,72 @@ def test_exact_numbers_and_references_still_pass(evidence, claim_text):
         result_with(_abstractive(src, claim_text)), request_with(src)
     )
     assert len(kept) == 1
+
+
+# --------------------------------------------------------------------------
+# V9: an extractive claim says exactly what it cites. V10: a claim's section
+# follows the classification policy, whichever summarizer produced it.
+
+
+def _rules(claim: Claim, *sources: SourceDoc) -> list[str]:
+    _kept, report = FaithfulnessValidator().validate(result_with(claim), request_with(*sources))
+    return [v.rule for v in report.violations]
+
+
+def test_v9_extractive_claim_with_text_other_than_its_quote_is_dropped():
+    src = source(text="Waiting on staging credentials from infra.")
+    claim = Claim(
+        kind=ClaimKind.PROGRESS,
+        member_id=src.member_id,
+        member_name=src.member_name,
+        text="Ada is fully unblocked and the release is on track.",
+        citations=(Citation(source_id=src.id, quote=src.text, start=0, end=len(src.text)),),
+        extractive=True,
+    )
+    assert "V9" in _rules(claim, src)
+
+
+def test_v9_allows_whitespace_and_nfkc_differences():
+    src = source(text="Waiting  on staging.")
+    claim = valid_claim(src)
+    claim = Claim(**{**claim.__dict__, "text": "Waiting on staging."})
+    assert _rules(claim, src) == []
+
+
+def test_v10_progress_line_reported_as_a_blocker_is_dropped():
+    src = source(text="Shipped the retry logic.", kind=ItemKind.PROGRESS)
+    assert "V10" in _rules(valid_claim(src), src)  # valid_claim is a BLOCKER claim
+
+
+def test_v10_a_blocker_hidden_under_progress_is_dropped():
+    src = source(text="Waiting on staging credentials from infra.")
+    claim = Claim(**{**valid_claim(src).__dict__, "kind": ClaimKind.PROGRESS})
+    assert "V10" in _rules(claim, src)
+
+
+def test_v10_an_empty_blocker_answer_is_not_a_blocker():
+    src = source(text="None.")
+    assert "V10" in _rules(valid_claim(src), src)
+
+
+def test_v10_a_promoted_blocker_is_allowed():
+    src = source(text="Stuck on the deploy pipeline.", kind=ItemKind.PROGRESS)
+    assert _rules(valid_claim(src), src) == []
+
+
+def test_v10_carryover_needs_an_earlier_report():
+    src = source(text="Waiting on staging credentials from infra.")
+    claim = Claim(**{**valid_claim(src).__dict__, "kind": ClaimKind.CARRYOVER})
+    assert "V10" in _rules(claim, src)
+
+
+def test_v9_v10_do_not_crash_when_the_first_citation_is_unknown():
+    src = source()
+    claim = Claim(
+        **{
+            **valid_claim(src).__dict__,
+            "citations": (Citation(source_id="nope", quote="x", start=0, end=1),)
+            + valid_claim(src).citations,
+        }
+    )
+    assert _rules(claim, src) == ["V2"]

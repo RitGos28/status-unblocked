@@ -15,6 +15,9 @@ Rules implemented here:
 * **V5** entity refs (#123, URLs, @handles) appear in a cited quote
 * **V6** the claim's member matches every cited source (no cross-attribution)
 * **V8** length-inflation guard for abstractive claims
+* **V9** an extractive claim's text is its first cited quote
+* **V10** the claim's section is what ``rules.classify`` gives its primary
+  source (a carry-over must also cite the earlier report)
 
 V7 (no source outside consented/visible scope) is not implemented: it needs a
 consent and visibility model, which does not exist yet.
@@ -24,7 +27,9 @@ import re
 import unicodedata
 from dataclasses import dataclass, field
 
+from standup.domain.enums import ClaimKind
 from standup.summarize.base import Claim, SourceDoc, SummaryRequest, SummaryResult
+from standup.summarize.rules import classify
 
 # Derived values a claim may state without them appearing verbatim in a source.
 DERIVED_METRICS = frozenset({"days_open", "source_count"})
@@ -96,6 +101,7 @@ class FaithfulnessValidator:
             return violations
 
         cited_quotes: list[str] = []
+        primary: SourceDoc | None = None  # the first citation's source, if it checks out
 
         for citation in claim.citations:
             source = sources_by_id.get(citation.source_id)
@@ -133,10 +139,40 @@ class FaithfulnessValidator:
                     )
                 )
 
+            if citation is claim.citations[0]:
+                primary = source
             cited_quotes.append(citation.quote)
 
         if not cited_quotes:
             return violations
+
+        # V9 and V10 judge the claim against its first citation. If that one
+        # already failed V2 or V3, the claim is rejected and there is nothing
+        # sound to judge against.
+        if primary is not None:
+            # V9 - an extractive claim says exactly what it cites, no more: its
+            # text is its first quote. Without this, a valid citation could
+            # carry any sentence at all.
+            if claim.extractive and _canonical(text) != _canonical(cited_quotes[0]):
+                violations.append(
+                    Violation("V9", text, f"extractive claim is not its quote {cited_quotes[0]!r}")
+                )
+
+            # V10 - the section follows the one classification policy. A wrong
+            # section is not cosmetic: blockers become tracker issues.
+            expected, _rule = classify(primary.kind, cited_quotes[0])
+            filed = ClaimKind.BLOCKER if claim.kind is ClaimKind.CARRYOVER else claim.kind
+            if filed is not expected:
+                violations.append(
+                    Violation(
+                        "V10",
+                        text,
+                        f"filed as {claim.kind.value}, but its source classifies as "
+                        f"{expected.value if expected else 'not reported'}",
+                    )
+                )
+            elif claim.kind is ClaimKind.CARRYOVER and len(cited_quotes) < 2:
+                violations.append(Violation("V10", text, "carry-over cites no earlier report"))
 
         evidence = " ".join(_canonical(q) for q in cited_quotes)
         canonical_text = _canonical(text)
