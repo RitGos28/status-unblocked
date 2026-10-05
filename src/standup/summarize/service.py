@@ -78,6 +78,7 @@ def build_request(session: Session, cycle_id: str, base_url: str) -> SummaryRequ
                 permalink=update.permalink,
                 normalized_key=item.normalized_key,
                 entity_refs=tuple(e.get("value", "") for e in (item.entity_refs or [])),
+                standup_day=cycle.local_date,
             )
         )
 
@@ -117,6 +118,7 @@ def _prior_blockers(
         update = session.get(Update, item.update_id) if item else None
         if item is None or update is None or not item.text or update.purged_at is not None:
             continue
+        earlier_cycle = session.get(StandupCycle, update.cycle_id)
         prior.append(
             SourceDoc(
                 id=item.id,
@@ -128,6 +130,7 @@ def _prior_blockers(
                 evidence_url=evidence_url(base_url, item.id),
                 permalink=update.permalink,
                 normalized_key=item.normalized_key,
+                standup_day=earlier_cycle.local_date if earlier_cycle else None,
             )
         )
     return tuple(prior)

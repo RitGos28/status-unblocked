@@ -204,7 +204,8 @@ class RulesSummarizer:
                     )
                     claim_kind = ClaimKind.CARRYOVER
                     matched_rule = (
-                        f"{matched_rule};carryover:{earlier.captured_at.date().isoformat()}"
+                        f"{matched_rule};carryover:"
+                        f"{(earlier.standup_day or earlier.captured_at.date()).isoformat()}"
                     )
 
             claims.append(

@@ -51,3 +51,25 @@ def test_the_second_day_shows_the_blocker_as_still_blocked(
     assert "Still blocked" in page
     assert "Also reported on 2026-09-14, and still open." in page
     assert "## Still blocked" in second.body_md
+
+
+def test_still_blocked_names_the_teams_own_day_not_the_utc_date(
+    client, session, clock, team_with_members
+):
+    """Found by the round-2 review (B): a team at UTC+14 saw 'Also reported on
+    <the UTC date>', one day earlier than the standup day it was filed under."""
+    from standup.db.models import Team
+
+    team, (ada, *_rest) = team_with_members
+    session.get(Team, team.id).tz_default = "Pacific/Kiritimati"  # UTC+14
+    session.commit()
+    login_as(client, ada.id)
+    # 12:00 UTC is 02:00 the next local day there.
+    clock.current = datetime(2026, 9, 14, 12, 0, tzinfo=UTC)  # local 2026-09-15
+    submit(client, ada.id, blockers=BLOCKER)
+    build(client, session, 1)
+    clock.current = datetime(2026, 9, 15, 12, 0, tzinfo=UTC)  # local 2026-09-16
+    submit(client, ada.id, blockers=BLOCKER)
+    digest = build(client, session, 2)
+    page = client.get(f"/digest/{digest.id}").text
+    assert "Also reported on 2026-09-15" in page, page[page.find("Also reported") :][:80]
