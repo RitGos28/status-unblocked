@@ -36,6 +36,9 @@ class SourceDoc:
     permalink: str | None = None
     normalized_key: str = ""
     entity_refs: tuple[str, ...] = ()
+    # The team-local standup day it was filed under. Not captured_at.date():
+    # that is the UTC date, a day off for teams far from UTC.
+    standup_day: date | None = None
 
 
 @dataclass(frozen=True)
