@@ -208,6 +208,14 @@ replay personal_card_submit || fail "the bot accepts a card submission"
 grep -q "Recorded for Core Platform" <<<"$(bot_said)" || fail "a card submission is recorded"
 pass "Teams: Ada files her update through the card, through the same ingest path as the web form"
 
+CSV="$(curl -s -b "$WORK/ada.jar" "$BASE/digest/$DIGEST_ID.csv")"
+[ "$(head -1 <<<"$CSV" | tr -d '\r')" = "section,member,text,evidence_url,earlier_report_url,issue_url" ] \
+    || fail "the digest downloads as a CSV with a header row"
+ADA_ROW="$(grep '^Still blocked,Ada Okafor' <<<"$CSV")"
+grep -q "$BASE/evidence/.*,$BASE/evidence/.*,$GH/demo/core/issues/" <<<"$ADA_ROW" \
+    || fail "Ada's carried-over row has today's source, the earlier report and its issue"
+pass "the digest downloads as a spreadsheet: one row per line, with evidence and issue links"
+
 # --- evidence and integrity --------------------------------------------------
 EVIDENCE="$(grep -o 'href="/evidence/[0-9a-f-]*"' <<<"$PAGE" | head -1 | cut -d'"' -f2)"
 EV="$(curl -s -b "$WORK/ada.jar" "$BASE$EVIDENCE")"

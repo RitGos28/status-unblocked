@@ -1,9 +1,11 @@
 """Digest building and reading."""
 
+import csv
+import io
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, Request
+from fastapi import APIRouter, BackgroundTasks, Request, Response
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from sqlalchemy import select
 
@@ -21,7 +23,9 @@ from standup.deps import (
     templates,
     tracker_from_settings,
 )
+from standup.domain.enums import ClaimKind
 from standup.domain.errors import NotFoundError
+from standup.summarize.render import SECTION_TITLES
 from standup.summarize.service import build_digest
 from standup.tracker.outbox import drain
 
@@ -120,6 +124,57 @@ def view_digest_markdown(digest_id: str, session: DbSession, member: CurrentMemb
     order, and ``{digest_id}`` would otherwise swallow the ``.md`` suffix."""
     digest, _cycle = _visible_digest(session, member, digest_id)
     return digest.body_md
+
+
+# Spreadsheet apps run a cell as a formula when it starts with one of these.
+_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _cell(value: str) -> str:
+    """Neutralise user text that a spreadsheet would execute as a formula."""
+    return "'" + value if value.startswith(_FORMULA_PREFIXES) else value
+
+
+@router.api_route("/digest/{digest_id}.csv", methods=["GET", "HEAD"])
+def view_digest_csv(digest_id: str, session: DbSession, member: CurrentMember) -> Response:
+    """The digest as a spreadsheet: one row per line, with its links.
+
+    Registered before the HTML route, like the Markdown one. Same team
+    scoping as the page.
+    """
+    digest, cycle = _visible_digest(session, member, digest_id)
+    team = session.get(Team, cycle.team_id)
+    fingerprints = [c.tracker_fingerprint for c in digest.claims if c.tracker_fingerprint]
+    issues = {
+        link.fingerprint: link.issue_url
+        for link in session.execute(
+            select(TrackerLink).where(TrackerLink.fingerprint.in_(fingerprints))
+        ).scalars()
+    }
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(
+        ["section", "member", "text", "evidence_url", "earlier_report_url", "issue_url"]
+    )
+    for claim in sorted(digest.claims, key=lambda c: c.order):
+        citations = claim.citations_json or []
+        writer.writerow(
+            [
+                SECTION_TITLES[ClaimKind(claim.kind)],
+                _cell(claim.member_name),
+                _cell(claim.text),
+                citations[0].get("evidence_url", "") if citations else "",
+                citations[1].get("evidence_url", "") if len(citations) > 1 else "",
+                issues.get(claim.tracker_fingerprint, ""),
+            ]
+        )
+    filename = f"{team.slug if team else 'team'}-{cycle.local_date}.csv"
+    return Response(
+        content=buffer.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 def _visible_digest(

@@ -149,6 +149,8 @@ Negations are checked first and win: `no blockers`, `not blocked`, `no longer bl
 
 Before creating an issue, the drain looks for an existing one carrying the marker, so a crash between "issue created" and "link saved" cannot open a duplicate. Recurrence adds **one** comment per cycle. The bot never closes issues; people do. *(Planned, not built: a periodic reconcile job that rebuilds every link from labelled issues.)*
 
+**Spreadsheet export.** `GET /digest/{id}.csv` (linked from every digest) gives one row per line: section, member, verbatim text, evidence link, earlier-report link and issue link, with the same team scoping as the page. Cells a spreadsheet would run as formulas (`=`, `+`, `-`, `@`) are prefixed with `'`.
+
 **The output is structured.** Each issue carries labels `standup-blocker` and `team:<slug>`, and a fenced `json` block: `{"standup_blocker": {fingerprint, team, reported_by, quote, first_reported, days_reported, evidence_url, digest_url}}`. Each later day's comment carries `{"standup_blocker_update": {fingerprint, date, days_reported, …}}`, so anything reading the tracker can follow a blocker without parsing prose.
 
 **Delivery never blocks a digest (invariant 8).** Building a digest only queues `tracker_outbox` rows. A drain then calls GitHub, running in the background after each build, or on demand with `python -m scripts.drain_outbox`. Only one drain runs at a time (a database lease), so concurrent drains cannot create the same issue twice. Rate limits (403 with `x-ratelimit-remaining: 0`, or 429) and 5xx errors back off and retry, honouring `retry-after`, for up to 8 attempts. A bad token or a missing repo fails the row at once with a stated reason. Every write is audited (`tracker.write`).
@@ -257,7 +259,7 @@ Layout today: `tests/{unit,integration,e2e}/`. Stack: pytest · FastAPI `TestCli
 Run them:
 
 ```bash
-pytest                      # everything (269 tests, a few seconds)
+pytest                      # everything (274 tests, a few seconds)
 pytest tests/unit           # fast unit pass
 pytest tests/e2e -v         # end-to-end smoke
 pytest --cov=standup --cov-report=term-missing
@@ -269,7 +271,7 @@ python -m scripts.verify_integrity   # audit chain + stored-text hashes
 
 CI (`.github/workflows/ci.yml`) runs all of the above with `STANDUP_VALIDATOR_STRICT=true`, gates `summarize/` and `privacy/` at 90% coverage, runs migrations plus the integration and e2e tests against Postgres 16, and builds the Docker image.
 
-Current: **269 passing, 97% coverage overall.** The gate that matters is `summarize/` and `privacy/` at >=90% — those are the modules where a silent regression is a correctness or compliance failure rather than a bug. `normalizer.py`, `summarize/base.py`, `logging_conf.py` and `main.py` sit at 100%; `validator.py` at 99%.
+Current: **274 passing, 97% coverage overall.** The gate that matters is `summarize/` and `privacy/` at >=90% — those are the modules where a silent regression is a correctness or compliance failure rather than a bug. `normalizer.py`, `summarize/base.py`, `logging_conf.py` and `main.py` sit at 100%; `validator.py` at 99%.
 
 > `lint-imports` must be run as the console script. `python -m importlinter.cli` exits 0 *without reading* `pyproject.toml`, so it reports success while enforcing nothing — confirmed by adding a deliberate boundary violation and watching it pass.
 
