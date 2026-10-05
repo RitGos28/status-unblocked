@@ -12,12 +12,12 @@ radius of a breaking SDK change to two files.
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from microsoft_agents.activity import Activity
 
-from standup.domain.enums import ItemKind, SourceKind
-from standup.ingestion.base import RawSubmission
+from standup.domain.enums import SourceKind
+from standup.ingestion.base import FORM_FIELDS, RawSubmission, text_fields_from
 
 
 def teams_user_key(activity: Activity) -> str:
@@ -47,11 +47,7 @@ class TeamsAdapter:
         return RawSubmission(
             source_kind=self.source_kind,
             external_user_key=external_user_key,
-            text_fields={
-                ItemKind.PROGRESS: str(value.get("progress", "") or ""),
-                ItemKind.BLOCKER: str(value.get("blockers", "") or ""),
-                ItemKind.PLAN: str(value.get("plan", "") or ""),
-            },
+            text_fields=text_fields_from(value),
             captured_at=captured_at,
             # A 1:1 Teams chat's conversation id is in ``a:`` form -- no
             # permalink is constructible from it. Every identifier Teams gives
@@ -75,7 +71,10 @@ class TeamsAdapter:
 # Anything else is refused before it reaches ingest() and counted, with no
 # content recorded (see db.models.IngestRejection).
 
-STANDUP_FIELDS = frozenset({"progress", "blockers", "plan"})
+STANDUP_FIELDS = frozenset(FORM_FIELDS)
+
+
+ScopeKind = Literal["card_submit", "command", "mention", "ignored", "rejected"]
 
 
 @dataclass(frozen=True)
@@ -92,7 +91,7 @@ class ScopeDecision:
       - "rejected": a message outside scope. Count it, read nothing.
     """
 
-    kind: str
+    kind: ScopeKind
     conversation_type: str
     reason: str = ""
     text: str = ""
@@ -126,6 +125,9 @@ def classify_scope(activity: Activity) -> ScopeDecision:
     return ScopeDecision("rejected", conversation_type, reason="unaddressed_group_message")
 
 
+_CARD_LABELS = {"progress": "Progress", "blockers": "Blockers", "plan": "Today"}
+
+
 def standup_card() -> dict[str, Any]:
     """The Adaptive Card that collects one update.
 
@@ -144,9 +146,10 @@ def standup_card() -> dict[str, Any]:
                 "isSubtle": True,
                 "wrap": True,
             },
-            {"type": "Input.Text", "id": "progress", "label": "Progress", "isMultiline": True},
-            {"type": "Input.Text", "id": "blockers", "label": "Blockers", "isMultiline": True},
-            {"type": "Input.Text", "id": "plan", "label": "Today", "isMultiline": True},
+            *(
+                {"type": "Input.Text", "id": name, "label": _CARD_LABELS[name], "isMultiline": True}
+                for name in FORM_FIELDS
+            ),
         ],
         "actions": [{"type": "Action.Submit", "title": "Submit update"}],
     }

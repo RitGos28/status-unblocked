@@ -10,6 +10,7 @@ Each blocker becomes one issue. The same blocker reported on a later day adds
 one comment to that issue. The bot never closes issues; people do.
 """
 
+import json
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -27,7 +28,8 @@ from standup.db.models import (
     TrackerOutbox,
     UpdateItem,
 )
-from standup.domain.enums import AuditAction, ClaimKind
+from standup.domain.enums import BLOCKER_KINDS, AuditAction
+from standup.domain.urls import digest_url
 from standup.logging_conf import get_logger
 from standup.privacy.audit import record_audit
 from standup.tracker.base import TrackerAdapter, TrackerError
@@ -36,7 +38,6 @@ from standup.tracker.idempotency import LABEL, fingerprint, marker
 log = get_logger(__name__)
 
 MAX_ATTEMPTS = 8
-_BLOCKER_KINDS = {ClaimKind.BLOCKER.value, ClaimKind.CARRYOVER.value}
 
 
 @dataclass
@@ -58,12 +59,11 @@ def enqueue_blocker_issues(
     show the issue link once it exists. Rebuilding a digest for the same cycle
     queues nothing new: ``(fingerprint, cycle_id)`` is unique.
     """
-    base = base_url.rstrip("/")
     queued = 0
     seen: set[str] = set()
 
     for claim in digest.claims:
-        if claim.kind not in _BLOCKER_KINDS or not claim.citations_json:
+        if claim.kind not in BLOCKER_KINDS or not claim.citations_json:
             continue
         citation = claim.citations_json[0]
         item = session.get(UpdateItem, citation["source_id"])
@@ -96,7 +96,7 @@ def enqueue_blocker_issues(
                     "author": claim.member_name,
                     "date": cycle.local_date.isoformat(),
                     "evidence_url": citation.get("evidence_url", ""),
-                    "digest_url": f"{base}/digest/{digest.id}",
+                    "digest_url": digest_url(base_url, digest.id),
                 },
             )
         )
@@ -104,6 +104,31 @@ def enqueue_blocker_issues(
 
     session.flush()
     return queued
+
+
+# How far back requeue_skipped reaches: the same week carry-over looks back,
+# so connecting a repo files this week's blockers, not every blocker ever.
+REQUEUE_WINDOW = timedelta(days=7)
+
+
+def requeue_skipped(session: Session, team_id: str, now: datetime) -> int:
+    """Queue again the team's recent rows skipped for lack of a tracker or repo.
+
+    Call it after configuring one, so blockers reported before that are filed
+    too. Returns how many rows were requeued; the next drain delivers them.
+    """
+    rows = session.execute(
+        select(TrackerOutbox)
+        .where(TrackerOutbox.team_id == team_id)
+        .where(TrackerOutbox.status == "skipped")
+        .where(TrackerOutbox.created_at >= now - REQUEUE_WINDOW)
+    ).scalars().all()
+    for row in rows:
+        row.status = "pending"
+        row.next_attempt_at = now
+        row.last_error = ""
+    session.flush()
+    return len(rows)
 
 
 DRAIN_LEASE = "outbox-drain"
@@ -202,8 +227,8 @@ def _deliver(
             ref = tracker.create_issue(
                 repo,
                 title=_title(payload["quote"]),
-                body=_issue_body(payload, team.name, row.fingerprint),
-                labels=[LABEL],
+                body=_issue_body(payload, team, row.fingerprint),
+                labels=[LABEL, f"team:{team.slug}"],
             )
             action = "created"
         link = TrackerLink(
@@ -219,8 +244,10 @@ def _deliver(
         )
         session.add(link)
     elif link.last_cycle_id != row.cycle_id:
-        tracker.add_comment(repo, link.issue_number, _comment_body(payload))
+        days = link.days_reported + 1
+        tracker.add_comment(repo, link.issue_number, _comment_body(payload, row.fingerprint, days))
         link.last_cycle_id = row.cycle_id
+        link.days_reported = days
         action = "commented"
     else:
         return "unchanged"
@@ -258,9 +285,27 @@ def _quote_block(text: str) -> str:
     return "\n".join(f"> {line}" for line in text.splitlines() or [""])
 
 
-def _issue_body(payload: dict[str, Any], team_name: str, fp: str) -> str:
+def _json_block(record: dict[str, Any]) -> str:
+    """A fenced JSON block: the structured part of an issue or comment, for
+    anything that reads the tracker (dashboards, scripts, other bots)."""
+    return "```json\n" + json.dumps(record, indent=2, sort_keys=True) + "\n```"
+
+
+def _issue_body(payload: dict[str, Any], team: Team, fp: str) -> str:
+    record = {
+        "standup_blocker": {
+            "fingerprint": fp,
+            "team": team.slug,
+            "reported_by": payload["author"],
+            "quote": payload["quote"],
+            "first_reported": payload["date"],
+            "days_reported": 1,
+            "evidence_url": payload["evidence_url"],
+            "digest_url": payload["digest_url"],
+        }
+    }
     return (
-        f"**{payload['author']}** reported this blocker in the {team_name} standup "
+        f"**{payload['author']}** reported this blocker in the {team.name} standup "
         f"on {payload['date']}:\n\n"
         f"{_quote_block(payload['quote'])}\n\n"
         f"- Source, verbatim with the cited span highlighted (team sign-in required): "
@@ -268,13 +313,24 @@ def _issue_body(payload: dict[str, Any], team_name: str, fp: str) -> str:
         f"- Digest: {payload['digest_url']}\n\n"
         "Filed by Status Unblocked. Each later day the same blocker is reported adds a "
         "comment here. The bot never closes issues.\n\n"
+        f"{_json_block(record)}\n\n"
         f"{marker(fp)}"
     )
 
 
-def _comment_body(payload: dict[str, Any]) -> str:
+def _comment_body(payload: dict[str, Any], fp: str, days_reported: int) -> str:
+    record = {
+        "standup_blocker_update": {
+            "fingerprint": fp,
+            "date": payload["date"],
+            "days_reported": days_reported,
+            "evidence_url": payload["evidence_url"],
+            "digest_url": payload["digest_url"],
+        }
+    }
     return (
-        f"Still blocked on {payload['date']}:\n\n"
+        f"Still blocked on {payload['date']} (reported on {days_reported} days):\n\n"
         f"{_quote_block(payload['quote'])}\n\n"
-        f"Source: {payload['evidence_url']} · Digest: {payload['digest_url']}"
+        f"Source: {payload['evidence_url']} · Digest: {payload['digest_url']}\n\n"
+        f"{_json_block(record)}"
     )

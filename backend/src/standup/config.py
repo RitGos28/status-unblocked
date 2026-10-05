@@ -6,14 +6,16 @@ the first attribute access somewhere deep in a request.
 
 import functools
 import os
+from urllib.parse import urlsplit
 
-from pydantic import Field, SecretStr, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # The Microsoft 365 Agents SDK reads its credentials from these hierarchical
 # variables itself, so they carry no STANDUP_ prefix.
+TEAMS_APP_ID_ENV = "CONNECTIONS__SERVICE_CONNECTION__SETTINGS__CLIENTID"
 TEAMS_REQUIRED_ENV = (
-    "CONNECTIONS__SERVICE_CONNECTION__SETTINGS__CLIENTID",
+    TEAMS_APP_ID_ENV,
     "CONNECTIONS__SERVICE_CONNECTION__SETTINGS__CLIENTSECRET",
     "CONNECTIONS__SERVICE_CONNECTION__SETTINGS__TENANTID",
 )
@@ -65,15 +67,14 @@ class Settings(DatabaseSettings):
     # Send the session cookie over HTTPS only. Turn on behind TLS.
     cookie_secure: bool = False
 
-    # Which Summarizer implementation to use. "rules" is the extractive engine;
-    # "llm" lands in week 4 behind the same protocol and the same validator.
+    # Which Summarizer implementation to use. "rules", the extractive engine,
+    # is the only one; another would sit behind the same protocol and validator.
     summarizer: str = "rules"
 
     # When true, a claim that fails faithfulness validation raises instead of
     # being silently dropped. CI runs strict; production drops and reports.
     validator_strict: bool = False
 
-    retention_days: int = Field(default=30, ge=1)
 
     # Optional integrations. Each one's credentials become required only when
     # it is switched on, and the error names every missing key at once.
@@ -87,6 +88,23 @@ class Settings(DatabaseSettings):
     github_token: SecretStr | None = None
     # The GitHub REST API. Point it at scripts/fake_github.py for a demo.
     github_api_url: str = "https://api.github.com"
+
+    @field_validator("base_url")
+    @classmethod
+    def _absolute_http_url(cls, value: str) -> str:
+        """Blank means unset. Anything else must be an absolute http(s) URL:
+        these links go into GitHub issues and Teams notices, where
+        "localhost:8000/digest/…" or "   /digest/…" lead nowhere."""
+        value = value.strip()
+        if not value:
+            return ""
+        parts = urlsplit(value)
+        if parts.scheme not in ("http", "https") or not parts.netloc:
+            raise ValueError(
+                f"STANDUP_BASE_URL must be an absolute http(s) URL such as "
+                f"http://127.0.0.1:8000, not {value!r}"
+            )
+        return value
 
     @model_validator(mode="after")
     def _integration_credentials_present(self) -> "Settings":

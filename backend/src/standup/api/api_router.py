@@ -370,7 +370,9 @@ def api_teams_link(
     member: CurrentMember, settings: AppSettings
 ) -> dict[str, Any]:
     """Retrieve personal linking code for Microsoft Teams."""
-    code = issue_teams_link_code(settings.secret_key.get_secret_value(), member.id)
+    code = issue_teams_link_code(
+        settings.secret_key.get_secret_value(), member.id, member.teams_aad_id
+    )
     return {
         "teams_enabled": settings.teams_enabled,
         "linked": member.teams_aad_id is not None,

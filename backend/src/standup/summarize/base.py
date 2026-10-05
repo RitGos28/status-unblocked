@@ -36,6 +36,9 @@ class SourceDoc:
     permalink: str | None = None
     normalized_key: str = ""
     entity_refs: tuple[str, ...] = ()
+    # The team-local standup day it was filed under. Not captured_at.date():
+    # that is the UTC date, a day off for teams far from UTC.
+    standup_day: date | None = None
 
 
 @dataclass(frozen=True)
@@ -43,7 +46,7 @@ class SummaryRequest:
     cycle_date: date
     team_name: str
     sources: tuple[SourceDoc, ...]
-    # Blockers still open from earlier cycles, for carry-over detection (week 3).
+    # Blockers still open from earlier cycles, for carry-over detection.
     prior_open_blockers: tuple[SourceDoc, ...] = ()
     max_claims_per_section: int = 50
 
@@ -89,7 +92,7 @@ class SummaryResult:
 
 
 class Summarizer(Protocol):
-    """Implementations: RulesSummarizer now, LLMSummarizer in week 4.
+    """Implemented by RulesSummarizer, the only implementation.
 
     A summarizer must never call the validator itself — ``service.py`` runs it
     afterwards, so the check cannot be bypassed by the next implementation.

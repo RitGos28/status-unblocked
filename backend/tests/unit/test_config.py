@@ -64,3 +64,25 @@ def test_scheduler_requires_a_base_url_for_its_links():
     with pytest.raises(ValidationError, match="STANDUP_BASE_URL"):
         Settings(_env_file=None, secret_key=KEY, scheduler=True, base_url="")
     assert Settings(_env_file=None, secret_key=KEY, scheduler=True, base_url="https://x").scheduler
+
+
+# Found by the round-2 review (B): "   " and "localhost:8020" were accepted,
+# and ended up as "   /digest/…" and "localhost:8020/digest/…" in GitHub
+# issues and Teams notices.
+
+
+def test_a_blank_base_url_means_unset():
+    assert Settings(_env_file=None, secret_key=KEY, base_url="   ").base_url == ""
+
+
+@pytest.mark.parametrize("url", ["localhost:8020", "127.0.0.1:8000", "ftp://x.example", "http://"])
+def test_a_base_url_must_be_an_absolute_http_url(url):
+    with pytest.raises(ValidationError, match="STANDUP_BASE_URL"):
+        Settings(_env_file=None, secret_key=KEY, base_url=url)
+
+
+@pytest.mark.parametrize(
+    "url", ["http://127.0.0.1:8000", "https://standup.example.com/", " https://x.example/app "]
+)
+def test_absolute_http_base_urls_are_accepted_and_trimmed(url):
+    assert Settings(_env_file=None, secret_key=KEY, base_url=url).base_url == url.strip()

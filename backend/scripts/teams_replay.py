@@ -34,8 +34,17 @@ def main() -> int:
     parser.add_argument("--text", help="replace the message text")
     parser.add_argument("--app", default="http://127.0.0.1:8000", help="the bot's base URL")
     parser.add_argument("--connector", default="http://127.0.0.1:8092", help="fake connector")
+    parser.add_argument(
+        "--as", dest="account", help="send from another Teams account (its aadObjectId)"
+    )
     args = parser.parse_args()
     activity = prepare(args.fixture, args.connector, args.text)
+    if args.account:
+        activity["from"] = {
+            "id": f"29:{args.account}",
+            "aadObjectId": args.account,
+            "name": args.account,
+        }
     response = httpx.post(f"{args.app.rstrip('/')}/api/messages", json=activity, timeout=30)
     print(f"{args.fixture}: HTTP {response.status_code}")
     return 0 if response.status_code < 400 else 1

@@ -9,6 +9,7 @@ class SourceKind(StrEnum):
     WEBFORM = "webform"
     TEAMS = "teams"
     CLI = "cli"
+    CSV = "csv"
 
 
 class ItemKind(StrEnum):
@@ -30,6 +31,11 @@ class ClaimKind(StrEnum):
     BLOCKER = "blocker"
     PLAN = "plan"
     CARRYOVER = "carryover"
+
+
+# The claim kinds that are blockers: each becomes a tracker issue and counts in
+# the "N blockers" notice. A carried-over blocker is still a blocker.
+BLOCKER_KINDS: frozenset[str] = frozenset({ClaimKind.BLOCKER.value, ClaimKind.CARRYOVER.value})
 
 
 class CycleState(StrEnum):

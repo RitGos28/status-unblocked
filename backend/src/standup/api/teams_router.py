@@ -32,12 +32,13 @@ from microsoft_agents.hosting.fastapi import CloudAdapter, jwt_authorization_dec
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from standup.auth.tokens import read_teams_link_code
-from standup.config import TEAMS_REQUIRED_ENV, teams_anonymous_allowed
+from standup.auth.tokens import read_teams_link_code, teams_link_state
+from standup.config import TEAMS_APP_ID_ENV, teams_anonymous_allowed
 from standup.db.models import IngestRejection, Member
 from standup.deps import AppClock, AppSettings, DbSession
 from standup.domain.errors import EmptySubmissionError
 from standup.domain.models import Clock
+from standup.domain.urls import app_url, public_base_url
 from standup.ingestion.permalink import teams_permalink
 from standup.ingestion.service import ingest
 from standup.ingestion.teams_adapter import (
@@ -79,7 +80,7 @@ class StandupAgent:
         self._session = session
         self._clock = clock
         self._secret_key = secret_key
-        self._base_url = base_url.rstrip("/")
+        self._base_url = base_url
 
     async def on_turn(self, context: ReplyContext) -> None:
         activity = context.activity
@@ -118,7 +119,8 @@ class StandupAgent:
         if member is None:
             await context.send_activity(
                 "This Teams account isn't linked to a member yet. Sign in to the web app, "
-                f"open {self._base_url}/me/teams, and send me **link** with the code it shows."
+                f"open {app_url(self._base_url, '/me/teams')}, and send me **link** with the "
+                "code it shows."
             )
             return
 
@@ -141,15 +143,23 @@ class StandupAgent:
 
         await context.send_activity(
             f"Recorded for {member.team.name}. Submitting again today replaces it. "
-            f"Digests: {self._base_url}/digests"
+            f"Digests: {app_url(self._base_url, '/digests')}"
         )
 
     def _link(self, activity: Activity, code: str) -> str:
+        invalid = "That code is invalid or has expired. Get a fresh one from /me/teams."
         user_key = teams_user_key(activity)
-        member_id = read_teams_link_code(self._secret_key, code) if code else None
-        member = self._session.get(Member, member_id) if member_id else None
-        if not user_key or member is None or not member.active:
-            return "That code is invalid or has expired. Get a fresh one from /me/teams."
+        signed = read_teams_link_code(self._secret_key, code) if code else None
+        member = self._session.get(Member, signed[0]) if signed else None
+        if not user_key or signed is None or member is None or not member.active:
+            return invalid
+        if member.teams_aad_id == user_key:
+            return f"You're already linked as {member.display_name}."
+        # Single use: the code signed the link state at issue. Once used, or
+        # once the member links again some other way, it no longer matches.
+        if signed[1] != teams_link_state(member.teams_aad_id):
+            log.info("teams.link_code_reused", member_id=member.id)
+            return invalid
 
         holder = self._session.execute(
             select(Member).where(Member.teams_aad_id == user_key)
@@ -213,7 +223,7 @@ async def messages(
         session=session,
         clock=clock,
         secret_key=settings.secret_key.get_secret_value(),
-        base_url=settings.base_url or str(request.base_url),
+        base_url=public_base_url(settings.base_url, str(request.base_url)),
     )
     response = await request.app.state.teams_adapter.process(request, agent)
     return response or Response(status_code=202)
@@ -253,7 +263,7 @@ def _build_adapter() -> tuple[CloudAdapter, Any]:
 
 def _notifier(adapter: CloudAdapter) -> TeamsNotifier:
     return TeamsNotifier(
-        adapter, os.environ.get(TEAMS_REQUIRED_ENV[0], ""), anonymous=teams_anonymous_allowed()
+        adapter, os.environ.get(TEAMS_APP_ID_ENV, ""), anonymous=teams_anonymous_allowed()
     )
 
 

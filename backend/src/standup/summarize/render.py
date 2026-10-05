@@ -1,12 +1,14 @@
 """Digest rendering.
 
-Withheld claims are handled here from day one, even though the features that
-produce them (validation drops, author deletion in week 4) arrive later. A gap
+Withheld claims are counted here: today validation drops are the only source
+of them; member-initiated deletion, not built yet, would be another. A gap
 in a digest must never be silent: if something was removed, the digest says so
 and says how many.
 """
 
+from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Any, Generic, Protocol, TypeVar
 
 from standup.domain.enums import ClaimKind
 from standup.summarize.base import Claim
@@ -26,11 +28,21 @@ SECTION_ORDER: tuple[ClaimKind, ...] = (
 )
 
 
+class _HasKind(Protocol):
+    # Any: summarizer Claims carry a ClaimKind, stored DigestClaim rows a
+    # SQLAlchemy-mapped str. ClaimKind() accepts both.
+    @property
+    def kind(self) -> Any: ...
+
+
+_T = TypeVar("_T", bound=_HasKind)
+
+
 @dataclass(frozen=True)
-class RenderedSection:
+class RenderedSection(Generic[_T]):
     kind: ClaimKind
     title: str
-    claims: tuple[Claim, ...]
+    claims: tuple[_T, ...]
 
 
 def explain_rule(matched_rule: str) -> str:
@@ -56,11 +68,16 @@ def explain_rule(matched_rule: str) -> str:
     return " ".join(reasons)
 
 
-def group_sections(claims: tuple[Claim, ...]) -> list[RenderedSection]:
-    """Blockers first. That ordering is the whole point of the digest."""
-    sections: list[RenderedSection] = []
+def group_sections(claims: Sequence[_T]) -> list[RenderedSection[_T]]:
+    """Blockers first. That ordering is the whole point of the digest.
+
+    One grouping for both the Markdown digest (summarizer Claims) and the HTML
+    page (stored DigestClaim rows), so the two can never order or title
+    sections differently. Claims keep their given order within a section.
+    """
+    sections: list[RenderedSection[_T]] = []
     for kind in SECTION_ORDER:
-        matching = tuple(c for c in claims if c.kind is kind)
+        matching = tuple(c for c in claims if ClaimKind(c.kind) is kind)
         if matching:
             sections.append(RenderedSection(kind, SECTION_TITLES[kind], matching))
     return sections
@@ -86,8 +103,9 @@ def render_markdown(
             lines.append("")
             for claim in section.claims:
                 links = " ".join(
-                    f"[source]({evidence_urls.get(c.source_id, '#')})"
-                    for c in claim.citations
+                    f"[{'source' if i == 0 else 'earlier report'}]"
+                    f"({evidence_urls.get(c.source_id, '#')})"
+                    for i, c in enumerate(claim.citations)
                 )
                 lines.append(f"- **{claim.member_name}** - {claim.text} {links}")
                 why = explain_rule(claim.matched_rule)

@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% block title %}Status Unblocked{% endblock %}</title>
+<link rel="icon" href="data:,">
 <style>
   :root {
     --bg: #fbfbfa; --fg: #1d1c1a; --muted: #6b6862; --line: #e2e0db;
@@ -40,7 +41,7 @@
   button.ghost { background: transparent; color: var(--accent); }
   .claim { display: flex; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); }
   .claim:last-child { border-bottom: 0; }
-  .who { font-weight: 650; white-space: nowrap; }
+  .who { font-weight: 650; white-space: nowrap; flex: 0 0 8.5rem; overflow: hidden; text-overflow: ellipsis; }
   .cite { font-size: 12px; color: var(--accent); text-decoration: none; align-self: flex-start;
           border: 1px solid var(--muted); border-radius: 5px; padding: 1px 6px; white-space: nowrap; }
   .cite:hover { border-color: var(--accent); }
@@ -71,6 +72,7 @@
     <a href="/submit">Submit update</a>
     <a href="/digests">Digests</a>
     <a href="/me/teams">Teams</a>
+    <a href="/me/data">My data</a>
     <span class="muted" style="margin-left:auto">{{ viewer.display_name }} &middot; {{ viewer.team.name }}</span>
     <form method="post" action="/logout" style="margin:0"><button class="ghost" type="submit">Sign out</button></form>
     {% endif %}

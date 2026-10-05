@@ -8,8 +8,9 @@ disclosed. Nobody can file an update as someone else.
 import pytest
 from sqlalchemy import select
 
-from standup.db.models import AuditLog, Digest, Member, StandupCycle, Team, Update, UpdateItem
+from standup.db.models import AuditLog, Member, Team, Update, UpdateItem
 from standup.domain.enums import AuditAction
+from tests.helpers import build_latest as build_digest_for
 from tests.helpers import login_as, submit
 
 
@@ -22,15 +23,6 @@ def other_team(session) -> tuple[Team, Member]:
     session.add(member)
     session.commit()
     return team, member
-
-
-def build_digest_for(client, session, team_id: str) -> Digest:
-    cycle = session.execute(
-        select(StandupCycle).where(StandupCycle.team_id == team_id)
-    ).scalar_one()
-    assert client.post(f"/digests/build/{cycle.id}", follow_redirects=False).status_code == 303
-    session.expire_all()
-    return session.execute(select(Digest).where(Digest.cycle_id == cycle.id)).scalar_one()
 
 
 def test_pages_require_sign_in(client, team_with_members):

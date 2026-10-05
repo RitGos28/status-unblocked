@@ -44,3 +44,10 @@ class SpanDriftError(StandupError):
 class EmptySubmissionError(StandupError):
     status_code = 400
     title = "Submission was empty"
+
+
+class ConflictError(StandupError):
+    """The request contradicts the record, e.g. rebuilding a day retention removed."""
+
+    status_code = 409
+    title = "Not possible any more"

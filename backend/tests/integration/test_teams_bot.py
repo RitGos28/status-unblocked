@@ -43,7 +43,7 @@ def run_turn(session, clock, act) -> FakeTurnContext:
 
 
 def link(session, clock, member: Member) -> None:
-    code = issue_teams_link_code(TEST_SECRET_KEY, member.id)
+    code = issue_teams_link_code(TEST_SECRET_KEY, member.id, member.teams_aad_id)
     run_turn(session, clock, activity("personal_command", text=f"link {code}"))
 
 
@@ -93,7 +93,7 @@ def test_bad_link_code_is_refused(session, clock, team_with_members):
 def test_one_teams_account_cannot_speak_for_two_members(session, clock, team_with_members):
     _team, (ada, bruno, _chen) = team_with_members
     link(session, clock, ada)
-    code = issue_teams_link_code(TEST_SECRET_KEY, bruno.id)
+    code = issue_teams_link_code(TEST_SECRET_KEY, bruno.id, bruno.teams_aad_id)
     context = run_turn(session, clock, activity("personal_command", text=f"link {code}"))
     assert "already linked to another member" in context.sent[0]
     session.refresh(bruno)
@@ -214,3 +214,45 @@ def test_notifier_continues_the_saved_conversation():
     assert continuation.conversation.id == "a:1on1-ada"
     assert continuation.service_url == "https://smba.trafficmanager.net/teams/"
     assert sent == ["Digest ready"]
+
+
+def _from(account: str) -> dict[str, Any]:
+    return {"from": {"id": f"29:{account}", "aadObjectId": account, "name": account}}
+
+
+def test_a_link_code_works_once(session, clock, team_with_members):
+    """Found by the round-2 review (B): the same code, sent from a second
+    Teams account, re-linked Ada to it and she was not told."""
+    _team, (ada, *_rest) = team_with_members
+    code = issue_teams_link_code(TEST_SECRET_KEY, ada.id, ada.teams_aad_id)
+    first = run_turn(session, clock, activity("personal_command", text=f"link {code}"))
+    assert "Linked" in first.sent[0]
+    again = run_turn(
+        session, clock, activity("personal_command", text=f"link {code}", **_from("aad-mallory"))
+    )
+    assert "invalid or has expired" in again.sent[0]
+    session.refresh(ada)
+    assert ada.teams_aad_id == "aad-ada"
+
+
+def test_a_fresh_code_still_moves_the_link_to_a_new_account(session, clock, team_with_members):
+    _team, (ada, *_rest) = team_with_members
+    link(session, clock, ada)
+    session.refresh(ada)
+    code = issue_teams_link_code(TEST_SECRET_KEY, ada.id, ada.teams_aad_id)
+    moved = run_turn(
+        session, clock, activity("personal_command", text=f"link {code}", **_from("aad-ada-new"))
+    )
+    assert "Linked" in moved.sent[0]
+    session.refresh(ada)
+    assert ada.teams_aad_id == "aad-ada-new"
+
+
+def test_resending_a_used_code_from_the_linked_account_is_harmless(
+    session, clock, team_with_members
+):
+    _team, (ada, *_rest) = team_with_members
+    code = issue_teams_link_code(TEST_SECRET_KEY, ada.id, None)
+    run_turn(session, clock, activity("personal_command", text=f"link {code}"))
+    again = run_turn(session, clock, activity("personal_command", text=f"link {code}"))
+    assert "already linked" in again.sent[0].lower() and "Ada" in again.sent[0]

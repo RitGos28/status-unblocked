@@ -7,6 +7,7 @@ issue's marker, and GitHub failures never touch the digest.
 """
 
 import json
+import re
 from datetime import timedelta
 
 import httpx
@@ -17,8 +18,6 @@ from sqlalchemy import select
 from standup.config import get_settings
 from standup.db.models import (
     AuditLog,
-    Digest,
-    StandupCycle,
     Team,
     TrackerLink,
     TrackerOutbox,
@@ -27,6 +26,7 @@ from standup.domain.enums import AuditAction
 from standup.ingestion.normalizer import normalized_key
 from standup.tracker.github import API
 from standup.tracker.idempotency import fingerprint, marker
+from tests.helpers import build_latest as build_today
 from tests.helpers import submit
 
 REPO = "acme/platform"
@@ -58,18 +58,6 @@ def github():
         yield mock
 
 
-def build_today(client, session) -> Digest:
-    cycle = session.execute(
-        select(StandupCycle).order_by(StandupCycle.local_date.desc())
-    ).scalars().first()
-    response = client.post(f"/digests/build/{cycle.id}", follow_redirects=False)
-    assert response.status_code == 303
-    session.expire_all()
-    return session.execute(
-        select(Digest).where(Digest.cycle_id == cycle.id).order_by(Digest.generated_at.desc())
-    ).scalars().first()
-
-
 def calls(mock, method: str, url: str) -> list[httpx.Request]:
     return [
         c.request
@@ -88,7 +76,7 @@ def test_a_blocker_becomes_exactly_one_issue(client, session, github_on, github)
     (created,) = calls(github, "POST", ISSUES)
     payload = json.loads(created.read())
     assert payload["title"] == f"Blocker: {BLOCKER}"
-    assert payload["labels"] == ["standup-blocker"]
+    assert payload["labels"] == ["standup-blocker", "team:core"]
     assert f"> {BLOCKER}" in payload["body"]
     assert "/evidence/" in payload["body"] and f"/digest/{digest.id}" in payload["body"]
 
@@ -204,3 +192,92 @@ def test_a_team_without_a_repo_is_skipped(client, session, monkeypatch, team_wit
 
     row = session.execute(select(TrackerOutbox)).scalar_one()
     assert (row.status, row.last_error) == ("skipped", "team has no github_repo configured")
+
+
+# --- structured output: the issue is machine-readable, not just prose -------
+
+_JSON_BLOCK = re.compile(r"```json\n(.*?)\n```", re.DOTALL)
+
+
+def json_block(body: str) -> dict:
+    match = _JSON_BLOCK.search(body)
+    assert match, f"no ```json block in:\n{body}"
+    return json.loads(match.group(1))
+
+
+def test_the_issue_carries_a_json_record_and_a_team_label(client, session, github_on, github):
+    team, (ada, *_rest) = github_on
+    submit(client, ada.id, blockers=BLOCKER)
+    digest = build_today(client, session)
+
+    (created,) = calls(github, "POST", ISSUES)
+    payload = json.loads(created.read())
+    assert payload["labels"] == ["standup-blocker", "team:core"]
+    record = json_block(payload["body"])["standup_blocker"]
+    link = session.execute(select(TrackerLink)).scalar_one()
+    assert record == {
+        "fingerprint": link.fingerprint,
+        "team": "core",
+        "reported_by": "Ada Okafor",
+        "quote": BLOCKER,
+        "first_reported": "2026-09-15",
+        "days_reported": 1,
+        "evidence_url": record["evidence_url"],
+        "digest_url": f"http://testserver/digest/{digest.id}",
+    }
+    assert "/evidence/" in record["evidence_url"]
+
+
+def test_each_later_day_adds_a_comment_with_the_running_count(
+    client, session, clock, github_on, github
+):
+    _team, (ada, *_rest) = github_on
+    for _day in range(3):
+        submit(client, ada.id, blockers=BLOCKER)
+        build_today(client, session)
+        clock.advance(days=1)
+
+    posted = calls(github, "POST", f"{ISSUES}/42/comments")
+    comments = [json.loads(c.read())["body"] for c in posted]
+    assert [json_block(c)["standup_blocker_update"]["days_reported"] for c in comments] == [2, 3]
+    assert json_block(comments[-1])["standup_blocker_update"]["date"] == "2026-09-17"
+    assert session.execute(select(TrackerLink.days_reported)).scalar_one() == 3
+
+
+def test_blockers_skipped_before_a_repo_was_set_are_filed_once_it_is(
+    client, session, clock, monkeypatch, team_with_members, github
+):
+    """Found by the round-2 review (B): rows skipped for 'no github_repo' were
+    final, so connecting the repo afterwards never filed that day's blockers."""
+    from standup.deps import tracker_from_settings
+    from standup.tracker.outbox import drain, requeue_skipped
+
+    monkeypatch.setenv("STANDUP_TRACKER", "github")
+    monkeypatch.setenv("STANDUP_GITHUB_TOKEN", "test-token")
+    get_settings.cache_clear()
+    _team, (ada, *_rest) = team_with_members
+    submit(client, ada.id, blockers=BLOCKER)
+    build_today(client, session)  # no repo yet: the background drain skips it
+    row = session.execute(select(TrackerOutbox)).scalar_one()
+    assert row.status == "skipped"
+
+    team = session.get(Team, team_with_members[0].id)
+    team.github_repo = REPO
+    assert requeue_skipped(session, team.id, clock.now()) == 1
+    session.commit()
+    report = drain(session, tracker_from_settings(get_settings()), clock.now())
+    assert report.done == 1
+    assert len(calls(github, "POST", ISSUES)) == 1
+    session.expire_all()
+    assert session.execute(select(TrackerOutbox)).scalar_one().status == "done"
+
+
+def test_requeue_leaves_old_skipped_rows_alone(
+    client, session, clock, monkeypatch, team_with_members
+):
+    from standup.tracker.outbox import requeue_skipped
+
+    _team, (ada, *_rest) = team_with_members
+    submit(client, ada.id, blockers=BLOCKER)
+    build_today(client, session)
+    assert requeue_skipped(session, team_with_members[0].id, clock.now() + timedelta(days=30)) == 0

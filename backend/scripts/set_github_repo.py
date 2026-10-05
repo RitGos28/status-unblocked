@@ -14,6 +14,8 @@ from sqlalchemy import select
 
 from standup.db.models import Team
 from standup.db.session import session_scope
+from standup.deps import get_clock
+from standup.tracker.outbox import requeue_skipped
 
 _REPO = re.compile(r"^[\w.-]+/[\w.-]+$")
 
@@ -34,6 +36,13 @@ def main() -> int:
             return 1
         team.github_repo = args.repo or None
         print(f"{team.name}: blockers go to {args.repo or 'nowhere'}")
+        if args.repo:
+            requeued = requeue_skipped(session, team.id, get_clock().now())
+            if requeued:
+                print(
+                    f"requeued {requeued} blocker(s) skipped while no repo was set this week; "
+                    "the next scheduler pass or `python -m scripts.drain_outbox` files them"
+                )
     return 0
 
 

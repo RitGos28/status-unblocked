@@ -6,23 +6,22 @@ is detectable by recomputing it.
 
 This is roughly thirty lines of code and it is the most persuasive
 "enterprise-grade" artifact in the project: it turns "we don't spy on you" from
-a claim into something a member can check for themselves via /me/data, which
-lands in week 4.
+a claim into something a member can check for themselves on /me/data.
 """
 
 import hashlib
 import json
-from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from datetime import datetime
+from typing import Any
 
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
-from sqlalchemy.sql.expression import Executable
 
+from standup.db.models import AuditChainHead, AuditLog, Update
+from standup.db.upsert import insert_ignoring_conflict
 from standup.domain.enums import AuditAction
-
-if TYPE_CHECKING:
-    from standup.db.models import AuditLog
+from standup.domain.text import content_sha256
+from standup.domain.timezones import as_utc
 
 GENESIS_HASH = "0" * 64
 
@@ -35,9 +34,7 @@ def timestamp_key(value: datetime) -> str:
     isoformat would therefore break the chain on the first verification. We
     normalise to UTC and drop the offset so both sides agree.
     """
-    if value.tzinfo is not None:
-        value = value.astimezone(UTC)
-    return value.replace(tzinfo=None).isoformat(timespec="microseconds")
+    return as_utc(value).replace(tzinfo=None).isoformat(timespec="microseconds")
 
 
 def _canonical_row(
@@ -77,30 +74,7 @@ def _lock_chain(session: Session) -> None:
     until commit, so a concurrent appender waits, then sees this one's row.
     The insert creates the head row the first time (or after create_all).
     """
-    from standup.db.models import AuditChainHead
-
-    dialect = session.get_bind().dialect.name
-    create_head: Executable
-    if dialect == "postgresql":
-        from sqlalchemy.dialects.postgresql import insert as pg_insert
-
-        create_head = (
-            pg_insert(AuditChainHead)
-            .values(id=1, seq=0)
-            .on_conflict_do_nothing(index_elements=["id"])
-        )
-    elif dialect == "sqlite":
-        from sqlalchemy.dialects.sqlite import insert as sqlite_insert
-
-        create_head = (
-            sqlite_insert(AuditChainHead)
-            .values(id=1, seq=0)
-            .on_conflict_do_nothing(index_elements=["id"])
-        )
-    else:
-        raise RuntimeError(f"audit chain locking is not implemented for {dialect!r}")
-
-    session.execute(create_head)
+    insert_ignoring_conflict(session, AuditChainHead, {"id": 1, "seq": 0}, ["id"])
     session.execute(
         update(AuditChainHead).where(AuditChainHead.id == 1).values(seq=AuditChainHead.seq + 1)
     )
@@ -121,8 +95,6 @@ def record_audit(
     Takes the chain lock first, so the "last row" read below is the real last
     row even when other requests are appending at the same moment.
     """
-    from standup.db.models import AuditLog
-
     _lock_chain(session)
     last = session.execute(
         select(AuditLog).order_by(AuditLog.seq.desc()).limit(1)
@@ -159,8 +131,6 @@ def record_audit(
 
 def verify_chain(session: Session) -> tuple[bool, int | None]:
     """Recompute the chain. Returns (intact, first_bad_seq)."""
-    from standup.db.models import AuditLog
-
     rows = session.execute(select(AuditLog).order_by(AuditLog.seq)).scalars().all()
 
     prev_hash = GENESIS_HASH
@@ -198,8 +168,6 @@ def verify_evidence(session: Session) -> list[str]:
     This only proves anything when ``verify_chain`` also passes; otherwise the
     pinned hashes themselves could have been rewritten.
     """
-    from standup.db.models import AuditLog, Update
-
     pinned: dict[str, str] = {}
     rows = session.execute(
         select(AuditLog).where(AuditLog.action == AuditAction.UPDATE_INGESTED.value)
@@ -213,7 +181,7 @@ def verify_evidence(session: Session) -> list[str]:
     for stored in session.execute(select(Update)).scalars():
         if stored.raw_text is None:
             continue
-        actual = hashlib.sha256(stored.raw_text.encode("utf-8")).hexdigest()
+        actual = content_sha256(stored.raw_text)
         if pinned.get(stored.id) != actual:
             tampered.append(stored.id)
     return tampered

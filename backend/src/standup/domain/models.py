@@ -1,7 +1,7 @@
 """Pure domain types. No I/O, no ORM, no project imports beyond sibling enums."""
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Protocol
 
 
@@ -32,6 +32,4 @@ class FakeClock:
         return self.current
 
     def advance(self, **kwargs: float) -> None:
-        from datetime import timedelta
-
         self.current += timedelta(**kwargs)

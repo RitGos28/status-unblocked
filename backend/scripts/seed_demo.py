@@ -149,6 +149,20 @@ def _file_day(
     return added
 
 
+def serve_command() -> str:
+    """The uvicorn command that serves the app where the printed links point.
+
+    The links use STANDUP_BASE_URL, so the server must listen on its port.
+    """
+    from urllib.parse import urlsplit
+
+    from standup.config import get_settings
+    from standup.domain.urls import LOCAL_BASE_URL
+
+    port = urlsplit(get_settings().base_url or LOCAL_BASE_URL).port or 8000
+    return f"uvicorn standup.main:app --port {port}"
+
+
 def seed(*, with_updates: bool = False, days: int = 0, now: datetime | None = None) -> None:
     create_all()
     now = now or datetime.now(UTC)
@@ -170,7 +184,7 @@ def seed(*, with_updates: bool = False, days: int = 0, now: datetime | None = No
 
     print("\nPersonal login links (each signs in as that person):")
     print_links()
-    print("\nNow run: uvicorn standup.main:app --reload")
+    print(f"\nNow run: {serve_command()}")
 
 
 if __name__ == "__main__":

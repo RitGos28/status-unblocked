@@ -64,3 +64,13 @@ def test_tick_at_parses_iso_times_as_utc(value, expected):
     parsed = _parse_at(value)
     assert parsed == expected
     assert parsed.utcoffset() == expected.utcoffset()
+
+
+def test_the_seed_tells_you_to_serve_on_the_port_its_links_use(monkeypatch, app_env):
+    from scripts.seed_demo import serve_command
+
+    from standup.config import get_settings
+
+    monkeypatch.setenv("STANDUP_BASE_URL", "http://127.0.0.1:8025")
+    get_settings.cache_clear()
+    assert serve_command() == "uvicorn standup.main:app --port 8025"

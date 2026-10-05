@@ -3,8 +3,7 @@
 {% block content %}
 <h1>{{ team_name }}</h1>
 <p class="sub">
-  Standup {{ cycle.local_date }} &middot; built {{ digest.generated_at.strftime('%H:%M UTC') }}
-  by <code>{{ digest.summarizer_name }} {{ digest.summarizer_version }}</code>
+  Standup {{ cycle.local_date }} &middot; built {{ digest.generated_at.strftime('%Y-%m-%d at %H:%M UTC') }}
 </p>
 
 {% if not sections %}
@@ -24,7 +23,7 @@
       {% set issue = issues.get(claim.tracker_fingerprint) if claim.tracker_fingerprint else None %}
       {% if issue %}<a class="cite" href="{{ issue.url }}" title="Tracked as a GitHub issue">#{{ issue.number }}{% if issue.age_days %} &middot; {{ issue.age_days }}d{% endif %}</a>{% endif %}
       {% for c in claim.citations_json %}
-        <a class="cite" href="/evidence/{{ c.source_id }}" title="See the exact words this came from">source<span class="sr-only"> for this line</span></a>
+        <a class="cite" href="/evidence/{{ c.source_id }}" title="{{ 'See the exact words this came from' if loop.first else 'See the earlier day this was first reported' }}">{{ 'source' if loop.first else 'earlier report' }}<span class="sr-only"> for this line</span></a>
       {% endfor %}
     </div>
     {% endfor %}
@@ -45,6 +44,7 @@
 
 <p class="muted" style="margin-top:26px">
   Every line above is a verbatim quote, checked against its stored source before this page was written.
-  <a href="/digest/{{ digest.id }}.md">Markdown</a>
+  <a href="/digest/{{ digest.id }}.md">Markdown</a> &middot;
+  <a href="/digest/{{ digest.id }}.csv">Spreadsheet (CSV)</a>
 </p>
 {% endblock %}

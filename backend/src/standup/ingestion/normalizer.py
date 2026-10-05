@@ -10,13 +10,13 @@ only *finds boundaries*. Anything that would alter characters happens later and
 carries its own offsets.
 """
 
-import hashlib
 import re
 import unicodedata
 from dataclasses import dataclass
 
 from standup.domain.enums import ItemKind
 from standup.domain.errors import SpanDriftError
+from standup.domain.text import content_sha256
 from standup.ingestion.base import RawSubmission
 
 # Order matters: it is the order fields appear in the composed raw text.
@@ -104,8 +104,8 @@ def compose_raw_text(submission: RawSubmission) -> str:
 def extract_entities(text: str) -> list[dict[str, str]]:
     """Find issue refs, URLs, tickets and mentions.
 
-    Used for deterministic grouping and, from week 2, for validator rule V5:
-    an entity in a claim must appear in a cited source.
+    Used for deterministic grouping and by validator rule V5: an entity in a
+    claim must appear in a cited source.
     """
     found: list[dict[str, str]] = []
     seen: set[str] = set()
@@ -122,7 +122,7 @@ def normalized_key(text: str) -> str:
     """A stable key for matching the same blocker across days.
 
     Lowercased, punctuation-stripped, stopwords removed, tokens sorted. Crude on
-    purpose — it feeds carry-over detection in week 3, where a false negative
+    purpose — it feeds carry-over detection and the tracker fingerprint, where a false negative
     (a missed carry-over) is far cheaper than a false positive (two people's
     different blockers merged into one).
     """
@@ -171,7 +171,7 @@ def _segment(block_text: str, block_offset: int) -> list[tuple[str, int, int]]:
 def normalize(submission: RawSubmission) -> NormalizedUpdate:
     """Compose the raw text and split it into items with verified spans."""
     raw_text, block_starts = _compose(submission)
-    digest = hashlib.sha256(raw_text.encode("utf-8")).hexdigest()
+    digest = content_sha256(raw_text)
 
     items: list[NormalizedItem] = []
     order = 0

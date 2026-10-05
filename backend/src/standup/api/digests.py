@@ -1,9 +1,10 @@
 """Digest building and reading."""
 
+import csv
+import io
 from datetime import datetime
-from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, Request
+from fastapi import APIRouter, BackgroundTasks, Request, Response
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from sqlalchemy import select
 
@@ -21,16 +22,24 @@ from standup.deps import (
     templates,
     tracker_from_settings,
 )
+from standup.domain.enums import ClaimKind
 from standup.domain.errors import NotFoundError
-from standup.summarize.service import build_digest
+from standup.domain.timezones import as_utc
+from standup.domain.urls import public_base_url
+from standup.privacy.retention import day_was_purged
+from standup.summarize.render import SECTION_TITLES, group_sections
+from standup.summarize.service import build_digest, latest_digest
 from standup.tracker.outbox import drain
 
 router = APIRouter(tags=["digest"])
 
 
 @router.get("/digests", response_class=HTMLResponse)
-def list_digests(request: Request, session: DbSession, member: CurrentMember) -> HTMLResponse:
+def list_digests(
+    request: Request, session: DbSession, member: CurrentMember, clock: AppClock
+) -> HTMLResponse:
     """The viewer's own team only. Other teams' cycles are not listed."""
+    now = clock.now()
     cycles = (
         session.execute(
             select(StandupCycle)
@@ -43,12 +52,7 @@ def list_digests(request: Request, session: DbSession, member: CurrentMember) ->
 
     rows = []
     for cycle in cycles:
-        digest = session.execute(
-            select(Digest)
-            .where(Digest.cycle_id == cycle.id)
-            .order_by(Digest.generated_at.desc())
-            .limit(1)
-        ).scalar_one_or_none()
+        digest = latest_digest(session, cycle.id)
         update_count = len(
             session.execute(
                 select(Update)
@@ -65,6 +69,9 @@ def list_digests(request: Request, session: DbSession, member: CurrentMember) ->
                 "digest": digest,
                 "update_count": update_count,
                 "team_name": team.name if team else "Team",
+                "status": _status(cycle, now),
+                # Retention removed the day's updates: its digest is final.
+                "final": day_was_purged(session, cycle.id),
             }
         )
 
@@ -99,7 +106,7 @@ def build(
         session,
         cycle_id=cycle_id,
         summarizer=summarizer,
-        base_url=settings.base_url or str(request.base_url),
+        base_url=public_base_url(settings.base_url, str(request.base_url)),
         now=clock.now(),
         actor_id=member.id,
     )
@@ -120,6 +127,57 @@ def view_digest_markdown(digest_id: str, session: DbSession, member: CurrentMemb
     order, and ``{digest_id}`` would otherwise swallow the ``.md`` suffix."""
     digest, _cycle = _visible_digest(session, member, digest_id)
     return digest.body_md
+
+
+# Spreadsheet apps run a cell as a formula when it starts with one of these.
+_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _cell(value: str) -> str:
+    """Neutralise user text that a spreadsheet would execute as a formula."""
+    return "'" + value if value.startswith(_FORMULA_PREFIXES) else value
+
+
+@router.api_route("/digest/{digest_id}.csv", methods=["GET", "HEAD"])
+def view_digest_csv(digest_id: str, session: DbSession, member: CurrentMember) -> Response:
+    """The digest as a spreadsheet: one row per line, with its links.
+
+    Registered before the HTML route, like the Markdown one. Same team
+    scoping as the page.
+    """
+    digest, cycle = _visible_digest(session, member, digest_id)
+    team = session.get(Team, cycle.team_id)
+    fingerprints = [c.tracker_fingerprint for c in digest.claims if c.tracker_fingerprint]
+    issues = {
+        link.fingerprint: link.issue_url
+        for link in session.execute(
+            select(TrackerLink).where(TrackerLink.fingerprint.in_(fingerprints))
+        ).scalars()
+    }
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(
+        ["section", "member", "text", "evidence_url", "earlier_report_url", "issue_url"]
+    )
+    for claim in sorted(digest.claims, key=lambda c: c.order):
+        citations = claim.citations_json or []
+        writer.writerow(
+            [
+                SECTION_TITLES[ClaimKind(claim.kind)],
+                _cell(claim.member_name),
+                _cell(claim.text),
+                citations[0].get("evidence_url", "") if citations else "",
+                citations[1].get("evidence_url", "") if len(citations) > 1 else "",
+                issues.get(claim.tracker_fingerprint, ""),
+            ]
+        )
+    filename = f"{team.slug if team else 'team'}-{cycle.local_date}.csv"
+    return Response(
+        content=buffer.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 def _visible_digest(
@@ -158,15 +216,7 @@ def view_digest(
     }
 
     # Sections in reading order: what is blocking comes before what is done.
-    from standup.summarize.render import SECTION_ORDER, SECTION_TITLES
-
-    sections: list[dict[str, Any]] = []
-    for kind in SECTION_ORDER:
-        claims = [c for c in digest.claims if c.kind == kind.value]
-        if claims:
-            sections.append(
-                {"title": SECTION_TITLES[kind], "claims": sorted(claims, key=lambda c: c.order)}
-            )
+    sections = group_sections(sorted(digest.claims, key=lambda c: c.order))
 
     return templates.TemplateResponse(
         request=request,
@@ -182,11 +232,19 @@ def view_digest(
     )
 
 
+def _status(cycle: StandupCycle, now: datetime) -> str:
+    """A day's state, in words; an open day past its cutoff is waiting, not collecting."""
+    if cycle.state == "digested":
+        return "Digest built"
+    if cycle.state == "closed":
+        return "Closed"
+    if cycle.cutoff_at_utc is not None and as_utc(cycle.cutoff_at_utc) <= as_utc(now):
+        return "Waiting for its digest"
+    return "Collecting updates"
+
+
 def _age_days(now: datetime, created_at: datetime) -> int:
-    # SQLite returns naive datetimes; both sides are UTC.
-    if created_at.tzinfo is None:
-        now = now.replace(tzinfo=None)
-    return max((now - created_at).days, 0)
+    return max((as_utc(now) - as_utc(created_at)).days, 0)
 
 
 def drain_tracker_outbox() -> None:

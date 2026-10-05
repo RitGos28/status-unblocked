@@ -70,7 +70,8 @@ class Member(Base):
     team_id: Mapped[str] = mapped_column(ForeignKey("team.id"))
     display_name: Mapped[str] = mapped_column(String(200))
     tz: Mapped[str] = mapped_column(String(64), default="UTC")
-    # Maps an external identity (Teams aadObjectId, web form handle) to this row.
+    # Informational only: the seed records a web-form handle here. Nothing looks
+    # members up by it; Teams identity is teams_aad_id below.
     source_keys: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     # The member's Teams identity (aadObjectId), set when they link their
     # account with a code from the web app. Unique: one Teams account can
@@ -106,6 +107,9 @@ class StandupCycle(Base):
     opens_at_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     cutoff_at_utc: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     state: Mapped[str] = mapped_column(String(16), default=CycleState.OPEN)
+    # Bumped first by every build: the row lock that makes builds of one day
+    # run one at a time, and the source of Digest.build_seq.
+    build_seq: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     # When the team was told this cycle's digest is ready. Exactly one notice
     # per cycle, whoever built the digest and whenever.
     notified_at: Mapped[datetime | None] = mapped_column(
@@ -181,7 +185,8 @@ class UpdateItem(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     update_id: Mapped[str] = mapped_column(ForeignKey("update.id"))
     kind: Mapped[str] = mapped_column(String(16))
-    text: Mapped[str] = mapped_column(Text)
+    # None once retention removed it: only lines a digest quoted are kept.
+    text: Mapped[str | None] = mapped_column(Text, nullable=True)
     span_start: Mapped[int] = mapped_column(Integer)
     span_end: Mapped[int] = mapped_column(Integer)
     # Lowercased, stopword-stripped key used to match a blocker across days.
@@ -202,6 +207,11 @@ class Digest(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     cycle_id: Mapped[str] = mapped_column(ForeignKey("standup_cycle.id"))
     generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    # The cycle's build counter when this digest was built: the latest digest
+    # is the highest, whatever clock generated_at came from.
+    build_seq: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    # What it was built from; a build with the same inputs reuses this digest.
+    inputs_sha256: Mapped[str] = mapped_column(String(64), default="", server_default="")
     summarizer_name: Mapped[str] = mapped_column(String(64))
     summarizer_version: Mapped[str] = mapped_column(String(32))
     validator_report_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
@@ -323,6 +333,9 @@ class TrackerLink(Base):
     # The latest cycle that has been written to the issue, so a recurrence adds
     # one comment per cycle and a rebuild of the same day adds none.
     last_cycle_id: Mapped[str] = mapped_column(String(36))
+    # How many standup days this blocker has been reported on: 1 when the
+    # issue opens, +1 per later day's comment. Also in the issue's JSON.
+    days_reported: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
 
 
 class TrackerOutbox(Base):

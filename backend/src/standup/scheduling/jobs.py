@@ -8,20 +8,33 @@ in-app loop (``STANDUP_SCHEDULER=true``) or by ``python -m scripts.tick``.
 import asyncio
 import uuid
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
-from typing import Any, Protocol
+from datetime import datetime, timedelta
+from typing import Any, Protocol, assert_never
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from standup.config import get_settings
 from standup.db.lease import acquire_lease, release_lease
 from standup.db.models import Digest, Member, StandupCycle, Team, Update
-from standup.domain.enums import ClaimKind
+from standup.db.session import session_scope
+from standup.deps import get_clock, get_summarizer, tracker_from_settings
+from standup.domain.enums import BLOCKER_KINDS, ClaimKind
 from standup.domain.errors import ConfigurationError
+from standup.domain.timezones import as_utc
+from standup.domain.urls import digest_url
 from standup.logging_conf import get_logger
-from standup.scheduling.tick import BuildDigest, CycleView, DrainOutbox, NotifyDigest, tick
+from standup.privacy.retention import purge_expired
+from standup.scheduling.tick import (
+    BuildDigest,
+    CycleView,
+    DrainOutbox,
+    NotifyDigest,
+    PurgeExpired,
+    tick,
+)
 from standup.summarize.base import Summarizer
-from standup.summarize.service import build_digest
+from standup.summarize.service import build_digest, latest_digest
 from standup.tracker.base import TrackerAdapter
 from standup.tracker.outbox import drain
 
@@ -45,20 +58,16 @@ class TickReport:
     notified: int = 0
     notify_failures: int = 0
     drained: int = 0
+    purged: int = 0
 
 
 def _aware(value: datetime | None) -> datetime | None:
-    # SQLite hands back naive datetimes; every stored value is UTC.
-    if value is None or value.tzinfo is not None:
-        return value
-    return value.replace(tzinfo=UTC)
+    return None if value is None else as_utc(value)
 
 
 def load_cycle_views(session: Session, now: datetime) -> list[CycleView]:
     since = (now - LOOKBACK).date()
-    cycles = session.execute(
-        select(StandupCycle).where(StandupCycle.local_date >= since)
-    ).scalars()
+    cycles = session.execute(select(StandupCycle).where(StandupCycle.local_date >= since)).scalars()
     views: list[CycleView] = []
     for cycle in cycles:
         update_count, last_update = session.execute(
@@ -146,10 +155,21 @@ async def _run_jobs(
                 await _announce(session, notifier, job.cycle_id, base_url, now, report)
         elif isinstance(job, NotifyDigest):
             await _announce(session, notifier, job.cycle_id, base_url, now, report)
+        elif isinstance(job, PurgeExpired):
+            report.purged = await asyncio.to_thread(_purge, session, now)
         elif isinstance(job, DrainOutbox):
             drained = await asyncio.to_thread(drain, session, tracker, now)
             report.drained = drained.done
+        else:
+            # A job type added to tick() but not handled here fails mypy.
+            assert_never(job)
     return report
+
+
+def _purge(session: Session, now: datetime) -> int:
+    purged = purge_expired(session, now)
+    session.commit()
+    return purged
 
 
 def _build(
@@ -198,15 +218,19 @@ def _notice(
 ) -> tuple[str, list[tuple[str, dict[str, Any]]]]:
     cycle = session.get(StandupCycle, cycle_id)
     team = session.get(Team, cycle.team_id) if cycle else None
-    digest = session.execute(
-        select(Digest).where(Digest.cycle_id == cycle_id).order_by(Digest.generated_at.desc())
-    ).scalars().first()
-    if team is None or digest is None:
+    digest = latest_digest(session, cycle_id)
+    if cycle is None or team is None or digest is None:
         return "", []
-    blockers = sum(1 for c in digest.claims if c.kind == ClaimKind.BLOCKER.value)
+    # Carried-over blockers are blockers too: the page shows them first.
+    blockers = sum(1 for c in digest.claims if c.kind in BLOCKER_KINDS)
+    carried = sum(1 for c in digest.claims if c.kind == ClaimKind.CARRYOVER.value)
+    counts = f"{blockers} blocker{'' if blockers == 1 else 's'}"
+    if carried:
+        counts += f", {carried} still open from an earlier day"
+    # Name the digest's own date: a pass can announce yesterday's digest too.
     text = (
-        f"Today's {team.name} digest is ready ({blockers} blocker"
-        f"{'' if blockers == 1 else 's'}): {base_url.rstrip('/')}/digest/{digest.id}"
+        f"The {team.name} digest for {cycle.local_date} is ready ({counts}): "
+        f"{digest_url(base_url, digest.id)}"
     )
     members = session.execute(
         select(Member)
@@ -226,10 +250,6 @@ def _mark_notified(session: Session, cycle_id: str, now: datetime) -> None:
 
 async def run_once(notifier: DigestNotifier | None = None) -> TickReport:
     """One scheduler pass with the app's own settings, clock and session."""
-    from standup.config import get_settings
-    from standup.db.session import session_scope
-    from standup.deps import get_clock, get_summarizer, tracker_from_settings
-
     settings = get_settings()
     with session_scope() as session:
         report = await run_tick(

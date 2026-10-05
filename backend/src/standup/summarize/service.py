@@ -8,17 +8,22 @@ It is also the mapping layer between the ORM and the pure domain types, which
 is what keeps ``summarize/`` free of database imports.
 """
 
+import json
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING
 
 from sqlalchemy import select
+from sqlalchemy import update as sql_update
 from sqlalchemy.orm import Session
 
 from standup.config import get_settings
-from standup.domain.enums import AuditAction, ClaimKind, CycleState, ItemKind
-from standup.domain.errors import NotFoundError, ValidationFailure
+from standup.db.models import Digest, DigestClaim, StandupCycle, Team, Update, UpdateItem
+from standup.domain.enums import BLOCKER_KINDS, AuditAction, CycleState, ItemKind
+from standup.domain.errors import ConflictError, NotFoundError, ValidationFailure
+from standup.domain.text import content_sha256
+from standup.domain.urls import evidence_url
 from standup.logging_conf import get_logger
 from standup.privacy.audit import record_audit
+from standup.privacy.retention import day_was_purged
 from standup.summarize.base import (
     SourceDoc,
     Summarizer,
@@ -28,17 +33,10 @@ from standup.summarize.render import render_markdown
 from standup.summarize.validator import FaithfulnessValidator
 from standup.tracker.outbox import enqueue_blocker_issues
 
-if TYPE_CHECKING:
-    from standup.db.models import Digest, StandupCycle
-
 log = get_logger(__name__)
 
 # How far back a blocker counts as "reported before" for carry-over.
 CARRYOVER_DAYS = 7
-
-
-def evidence_url(base_url: str, item_id: str) -> str:
-    return f"{base_url.rstrip('/')}/evidence/{item_id}"
 
 
 def build_request(session: Session, cycle_id: str, base_url: str) -> SummaryRequest:
@@ -47,8 +45,6 @@ def build_request(session: Session, cycle_id: str, base_url: str) -> SummaryRequ
     Note what does *not* cross this boundary: ORM objects, the session, member
     identifiers from the source platform, and any purged update's text.
     """
-    from standup.db.models import StandupCycle, Team, Update, UpdateItem
-
     cycle = session.get(StandupCycle, cycle_id)
     if cycle is None:
         raise NotFoundError(f"cycle {cycle_id} not found")
@@ -71,6 +67,8 @@ def build_request(session: Session, cycle_id: str, base_url: str) -> SummaryRequ
 
     sources: list[SourceDoc] = []
     for item, update in rows:
+        if item.text is None:  # removed by retention; live updates never are
+            continue
         sources.append(
             SourceDoc(
                 id=item.id,
@@ -83,6 +81,7 @@ def build_request(session: Session, cycle_id: str, base_url: str) -> SummaryRequ
                 permalink=update.permalink,
                 normalized_key=item.normalized_key,
                 entity_refs=tuple(e.get("value", "") for e in (item.entity_refs or [])),
+                standup_day=cycle.local_date,
             )
         )
 
@@ -104,8 +103,6 @@ def _prior_blockers(
     them to mark a blocker reported again as "Still blocked". Items whose text
     retention has removed are skipped: there is nothing left to cite.
     """
-    from standup.db.models import Digest, DigestClaim, StandupCycle, Update, UpdateItem
-
     since = cycle.local_date - timedelta(days=CARRYOVER_DAYS)
     claims = session.execute(
         select(DigestClaim)
@@ -114,7 +111,7 @@ def _prior_blockers(
         .where(StandupCycle.team_id == cycle.team_id)
         .where(StandupCycle.local_date < cycle.local_date)
         .where(StandupCycle.local_date >= since)
-        .where(DigestClaim.kind.in_([ClaimKind.BLOCKER.value, ClaimKind.CARRYOVER.value]))
+        .where(DigestClaim.kind.in_(sorted(BLOCKER_KINDS)))
     ).scalars()
 
     item_ids = {c["source_id"] for claim in claims for c in claim.citations_json}
@@ -124,6 +121,7 @@ def _prior_blockers(
         update = session.get(Update, item.update_id) if item else None
         if item is None or update is None or not item.text or update.purged_at is not None:
             continue
+        earlier_cycle = session.get(StandupCycle, update.cycle_id)
         prior.append(
             SourceDoc(
                 id=item.id,
@@ -135,6 +133,7 @@ def _prior_blockers(
                 evidence_url=evidence_url(base_url, item.id),
                 permalink=update.permalink,
                 normalized_key=item.normalized_key,
+                standup_day=earlier_cycle.local_date if earlier_cycle else None,
             )
         )
     return tuple(prior)
@@ -153,10 +152,28 @@ def build_digest(
 
     Returns the persisted ``Digest`` row.
     """
-    from standup.db.models import Digest, DigestClaim, StandupCycle
-
     settings = get_settings()
+    if day_was_purged(session, cycle_id):
+        raise ConflictError(
+            "This day's updates were removed under the team's retention policy, so there is "
+            "nothing to rebuild from. Its digest stays as it was."
+        )
+    # One build of a day at a time: bump the day's counter first, which takes
+    # its row lock until commit. A concurrent build waits here, then sees this
+    # one's digest (no SAVEPOINT needed, which pysqlite lacks).
+    session.execute(
+        sql_update(StandupCycle)
+        .where(StandupCycle.id == cycle_id)
+        .values(build_seq=StandupCycle.build_seq + 1)
+    )
+    build_seq = session.execute(
+        select(StandupCycle.build_seq).where(StandupCycle.id == cycle_id)
+    ).scalar_one()
     request = build_request(session, cycle_id, base_url)
+    inputs = _inputs_sha256(request, summarizer)
+    current = latest_digest(session, cycle_id)
+    if current is not None and current.inputs_sha256 == inputs:
+        return current  # nothing changed: a second click is not a second digest
 
     result = summarizer.summarize(request)
 
@@ -176,9 +193,7 @@ def build_digest(
                 f"{len(report.violations)} claim(s) failed faithfulness validation"
             )
 
-    evidence_urls = {
-        s.id: s.evidence_url for s in (*request.sources, *request.prior_open_blockers)
-    }
+    evidence_urls = {s.id: s.evidence_url for s in (*request.sources, *request.prior_open_blockers)}
     body_md = render_markdown(
         team_name=request.team_name,
         cycle_date=request.cycle_date.isoformat(),
@@ -191,6 +206,8 @@ def build_digest(
     digest = Digest(
         cycle_id=cycle_id,
         generated_at=now,
+        build_seq=build_seq,
+        inputs_sha256=inputs,
         summarizer_name=result.summarizer_name,
         summarizer_version=result.summarizer_version,
         validator_report_json=report.to_dict(),
@@ -253,3 +270,33 @@ def build_digest(
         summarizer=result.summarizer_name,
     )
     return digest
+
+
+def latest_digest(session: Session, cycle_id: str) -> "Digest | None":
+    """The day's most recently built digest. By build order, never by clock."""
+    return session.execute(
+        select(Digest)
+        .where(Digest.cycle_id == cycle_id)
+        .order_by(Digest.build_seq.desc(), Digest.generated_at.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+
+
+def _inputs_sha256(request: SummaryRequest, summarizer: Summarizer) -> str:
+    """A fingerprint of everything a digest is built from."""
+
+    def doc(s: SourceDoc) -> list[str]:
+        return [s.id, s.kind.value, s.member_id, s.member_name, s.text, str(s.standup_day)]
+
+    return content_sha256(
+        json.dumps(
+            {
+                "summarizer": [summarizer.name, summarizer.version],
+                "day": request.cycle_date.isoformat(),
+                "team": request.team_name,
+                "sources": [doc(s) for s in request.sources],
+                "earlier": [doc(s) for s in request.prior_open_blockers],
+            },
+            sort_keys=True,
+        )
+    )
