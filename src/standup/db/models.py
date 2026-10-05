@@ -323,6 +323,9 @@ class TrackerLink(Base):
     # The latest cycle that has been written to the issue, so a recurrence adds
     # one comment per cycle and a rebuild of the same day adds none.
     last_cycle_id: Mapped[str] = mapped_column(String(36))
+    # How many standup days this blocker has been reported on: 1 when the
+    # issue opens, +1 per later day's comment. Also in the issue's JSON.
+    days_reported: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
 
 
 class TrackerOutbox(Base):

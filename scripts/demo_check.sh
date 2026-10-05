@@ -165,6 +165,11 @@ for issue in json.load(sys.stdin):
 [ "$(cut -d' ' -f2 <<<"$ADA_ISSUES")" = 1 ] || fail "the second day added one comment to it"
 grep -q "Still blocked on" <<<"$(curl -s "$GH/demo/core/issues/$(cut -d' ' -f1 <<<"$ADA_ISSUES")")" \
     || fail "the second day's comment says 'Still blocked on'"
+ADA_PAGE="$(curl -s "$GH/demo/core/issues/$(cut -d' ' -f1 <<<"$ADA_ISSUES")")"
+grep -q "team:core" <<<"$ADA_PAGE" || fail "the issue is labelled with its team"
+grep -q '&#34;days_reported&#34;: 2\|&quot;days_reported&quot;: 2\|"days_reported": 2' <<<"$ADA_PAGE" \
+    || fail "the day-2 comment carries a JSON update with days_reported 2"
+grep -q "standup_blocker" <<<"$ADA_PAGE" || fail "the issue carries a structured JSON record"
 pass "blockers became GitHub issues: Ada's two-day blocker is one issue plus a 'Still blocked' comment"
 NOTICES="$(bot_said | grep -o 'digest is ready' | wc -l | tr -d ' ')"
 [ "$NOTICES" = 2 ] || fail "Ada got one 'digest is ready' notice per day's digest, not one per pass (got $NOTICES)"
