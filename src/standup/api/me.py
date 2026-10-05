@@ -31,7 +31,9 @@ _ACTIONS = {
 @router.get("/me/teams", response_class=HTMLResponse)
 def teams_link(request: Request, member: CurrentMember, settings: AppSettings) -> HTMLResponse:
     """A short-lived code that links this member's Teams account to the bot."""
-    code = issue_teams_link_code(settings.secret_key.get_secret_value(), member.id)
+    code = issue_teams_link_code(
+        settings.secret_key.get_secret_value(), member.id, member.teams_aad_id
+    )
     return templates.TemplateResponse(
         request=request,
         name="me_teams.html",
@@ -126,11 +128,15 @@ def _my_updates(session: DbSession, member: Member) -> list[dict[str, Any]]:
 
 
 def _events_about(session: DbSession, member: Member) -> list[dict[str, Any]]:
-    rows = session.execute(
-        select(AuditLog)
-        .where(AuditLog.subject_member_id == member.id)
-        .order_by(AuditLog.seq.desc())
-    ).scalars().all()
+    rows = (
+        session.execute(
+            select(AuditLog)
+            .where(AuditLog.subject_member_id == member.id)
+            .order_by(AuditLog.seq.desc())
+        )
+        .scalars()
+        .all()
+    )
     names = {
         m.id: m.display_name
         for m in session.execute(

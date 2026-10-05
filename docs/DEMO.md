@@ -36,6 +36,7 @@ The seed prints `Now run: uvicorn standup.main:app --port <port>`: use that port
 ## 1b. The Teams bot (no tenant needed)
 Activities are replayed to the bot as Teams would send them (`scripts/teams_replay.py`); the bot's replies land at the fake connector. Open `http://127.0.0.1:8092/` to watch them.
 - As Ada, open **Teams** in the header: it shows `link <code>`. Send it: `python -m scripts.teams_replay personal_command --text "link <code>"` → "Linked. You're Ada Okafor on Core Platform".
+- A code works once. Send the same code from another Teams account, `... --text "link <code>" --as aad-someone-else` → "That code is invalid or has expired", and Ada stays linked to her own account.
 - `python -m scripts.teams_replay personal_command` (the text `standup`) → the bot replies with the update card.
 - `python -m scripts.teams_replay channel_unaddressed` → no reply, nothing read; `/scope` counts one refusal.
 - `python -m scripts.teams_replay channel_mention` → "I don't read channel conversations…".

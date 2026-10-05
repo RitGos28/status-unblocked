@@ -32,7 +32,7 @@ from microsoft_agents.hosting.fastapi import CloudAdapter, jwt_authorization_dec
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from standup.auth.tokens import read_teams_link_code
+from standup.auth.tokens import read_teams_link_code, teams_link_state
 from standup.config import TEAMS_APP_ID_ENV, teams_anonymous_allowed
 from standup.db.models import IngestRejection, Member
 from standup.deps import AppClock, AppSettings, DbSession
@@ -145,11 +145,19 @@ class StandupAgent:
         )
 
     def _link(self, activity: Activity, code: str) -> str:
+        invalid = "That code is invalid or has expired. Get a fresh one from /me/teams."
         user_key = teams_user_key(activity)
-        member_id = read_teams_link_code(self._secret_key, code) if code else None
-        member = self._session.get(Member, member_id) if member_id else None
-        if not user_key or member is None or not member.active:
-            return "That code is invalid or has expired. Get a fresh one from /me/teams."
+        signed = read_teams_link_code(self._secret_key, code) if code else None
+        member = self._session.get(Member, signed[0]) if signed else None
+        if not user_key or signed is None or member is None or not member.active:
+            return invalid
+        if member.teams_aad_id == user_key:
+            return f"You're already linked as {member.display_name}."
+        # Single use: the code signed the link state at issue. Once used, or
+        # once the member links again some other way, it no longer matches.
+        if signed[1] != teams_link_state(member.teams_aad_id):
+            log.info("teams.link_code_reused", member_id=member.id)
+            return invalid
 
         holder = self._session.execute(
             select(Member).where(Member.teams_aad_id == user_key)
