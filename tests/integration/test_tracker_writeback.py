@@ -7,6 +7,7 @@ issue's marker, and GitHub failures never touch the digest.
 """
 
 import json
+import re
 from datetime import timedelta
 
 import httpx
@@ -88,7 +89,7 @@ def test_a_blocker_becomes_exactly_one_issue(client, session, github_on, github)
     (created,) = calls(github, "POST", ISSUES)
     payload = json.loads(created.read())
     assert payload["title"] == f"Blocker: {BLOCKER}"
-    assert payload["labels"] == ["standup-blocker"]
+    assert payload["labels"] == ["standup-blocker", "team:core"]
     assert f"> {BLOCKER}" in payload["body"]
     assert "/evidence/" in payload["body"] and f"/digest/{digest.id}" in payload["body"]
 
@@ -204,3 +205,53 @@ def test_a_team_without_a_repo_is_skipped(client, session, monkeypatch, team_wit
 
     row = session.execute(select(TrackerOutbox)).scalar_one()
     assert (row.status, row.last_error) == ("skipped", "team has no github_repo configured")
+
+
+# --- structured output: the issue is machine-readable, not just prose -------
+
+_JSON_BLOCK = re.compile(r"```json\n(.*?)\n```", re.DOTALL)
+
+
+def json_block(body: str) -> dict:
+    match = _JSON_BLOCK.search(body)
+    assert match, f"no ```json block in:\n{body}"
+    return json.loads(match.group(1))
+
+
+def test_the_issue_carries_a_json_record_and_a_team_label(client, session, github_on, github):
+    team, (ada, *_rest) = github_on
+    submit(client, ada.id, blockers=BLOCKER)
+    digest = build_today(client, session)
+
+    (created,) = calls(github, "POST", ISSUES)
+    payload = json.loads(created.read())
+    assert payload["labels"] == ["standup-blocker", "team:core"]
+    record = json_block(payload["body"])["standup_blocker"]
+    link = session.execute(select(TrackerLink)).scalar_one()
+    assert record == {
+        "fingerprint": link.fingerprint,
+        "team": "core",
+        "reported_by": "Ada Okafor",
+        "quote": BLOCKER,
+        "first_reported": "2026-09-15",
+        "days_reported": 1,
+        "evidence_url": record["evidence_url"],
+        "digest_url": f"http://testserver/digest/{digest.id}",
+    }
+    assert "/evidence/" in record["evidence_url"]
+
+
+def test_each_later_day_adds_a_comment_with_the_running_count(
+    client, session, clock, github_on, github
+):
+    _team, (ada, *_rest) = github_on
+    for _day in range(3):
+        submit(client, ada.id, blockers=BLOCKER)
+        build_today(client, session)
+        clock.advance(days=1)
+
+    posted = calls(github, "POST", f"{ISSUES}/42/comments")
+    comments = [json.loads(c.read())["body"] for c in posted]
+    assert [json_block(c)["standup_blocker_update"]["days_reported"] for c in comments] == [2, 3]
+    assert json_block(comments[-1])["standup_blocker_update"]["date"] == "2026-09-17"
+    assert session.execute(select(TrackerLink.days_reported)).scalar_one() == 3

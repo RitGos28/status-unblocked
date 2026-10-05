@@ -10,6 +10,7 @@ Each blocker becomes one issue. The same blocker reported on a later day adds
 one comment to that issue. The bot never closes issues; people do.
 """
 
+import json
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -202,8 +203,8 @@ def _deliver(
             ref = tracker.create_issue(
                 repo,
                 title=_title(payload["quote"]),
-                body=_issue_body(payload, team.name, row.fingerprint),
-                labels=[LABEL],
+                body=_issue_body(payload, team, row.fingerprint),
+                labels=[LABEL, f"team:{team.slug}"],
             )
             action = "created"
         link = TrackerLink(
@@ -219,8 +220,10 @@ def _deliver(
         )
         session.add(link)
     elif link.last_cycle_id != row.cycle_id:
-        tracker.add_comment(repo, link.issue_number, _comment_body(payload))
+        days = link.days_reported + 1
+        tracker.add_comment(repo, link.issue_number, _comment_body(payload, row.fingerprint, days))
         link.last_cycle_id = row.cycle_id
+        link.days_reported = days
         action = "commented"
     else:
         return "unchanged"
@@ -258,9 +261,27 @@ def _quote_block(text: str) -> str:
     return "\n".join(f"> {line}" for line in text.splitlines() or [""])
 
 
-def _issue_body(payload: dict[str, Any], team_name: str, fp: str) -> str:
+def _json_block(record: dict[str, Any]) -> str:
+    """A fenced JSON block: the structured part of an issue or comment, for
+    anything that reads the tracker (dashboards, scripts, other bots)."""
+    return "```json\n" + json.dumps(record, indent=2, sort_keys=True) + "\n```"
+
+
+def _issue_body(payload: dict[str, Any], team: Team, fp: str) -> str:
+    record = {
+        "standup_blocker": {
+            "fingerprint": fp,
+            "team": team.slug,
+            "reported_by": payload["author"],
+            "quote": payload["quote"],
+            "first_reported": payload["date"],
+            "days_reported": 1,
+            "evidence_url": payload["evidence_url"],
+            "digest_url": payload["digest_url"],
+        }
+    }
     return (
-        f"**{payload['author']}** reported this blocker in the {team_name} standup "
+        f"**{payload['author']}** reported this blocker in the {team.name} standup "
         f"on {payload['date']}:\n\n"
         f"{_quote_block(payload['quote'])}\n\n"
         f"- Source, verbatim with the cited span highlighted (team sign-in required): "
@@ -268,13 +289,24 @@ def _issue_body(payload: dict[str, Any], team_name: str, fp: str) -> str:
         f"- Digest: {payload['digest_url']}\n\n"
         "Filed by Status Unblocked. Each later day the same blocker is reported adds a "
         "comment here. The bot never closes issues.\n\n"
+        f"{_json_block(record)}\n\n"
         f"{marker(fp)}"
     )
 
 
-def _comment_body(payload: dict[str, Any]) -> str:
+def _comment_body(payload: dict[str, Any], fp: str, days_reported: int) -> str:
+    record = {
+        "standup_blocker_update": {
+            "fingerprint": fp,
+            "date": payload["date"],
+            "days_reported": days_reported,
+            "evidence_url": payload["evidence_url"],
+            "digest_url": payload["digest_url"],
+        }
+    }
     return (
-        f"Still blocked on {payload['date']}:\n\n"
+        f"Still blocked on {payload['date']} (reported on {days_reported} days):\n\n"
         f"{_quote_block(payload['quote'])}\n\n"
-        f"Source: {payload['evidence_url']} · Digest: {payload['digest_url']}"
+        f"Source: {payload['evidence_url']} · Digest: {payload['digest_url']}\n\n"
+        f"{_json_block(record)}"
     )
