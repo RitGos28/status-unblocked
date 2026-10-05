@@ -16,6 +16,7 @@ from standup.db.session import create_all, session_scope
 from standup.deps import templates
 from standup.domain.errors import StandupError
 from standup.logging_conf import configure_logging, get_logger
+from standup.scheduling.jobs import run_once
 
 log = get_logger(__name__)
 
@@ -86,8 +87,6 @@ def _viewer(request: Request) -> Member | None:
 
 async def _scheduler_loop(app: FastAPI, interval_seconds: int) -> None:
     """Run a scheduler pass every interval. A failing pass is logged, never fatal."""
-    from standup.scheduling.jobs import run_once
-
     while True:
         try:
             await run_once(getattr(app.state, "teams_notifier", None))

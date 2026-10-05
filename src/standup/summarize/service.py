@@ -9,12 +9,12 @@ is what keeps ``summarize/`` free of database imports.
 """
 
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from standup.config import get_settings
+from standup.db.models import Digest, DigestClaim, StandupCycle, Team, Update, UpdateItem
 from standup.domain.enums import AuditAction, ClaimKind, CycleState, ItemKind
 from standup.domain.errors import NotFoundError, ValidationFailure
 from standup.domain.urls import evidence_url
@@ -29,9 +29,6 @@ from standup.summarize.render import render_markdown
 from standup.summarize.validator import FaithfulnessValidator
 from standup.tracker.outbox import enqueue_blocker_issues
 
-if TYPE_CHECKING:
-    from standup.db.models import Digest, StandupCycle
-
 log = get_logger(__name__)
 
 # How far back a blocker counts as "reported before" for carry-over.
@@ -44,8 +41,6 @@ def build_request(session: Session, cycle_id: str, base_url: str) -> SummaryRequ
     Note what does *not* cross this boundary: ORM objects, the session, member
     identifiers from the source platform, and any purged update's text.
     """
-    from standup.db.models import StandupCycle, Team, Update, UpdateItem
-
     cycle = session.get(StandupCycle, cycle_id)
     if cycle is None:
         raise NotFoundError(f"cycle {cycle_id} not found")
@@ -101,8 +96,6 @@ def _prior_blockers(
     them to mark a blocker reported again as "Still blocked". Items whose text
     retention has removed are skipped: there is nothing left to cite.
     """
-    from standup.db.models import Digest, DigestClaim, StandupCycle, Update, UpdateItem
-
     since = cycle.local_date - timedelta(days=CARRYOVER_DAYS)
     claims = session.execute(
         select(DigestClaim)
@@ -150,8 +143,6 @@ def build_digest(
 
     Returns the persisted ``Digest`` row.
     """
-    from standup.db.models import Digest, DigestClaim, StandupCycle
-
     settings = get_settings()
     request = build_request(session, cycle_id, base_url)
 
@@ -173,9 +164,7 @@ def build_digest(
                 f"{len(report.violations)} claim(s) failed faithfulness validation"
             )
 
-    evidence_urls = {
-        s.id: s.evidence_url for s in (*request.sources, *request.prior_open_blockers)
-    }
+    evidence_urls = {s.id: s.evidence_url for s in (*request.sources, *request.prior_open_blockers)}
     body_md = render_markdown(
         team_name=request.team_name,
         cycle_date=request.cycle_date.isoformat(),

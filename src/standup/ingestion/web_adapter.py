@@ -2,7 +2,7 @@
 
 Zero external dependencies, so the full pipeline is exercisable and demoable
 whatever a Teams tenant's sideloading policy turns out to be. The Teams adapter
-in week 2 produces the identical ``RawSubmission``.
+and the CSV importer produce the identical ``RawSubmission``.
 """
 
 from datetime import UTC, datetime

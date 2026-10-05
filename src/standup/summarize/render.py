@@ -1,7 +1,7 @@
 """Digest rendering.
 
-Withheld claims are handled here from day one, even though the features that
-produce them (validation drops, author deletion in week 4) arrive later. A gap
+Withheld claims are counted here: today validation drops are the only source
+of them; member-initiated deletion, not built yet, would be another. A gap
 in a digest must never be silent: if something was removed, the digest says so
 and says how many.
 """

@@ -43,7 +43,7 @@ class SummaryRequest:
     cycle_date: date
     team_name: str
     sources: tuple[SourceDoc, ...]
-    # Blockers still open from earlier cycles, for carry-over detection (week 3).
+    # Blockers still open from earlier cycles, for carry-over detection.
     prior_open_blockers: tuple[SourceDoc, ...] = ()
     max_claims_per_section: int = 50
 
@@ -89,7 +89,7 @@ class SummaryResult:
 
 
 class Summarizer(Protocol):
-    """Implementations: RulesSummarizer now, LLMSummarizer in week 4.
+    """Implemented by RulesSummarizer, the only implementation.
 
     A summarizer must never call the validator itself — ``service.py`` runs it
     afterwards, so the check cannot be bypassed by the next implementation.

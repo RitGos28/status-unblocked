@@ -14,8 +14,11 @@ from typing import Any, Protocol
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from standup.config import get_settings
 from standup.db.lease import acquire_lease, release_lease
 from standup.db.models import Digest, Member, StandupCycle, Team, Update
+from standup.db.session import session_scope
+from standup.deps import get_clock, get_summarizer, tracker_from_settings
 from standup.domain.enums import ClaimKind
 from standup.domain.errors import ConfigurationError
 from standup.domain.timezones import as_utc
@@ -64,9 +67,7 @@ def _aware(value: datetime | None) -> datetime | None:
 
 def load_cycle_views(session: Session, now: datetime) -> list[CycleView]:
     since = (now - LOOKBACK).date()
-    cycles = session.execute(
-        select(StandupCycle).where(StandupCycle.local_date >= since)
-    ).scalars()
+    cycles = session.execute(select(StandupCycle).where(StandupCycle.local_date >= since)).scalars()
     views: list[CycleView] = []
     for cycle in cycles:
         update_count, last_update = session.execute(
@@ -214,9 +215,13 @@ def _notice(
 ) -> tuple[str, list[tuple[str, dict[str, Any]]]]:
     cycle = session.get(StandupCycle, cycle_id)
     team = session.get(Team, cycle.team_id) if cycle else None
-    digest = session.execute(
-        select(Digest).where(Digest.cycle_id == cycle_id).order_by(Digest.generated_at.desc())
-    ).scalars().first()
+    digest = (
+        session.execute(
+            select(Digest).where(Digest.cycle_id == cycle_id).order_by(Digest.generated_at.desc())
+        )
+        .scalars()
+        .first()
+    )
     if cycle is None or team is None or digest is None:
         return "", []
     # Carried-over blockers are blockers too: the page shows them first.
@@ -249,10 +254,6 @@ def _mark_notified(session: Session, cycle_id: str, now: datetime) -> None:
 
 async def run_once(notifier: DigestNotifier | None = None) -> TickReport:
     """One scheduler pass with the app's own settings, clock and session."""
-    from standup.config import get_settings
-    from standup.db.session import session_scope
-    from standup.deps import get_clock, get_summarizer, tracker_from_settings
-
     settings = get_settings()
     with session_scope() as session:
         report = await run_tick(

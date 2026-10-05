@@ -12,7 +12,7 @@ radius of a breaking SDK change to two files.
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from microsoft_agents.activity import Activity
 
@@ -74,6 +74,9 @@ class TeamsAdapter:
 STANDUP_FIELDS = frozenset(FORM_FIELDS)
 
 
+ScopeKind = Literal["card_submit", "command", "mention", "ignored", "rejected"]
+
+
 @dataclass(frozen=True)
 class ScopeDecision:
     """What the bot may do with one activity.
@@ -88,7 +91,7 @@ class ScopeDecision:
       - "rejected": a message outside scope. Count it, read nothing.
     """
 
-    kind: str
+    kind: ScopeKind
     conversation_type: str
     reason: str = ""
     text: str = ""
