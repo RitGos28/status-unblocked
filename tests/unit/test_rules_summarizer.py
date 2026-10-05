@@ -277,3 +277,52 @@ def test_a_promoted_blocker_can_also_be_carried_over_and_says_both():
     assert claim.kind is ClaimKind.CARRYOVER
     why = explain_rule(claim.matched_rule)
     assert "Moved to Blockers" in why and "Also reported on 2026-09-14" in why
+
+
+# --- round-2 wording (review B): each false positive here opened a GitHub
+# issue, and the false negative dropped a real blocker from the digest.
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["Nope, all clear", "Blockers: none", "Blockers: None.", "None, all good", "No, all clear!"],
+)
+def test_more_ways_of_saying_nothing_in_the_blocker_box(text: str):
+    assert summarize(source("s1", text, ItemKind.BLOCKER)).claims == ()
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Fixed the bug where users cannot log in.",
+        "Shipped the fix for customers who can't reset passwords.",
+        "No longer stuck on the iOS build.",
+        "Not waiting on design any more.",
+        "Finally unstuck on the migration.",
+    ],
+)
+def test_progress_that_only_mentions_a_problem_is_not_promoted(text: str):
+    (claim,) = summarize(source("s1", text, ItemKind.PROGRESS)).claims
+    assert claim.kind is ClaimKind.PROGRESS
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["I can't deploy until infra rotates the keys.", "We cannot ship without the legal sign-off."],
+)
+def test_a_first_person_cannot_is_still_promoted(text: str):
+    (claim,) = summarize(source("s1", text, ItemKind.PROGRESS)).claims
+    assert claim.kind is ClaimKind.BLOCKER
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "No blockers except waiting on App Store review.",
+        "Nothing blocking apart from waiting on legal.",
+        "No blockers other than the stuck CI runner.",
+    ],
+)
+def test_an_exception_to_no_blockers_is_a_blocker(text: str):
+    (claim,) = summarize(source("s1", text, ItemKind.BLOCKER)).claims
+    assert claim.kind is ClaimKind.BLOCKER
