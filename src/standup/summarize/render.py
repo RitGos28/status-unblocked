@@ -86,8 +86,9 @@ def render_markdown(
             lines.append("")
             for claim in section.claims:
                 links = " ".join(
-                    f"[source]({evidence_urls.get(c.source_id, '#')})"
-                    for c in claim.citations
+                    f"[{'source' if i == 0 else 'earlier report'}]"
+                    f"({evidence_urls.get(c.source_id, '#')})"
+                    for i, c in enumerate(claim.citations)
                 )
                 lines.append(f"- **{claim.member_name}** - {claim.text} {links}")
                 why = explain_rule(claim.matched_rule)

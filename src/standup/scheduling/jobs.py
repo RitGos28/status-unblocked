@@ -201,12 +201,19 @@ def _notice(
     digest = session.execute(
         select(Digest).where(Digest.cycle_id == cycle_id).order_by(Digest.generated_at.desc())
     ).scalars().first()
-    if team is None or digest is None:
+    if cycle is None or team is None or digest is None:
         return "", []
-    blockers = sum(1 for c in digest.claims if c.kind == ClaimKind.BLOCKER.value)
+    # Carried-over blockers are blockers too: the page shows them first.
+    blocker_kinds = {ClaimKind.BLOCKER.value, ClaimKind.CARRYOVER.value}
+    blockers = sum(1 for c in digest.claims if c.kind in blocker_kinds)
+    carried = sum(1 for c in digest.claims if c.kind == ClaimKind.CARRYOVER.value)
+    counts = f"{blockers} blocker{'' if blockers == 1 else 's'}"
+    if carried:
+        counts += f", {carried} still open from an earlier day"
+    # Name the digest's own date: a pass can announce yesterday's digest too.
     text = (
-        f"Today's {team.name} digest is ready ({blockers} blocker"
-        f"{'' if blockers == 1 else 's'}): {base_url.rstrip('/')}/digest/{digest.id}"
+        f"The {team.name} digest for {cycle.local_date} is ready ({counts}): "
+        f"{base_url.rstrip('/')}/digest/{digest.id}"
     )
     members = session.execute(
         select(Member)

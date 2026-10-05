@@ -5,5 +5,5 @@
 <div class="card">
   <p style="margin:0">{{ detail }}</p>
 </div>
-<p class="muted" style="margin-top:18px"><a href="/">Back to the start page</a></p>
+<p class="muted" style="margin-top:18px">{% if viewer %}<a href="/digests">Back to digests</a>{% else %}<a href="/">Back to the start page</a>{% endif %}</p>
 {% endblock %}

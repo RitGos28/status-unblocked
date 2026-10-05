@@ -39,7 +39,7 @@ Activities are replayed to the bot as Teams would send them (`scripts/teams_repl
 - `python -m scripts.teams_replay personal_command` (the text `standup`) → the bot replies with the update card.
 - `python -m scripts.teams_replay channel_unaddressed` → no reply, nothing read; `/scope` counts one refusal.
 - `python -m scripts.teams_replay channel_mention` → "I don't read channel conversations…".
-- After the scheduler pass in step 3, the connector shows a "digest is ready" message for Ada for each day's digest, sent with no credentials.
+- After the scheduler pass in step 3, the connector shows one "The Core Platform digest for <date> is ready (… blockers, 1 still open from an earlier day)" message for Ada per day's digest, sent with no credentials. (Each pass also logs an SDK warning, "App ID is not provided": expected in this anonymous demo mode.)
 - `python -m scripts.teams_replay personal_card_submit` → "Recorded for Core Platform": a card submission goes through the same ingest path as the web form.
 
 ## 2. Submit, and resubmit
@@ -54,7 +54,7 @@ python -m scripts.tick                                   # after 11:00 UTC: the 
 python -m scripts.tick --at <today>T11:06:00Z           # before 11:00 UTC; <today> is today's UTC date
 ```
 
-It reports `built 3 digest(s)`: Core Platform's yesterday and today, and Mobile's today. Then open **Digests** and today's digest. If you use `--at` with a time earlier than your submissions, the digest's "built" time will read earlier than the updates it contains; that is the demo clock, not the app.
+It reports `built 3 digest(s)`: Core Platform's yesterday and today, and Mobile's today (fewer if you already built one by hand with **Build digest**). Then open **Digests** and today's digest. If you use `--at` with a time earlier than your submissions, the digest's "built" time will read earlier than the updates it contains; that is the demo clock, not the app.
 
 Run it again, or twice at once: nothing is built twice and no one is told twice, because only one pass may run at a time (a database lease) and each cycle is announced once. Run it with `STANDUP_BASE_URL` unset and it refuses, because its links go into GitHub issues and Teams messages.
 

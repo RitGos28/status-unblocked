@@ -116,6 +116,7 @@ def _page(title: str, body: str) -> str:
     return (
         "<!doctype html><meta charset='utf-8'>"
         f"<title>{html.escape(title)}</title>"
+        "<style>pre{white-space:pre-wrap;overflow-wrap:anywhere}</style>"
         "<body style='font:15px/1.5 system-ui;max-width:760px;margin:24px auto'>"
         "<p style='color:#a4442c'>fake GitHub for demos: not github.com</p>"
         f"<h1>{html.escape(title)}</h1>{body}</body>"
