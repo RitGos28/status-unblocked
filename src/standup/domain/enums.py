@@ -33,6 +33,11 @@ class ClaimKind(StrEnum):
     CARRYOVER = "carryover"
 
 
+# The claim kinds that are blockers: each becomes a tracker issue and counts in
+# the "N blockers" notice. A carried-over blocker is still a blocker.
+BLOCKER_KINDS: frozenset[str] = frozenset({ClaimKind.BLOCKER.value, ClaimKind.CARRYOVER.value})
+
+
 class CycleState(StrEnum):
     OPEN = "open"
     CLOSED = "closed"

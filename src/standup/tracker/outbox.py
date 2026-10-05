@@ -28,7 +28,7 @@ from standup.db.models import (
     TrackerOutbox,
     UpdateItem,
 )
-from standup.domain.enums import AuditAction, ClaimKind
+from standup.domain.enums import BLOCKER_KINDS, AuditAction
 from standup.domain.urls import digest_url
 from standup.logging_conf import get_logger
 from standup.privacy.audit import record_audit
@@ -38,7 +38,6 @@ from standup.tracker.idempotency import LABEL, fingerprint, marker
 log = get_logger(__name__)
 
 MAX_ATTEMPTS = 8
-_BLOCKER_KINDS = {ClaimKind.BLOCKER.value, ClaimKind.CARRYOVER.value}
 
 
 @dataclass
@@ -60,12 +59,11 @@ def enqueue_blocker_issues(
     show the issue link once it exists. Rebuilding a digest for the same cycle
     queues nothing new: ``(fingerprint, cycle_id)`` is unique.
     """
-    base = base_url.rstrip("/")
     queued = 0
     seen: set[str] = set()
 
     for claim in digest.claims:
-        if claim.kind not in _BLOCKER_KINDS or not claim.citations_json:
+        if claim.kind not in BLOCKER_KINDS or not claim.citations_json:
             continue
         citation = claim.citations_json[0]
         item = session.get(UpdateItem, citation["source_id"])
@@ -98,7 +96,7 @@ def enqueue_blocker_issues(
                     "author": claim.member_name,
                     "date": cycle.local_date.isoformat(),
                     "evidence_url": citation.get("evidence_url", ""),
-                    "digest_url": digest_url(base, digest.id),
+                    "digest_url": digest_url(base_url, digest.id),
                 },
             )
         )

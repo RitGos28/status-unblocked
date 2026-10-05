@@ -14,14 +14,13 @@ from standup.auth.tokens import issue_login_token, login_url
 from standup.config import get_settings
 from standup.db.models import Member, Team
 from standup.db.session import session_scope
-
-DEFAULT_BASE_URL = "http://localhost:8000"
+from standup.domain.urls import LOCAL_BASE_URL
 
 
 def print_links(team_slug: str | None = None) -> None:
     settings = get_settings()
     secret = settings.secret_key.get_secret_value()
-    base_url = settings.base_url or DEFAULT_BASE_URL
+    base_url = settings.base_url or LOCAL_BASE_URL
 
     with session_scope() as session:
         query = select(Member, Team).join(Team, Member.team_id == Team.id).where(

@@ -9,21 +9,14 @@ import csv
 import io
 
 import pytest
-from sqlalchemy import select
 
-from standup.db.models import Digest, Member, StandupCycle, Team
+from standup.db.models import Member, Team
+from tests.helpers import build_latest as build
 from tests.helpers import login_as, submit
 
 HEADER = [
     "section", "member", "text", "evidence_url", "earlier_report_url", "issue_url",
 ]
-
-
-def build(client, session) -> Digest:
-    cycle = session.execute(select(StandupCycle)).scalars().first()
-    client.post(f"/digests/build/{cycle.id}", follow_redirects=False)
-    session.expire_all()
-    return session.execute(select(Digest)).scalars().first()
 
 
 def rows(response) -> list[list[str]]:

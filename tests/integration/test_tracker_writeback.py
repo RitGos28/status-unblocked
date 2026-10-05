@@ -18,8 +18,6 @@ from sqlalchemy import select
 from standup.config import get_settings
 from standup.db.models import (
     AuditLog,
-    Digest,
-    StandupCycle,
     Team,
     TrackerLink,
     TrackerOutbox,
@@ -28,6 +26,7 @@ from standup.domain.enums import AuditAction
 from standup.ingestion.normalizer import normalized_key
 from standup.tracker.github import API
 from standup.tracker.idempotency import fingerprint, marker
+from tests.helpers import build_latest as build_today
 from tests.helpers import submit
 
 REPO = "acme/platform"
@@ -57,18 +56,6 @@ def github():
         )
         mock.post(f"{ISSUES}/42/comments").mock(return_value=httpx.Response(201, json={}))
         yield mock
-
-
-def build_today(client, session) -> Digest:
-    cycle = session.execute(
-        select(StandupCycle).order_by(StandupCycle.local_date.desc())
-    ).scalars().first()
-    response = client.post(f"/digests/build/{cycle.id}", follow_redirects=False)
-    assert response.status_code == 303
-    session.expire_all()
-    return session.execute(
-        select(Digest).where(Digest.cycle_id == cycle.id).order_by(Digest.generated_at.desc())
-    ).scalars().first()
 
 
 def calls(mock, method: str, url: str) -> list[httpx.Request]:

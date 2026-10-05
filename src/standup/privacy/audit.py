@@ -11,7 +11,7 @@ a claim into something a member can check for themselves on /me/data.
 
 import hashlib
 import json
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import select, update
@@ -21,6 +21,7 @@ from standup.db.models import AuditChainHead, AuditLog, Update
 from standup.db.upsert import insert_ignoring_conflict
 from standup.domain.enums import AuditAction
 from standup.domain.text import content_sha256
+from standup.domain.timezones import as_utc
 
 GENESIS_HASH = "0" * 64
 
@@ -33,9 +34,7 @@ def timestamp_key(value: datetime) -> str:
     isoformat would therefore break the chain on the first verification. We
     normalise to UTC and drop the offset so both sides agree.
     """
-    if value.tzinfo is not None:
-        value = value.astimezone(UTC)
-    return value.replace(tzinfo=None).isoformat(timespec="microseconds")
+    return as_utc(value).replace(tzinfo=None).isoformat(timespec="microseconds")
 
 
 def _canonical_row(

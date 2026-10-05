@@ -14,20 +14,11 @@ from datetime import UTC, datetime
 
 from sqlalchemy import select
 
-from standup.db.models import Digest, StandupCycle, UpdateItem
+from standup.db.models import UpdateItem
 from standup.scheduling.jobs import _notice
-from tests.helpers import login_as, submit
+from tests.helpers import build_latest, login_as, submit
 
 BLOCKER = "Waiting on staging credentials from infra."
-
-
-def build_latest(client, session) -> Digest:
-    cycle = session.execute(
-        select(StandupCycle).order_by(StandupCycle.local_date.desc())
-    ).scalars().first()
-    client.post(f"/digests/build/{cycle.id}", follow_redirects=False)
-    session.expire_all()
-    return session.execute(select(Digest).where(Digest.cycle_id == cycle.id)).scalars().first()
 
 
 def two_days(client, session, clock, team_with_members):

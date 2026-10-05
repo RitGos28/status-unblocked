@@ -9,7 +9,7 @@ import asyncio
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Any, Protocol
+from typing import Any, Protocol, assert_never
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -19,7 +19,7 @@ from standup.db.lease import acquire_lease, release_lease
 from standup.db.models import Digest, Member, StandupCycle, Team, Update
 from standup.db.session import session_scope
 from standup.deps import get_clock, get_summarizer, tracker_from_settings
-from standup.domain.enums import ClaimKind
+from standup.domain.enums import BLOCKER_KINDS, ClaimKind
 from standup.domain.errors import ConfigurationError
 from standup.domain.timezones import as_utc
 from standup.domain.urls import digest_url
@@ -160,6 +160,9 @@ async def _run_jobs(
         elif isinstance(job, DrainOutbox):
             drained = await asyncio.to_thread(drain, session, tracker, now)
             report.drained = drained.done
+        else:
+            # A job type added to tick() but not handled here fails mypy.
+            assert_never(job)
     return report
 
 
@@ -219,8 +222,7 @@ def _notice(
     if cycle is None or team is None or digest is None:
         return "", []
     # Carried-over blockers are blockers too: the page shows them first.
-    blocker_kinds = {ClaimKind.BLOCKER.value, ClaimKind.CARRYOVER.value}
-    blockers = sum(1 for c in digest.claims if c.kind in blocker_kinds)
+    blockers = sum(1 for c in digest.claims if c.kind in BLOCKER_KINDS)
     carried = sum(1 for c in digest.claims if c.kind == ClaimKind.CARRYOVER.value)
     counts = f"{blockers} blocker{'' if blockers == 1 else 's'}"
     if carried:
