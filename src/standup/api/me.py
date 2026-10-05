@@ -11,6 +11,7 @@ from standup.auth.tokens import TEAMS_LINK_MAX_AGE_SECONDS, issue_teams_link_cod
 from standup.db.models import AuditLog, Member, StandupCycle, Update
 from standup.deps import AppSettings, CurrentMember, DbSession, templates
 from standup.domain.enums import AuditAction
+from standup.domain.timezones import as_utc
 from standup.privacy.audit import record_audit
 
 router = APIRouter(tags=["me"])
@@ -102,11 +103,13 @@ def _my_updates(session: DbSession, member: Member) -> list[dict[str, Any]]:
         {
             "id": update.id,
             "day": str(day),
-            "captured_at": update.captured_at.isoformat(),
+            "captured_at": as_utc(update.captured_at).isoformat(),
             "source": update.source_kind,
             "raw_text": update.raw_text,
             "replaced_by_a_later_update": update.superseded_by is not None,
-            "removed_by_retention_at": update.purged_at.isoformat() if update.purged_at else None,
+            "removed_by_retention_at": as_utc(update.purged_at).isoformat()
+            if update.purged_at
+            else None,
             # Not "items": in a template, u.items would be the dict method.
             "lines": [
                 {"id": item.id, "kind": item.kind, "text": item.text}
@@ -131,7 +134,7 @@ def _events_about(session: DbSession, member: Member) -> list[dict[str, Any]]:
     }
     return [
         {
-            "when": row.ts.isoformat(),
+            "when": as_utc(row.ts).isoformat(),
             "action": row.action,
             "what": _ACTIONS.get(row.action, row.action),
             "by": names.get(row.actor_id or "", row.actor_id or row.actor_kind),

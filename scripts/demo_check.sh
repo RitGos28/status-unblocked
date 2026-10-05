@@ -93,7 +93,7 @@ grep -q "Core Platform" <<<"$DIGESTS" || fail "Ada sees Core Platform"
 pass "Ada signs in with her link and sees only her team"
 
 # --- Teams: link Ada's account, then talk to the bot -----------------------
-CODE="$(curl -s -b "$WORK/ada.jar" "$BASE/me/teams" | grep -o 'link [A-Za-z0-9._-]*' | head -1 | cut -d' ' -f2)"
+CODE="$(curl -s -b "$WORK/ada.jar" "$BASE/me/teams" | grep -o '<pre class="raw">link [A-Za-z0-9._-]*' | head -1 | cut -d' ' -f3)"
 [ -n "$CODE" ] || fail "/me/teams shows Ada a link code"
 replay personal_command --text "link $CODE" || fail "the bot accepts 'link <code>'"
 grep -q "Linked. You're Ada Okafor" <<<"$(bot_said)" || fail "the bot confirms the link"
@@ -153,9 +153,11 @@ cutoff = now.replace(hour=11, minute=5, second=0, microsecond=0)
 print((max(now, cutoff) + timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%SZ"))
 EOF
 )"
-if STANDUP_BASE_URL= $PY -m scripts.tick --at "$AT" >/dev/null 2>&1; then
+if STANDUP_BASE_URL= $PY -m scripts.tick --at "$AT" >/dev/null 2>"$WORK/nobase.err"; then
     fail "a scheduler pass without STANDUP_BASE_URL refuses (its links would be relative)"
 fi
+grep -q "STANDUP_BASE_URL is required" "$WORK/nobase.err" && ! grep -q Traceback "$WORK/nobase.err" \
+    || fail "the refusal is one clear line, not a traceback"
 # Wait on these two by PID: a bare `wait` would also wait for the server.
 $PY -m scripts.tick --at "$AT" 2>/dev/null | tail -1 >"$WORK/tick1.txt" &
 TICK1=$!
@@ -276,6 +278,8 @@ pass "My data: Ada sees that Bruno opened her update, and exports everything as 
 curl -s "$BASE/scope" | grep -q '"scope_violations":1' || fail "/scope counts the one refused channel message"
 ERR_TYPE="$(curl -s -o /dev/null -w '%{content_type}' -H 'accept: text/html' -b "$WORK/ada.jar" "$BASE/digest/nope")"
 [[ "$ERR_TYPE" == text/html* ]] || fail "browser errors render as HTML (got $ERR_TYPE)"
+UNKNOWN_TYPE="$(curl -s -o /dev/null -w '%{content_type}' -H 'accept: text/html' -b "$WORK/ada.jar" "$BASE/no-such-page")"
+[[ "$UNKNOWN_TYPE" == text/html* ]] || fail "an unknown address is an HTML page too (got $UNKNOWN_TYPE)"
 pass "/scope counts the refused channel message (content-free); browser errors are HTML pages"
 ! grep -Eq '/login/[A-Za-z0-9]' "$WORK/server.log" || fail "no login token appears in the server's access log"
 pass "the server's access log shows /login/[redacted], never a login token"

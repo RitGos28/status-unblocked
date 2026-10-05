@@ -33,8 +33,11 @@ router = APIRouter(tags=["digest"])
 
 
 @router.get("/digests", response_class=HTMLResponse)
-def list_digests(request: Request, session: DbSession, member: CurrentMember) -> HTMLResponse:
+def list_digests(
+    request: Request, session: DbSession, member: CurrentMember, clock: AppClock
+) -> HTMLResponse:
     """The viewer's own team only. Other teams' cycles are not listed."""
+    now = clock.now()
     cycles = (
         session.execute(
             select(StandupCycle)
@@ -69,6 +72,7 @@ def list_digests(request: Request, session: DbSession, member: CurrentMember) ->
                 "digest": digest,
                 "update_count": update_count,
                 "team_name": team.name if team else "Team",
+                "status": _status(cycle, now),
             }
         )
 
@@ -227,6 +231,17 @@ def view_digest(
             "issues": issues,
         },
     )
+
+
+def _status(cycle: StandupCycle, now: datetime) -> str:
+    """A day's state, in words; an open day past its cutoff is waiting, not collecting."""
+    if cycle.state == "digested":
+        return "Digest built"
+    if cycle.state == "closed":
+        return "Closed"
+    if cycle.cutoff_at_utc is not None and as_utc(cycle.cutoff_at_utc) <= as_utc(now):
+        return "Waiting for its digest"
+    return "Collecting updates"
 
 
 def _age_days(now: datetime, created_at: datetime) -> int:
