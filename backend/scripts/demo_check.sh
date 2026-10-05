@@ -10,7 +10,17 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
-BIN="${VENV_BIN:-.venv/bin}"
+if [ -z "${VENV_BIN:-}" ]; then
+    if [ -x ".venv/bin/python" ]; then
+        BIN=".venv/bin"
+    elif [ -x "../.venv/bin/python" ]; then
+        BIN="../.venv/bin"
+    else
+        BIN=".venv/bin"
+    fi
+else
+    BIN="$VENV_BIN"
+fi
 PY="$BIN/python"
 [ -x "$PY" ] || { echo "Missing $BIN/python (see README), or set VENV_BIN." >&2; exit 1; }
 
@@ -33,6 +43,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
+export PYTHONPATH=src
 export STANDUP_DATABASE_URL="sqlite:///$WORK/demo.db"
 export STANDUP_SECRET_KEY="$($PY -c 'import secrets; print(secrets.token_urlsafe(48))')"
 export STANDUP_BASE_URL="$BASE"

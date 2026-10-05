@@ -16,7 +16,8 @@ services:
       retries: 10
 
   api:
-    build: .
+    build:
+      context: ./backend
     depends_on:
       db:
         condition: service_healthy
@@ -24,8 +25,8 @@ services:
       STANDUP_ENV: docker
       STANDUP_DATABASE_URL: postgresql+psycopg://standup:standup@db:5432/standup
       STANDUP_BASE_URL: http://localhost:8000
-      # Required; compose refuses to start without it. See .env.example.
-      STANDUP_SECRET_KEY: ${STANDUP_SECRET_KEY:?set STANDUP_SECRET_KEY (see .env.example)}
+      # Required; compose refuses to start without it. See backend/.env.example.
+      STANDUP_SECRET_KEY: ${STANDUP_SECRET_KEY:?set STANDUP_SECRET_KEY (see backend/.env.example)}
       STANDUP_LOG_JSON: "true"
     ports:
       - "8000:8000"
@@ -34,6 +35,14 @@ services:
       sh -c "alembic upgrade head &&
              python -m scripts.seed_demo &&
              uvicorn standup.main:app --host 0.0.0.0 --port 8000"
+
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - api
 
 volumes:
   pgdata:

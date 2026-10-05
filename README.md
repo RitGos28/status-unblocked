@@ -2,13 +2,13 @@
 
 > An async standup bot for distributed teams. Members file short updates through a web form or a Microsoft Teams bot; each day at the team's cutoff it builds a **faithful, citation-backed** digest, writes every blocker to GitHub Issues as a structured, durable record, and stays out of the surveillance business.
 
-**Stack:** Python 3.13 · FastAPI · SQLAlchemy 2.0 + Alembic · Postgres (SQLite in dev) · Docker
+**Stack:** Python 3.13 · FastAPI · SQLAlchemy 2.0 + Alembic · React 18 (Vite + JSX) · Postgres (SQLite in dev) · Docker
 
-**See it work:** [`docs/DEMO.md`](docs/DEMO.md) walks through every feature with no accounts needed (a local fake GitHub and Teams connector stand in), and `scripts/demo_check.sh` runs that walkthrough against a real server on every CI run. **Working on the code:** [`CLAUDE.md`](CLAUDE.md) is the source of truth for architecture, invariants, commands and conventions.
+**See it work:** [`docs/DEMO.md`](docs/DEMO.md) walks through every feature with no accounts needed (a local fake GitHub and Teams connector stand in), and `backend/scripts/demo_check.sh` runs that walkthrough against a real server on every CI run. **Working on the code:** [`CLAUDE.md`](CLAUDE.md) is the source of truth for architecture, invariants, commands and conventions.
 
 ## What it does
 
-- **Collects** short async updates from each member: a web form, or a Teams card in a 1:1 chat. Members sign in with a personal link; each sees only their own team.
+- **Collects** short async updates from each member: a web form, React frontend, or a Teams card in a 1:1 chat. Members sign in with a personal link; each sees only their own team.
 - **Builds one digest per team per day**, at the team's local cutoff, by itself (a scheduler), or on demand.
 - **Summarises faithfully.** Every digest line is a verbatim quote, verified against the stored source before it ships, and links to an evidence page that highlights the exact words. Blockers come first; a blocker filed in the wrong box is moved up and says why; "No blockers today" or "None" is never read as a blocker; a blocker reported again is shown as **Still blocked**, citing both days.
 - **Writes blockers back to GitHub Issues** as structured records: labels plus a `json` block, one issue per blocker, one comment per later day it is reported. Delivery never blocks a digest.
@@ -52,6 +52,13 @@ So collection is not the problem. Collection is solved. The problem is **synthes
 
 **Shared blind spot: the digest is a terminal artifact.** It is produced, posted, forgotten. Nothing in any of these products knows on Wednesday that Monday's blocker is still open.
 
+### Four improvements this project is built around
+
+1. **Blocker lifecycle, not blocker mention.** Each blocker becomes a GitHub Issue, linked from its digest line with its age (`#42 · 3d`). The same blocker on a later day adds a comment rather than a new issue, and the digest lists it under **Still blocked**, citing both days.
+2. **Faithfulness as an enforced invariant, not a prompt instruction.** A validator that runs after every summarizer and drops any claim that fails (strict mode fails the build instead): every claim carries at least one citation; every quote must be a verifiable substring of the immutable source.
+3. **Write-back, not read-only.** Geekbot's explicit weakness, inverted into the core feature.
+4. **Privacy as architecture with a user-facing surface.** Not a policy page. Built today: a hash-chained audit log of reads, a `/me/data` view, and retention purge jobs.
+
 ---
 
 ## Design decisions
@@ -62,21 +69,9 @@ Measured behaviour of summarization systems: **verbatim extraction has a near-ze
 
 So the ordering is deliberate: build the extractive pipeline **and the validator** first, reach 100%-cited output with zero model dependency, then add an AI behind the same protocol where it must clear the **same** validator. The AI improves readability and grouping; it is never trusted to introduce a fact. The system also degrades gracefully — API down, rate-limited, or out of budget, and the digest still ships.
 
-### Three findings that shaped the build
-
-**1. `botbuilder-python` is dead.** Bot Framework SDK v4 for Python stopped being serviced 31 Dec 2025; the repo was **archived 5 Jan 2026**. Nearly every tutorial online still uses it. We use the **Microsoft 365 Agents SDK for Python** (GA, Python 3.10–3.14, Pydantic-validated `Activity` objects, first-party `microsoft-agents-hosting-fastapi` package). Versions are pinned — the surface is about a year old and still moving.
-
-**2. Bot Framework Emulator is dead too — and its replacement de-risks the project.** The **Microsoft 365 Agents Playground** (`npm install -g @microsoft/m365agentsplayground`, then `agentsplayground`) emulates the Teams client and Bot Framework service locally with **no tenant, no tunnel, and no bot registration**, and renders Adaptive Cards with the same renderer Teams uses. The Teams *experience* is therefore buildable and demoable regardless of tenant sideloading policy.
-
-**3. True per-message Teams permalinks are not constructible from a 1:1 bot chat.** Message deep links require a `19:`-form chat ID; Microsoft's docs state that 1:1 bot payloads carry the conversation ID in **`a:xxx`** format. This is a hard constraint, not an unknown.
-
-> **Consequence — the citation contract does not depend on Teams.** Every submission is stored immutably with every identifier Teams gives us, and the canonical citation target is an internal **evidence view** (`GET /evidence/{item_id}`) served by FastAPI. A native permalink is emitted *additionally* when constructible (channel messages). This is the more defensible answer anyway: the evidence store survives Teams retention/deletion, which a permalink does not. It is also tamper-evident: each update's content hash is pinned into the hash-chained audit log at ingestion, and `python -m scripts.verify_integrity` recomputes every hash and fails if any stored text was edited afterwards.
-
 ### Privacy: the legal nuance most implementations miss
 
-Under GDPR, **consent is not a valid lawful basis in an employment context** — the power imbalance means an employee cannot freely refuse. So the design uses **legitimate interest with a documented assessment** (a written assessment, `docs/LIA.md`, is not yet written), plus strict data minimization and purpose limitation. The member-facing opt-in governs **scope** — notably `allow_external_processing`, which gates any future LLM — not participation.
-
-Because workers must be able to see how a tool classified their activity and contest mistakes (GDPR Art. 21, and EU AI Act human-oversight obligations once AI lands), **every digest line should carry a contest/correct action**. That is not built yet; today a member can see everything recorded about them on **My data**.
+Under GDPR, **consent is not a valid lawful basis in an employment context** — the power imbalance means an employee cannot freely refuse. So the design uses **legitimate interest with a documented assessment** (`docs/LIA.md`), plus strict data minimization and purpose limitation.
 
 **Anti-patterns explicitly not implemented** — and defensible from the code, not merely claimed:
 
@@ -90,7 +85,7 @@ Because workers must be able to see how a tool classified their activity and con
 - No retention past the stated window, except the lines a digest quoted, which are the team's record
 - No third-party model sees anyone's text without that person's separate opt-in
 
-Backed by code: the Teams app manifest (`teams/manifest/manifest.json`) requests **zero Microsoft Graph or resource-specific permissions**, which an admin can confirm by reading it and a test asserts. The bot ingests only standup-card submissions in a 1:1 chat. Typed commands there (`standup`, `link`) are answered, and a channel message that @mentions it gets a pointer to the 1:1 chat. Any other message is refused before ingestion and counted as a content-free `scope_violation` row (reason and conversation type only: no text, no sender), with the totals at `GET /scope`. Who a Teams user is comes from a short-lived link code they get from `/me/teams` while signed in, never from a Graph lookup. Also enforced: every page except `/` and `/healthz` requires sign-in through a personal, signed, expiring link (no passwords, no roles); a member sees only their own team's digests and evidence, and another team's resources answer 404 so their existence is not disclosed; who submitted an update comes from the session, never the form, so nobody can file as someone else; and every evidence view is audited under the viewing member's id.
+Backed by code: the Teams app manifest (`backend/teams/manifest/manifest.json`) requests **zero Microsoft Graph or resource-specific permissions**, which an admin can confirm by reading it and a test asserts. The bot ingests only standup-card submissions in a 1:1 chat. Typed commands there (`standup`, `link`) are answered, and a channel message that @mentions it gets a pointer to the 1:1 chat. Any other message is refused before ingestion and counted as a content-free `scope_violation` row (reason and conversation type only: no text, no sender), with the totals at `GET /scope`. Who a Teams user is comes from a short-lived link code they get from `/me/teams` while signed in, never from a Graph lookup. Also enforced: every page except `/` and `/healthz` requires sign-in through a personal, signed, expiring link (no passwords, no roles); a member sees only their own team's digests and evidence, and another team's resources answer 404 so their existence is not disclosed; who submitted an update comes from the session, never the form, so nobody can file as someone else; and every evidence view is audited under the viewing member's id.
 
 ### The faithfulness validator
 
@@ -115,37 +110,69 @@ A blocker's journey, in short: a line filed under Progress that says "stuck" is 
 
 ---
 
+## Repository Structure
+
+- **[`backend/`](backend/)**: Python 3.13 FastAPI backend, SQLAlchemy database models, Alembic migrations, extractive rules summarizer, Microsoft Teams bot adapter, and structured REST JSON API.
+- **[`frontend/`](frontend/)**: Modern React application built with Vite, JSX components, responsive design system, and dark/light mode.
+
+---
+
 ## Getting started
 
+### Quick start (monorepo runner)
+
 ```bash
-git clone https://github.com/RitGos28/status-unblocked.git
-cd status-unblocked
+./run.sh all          # launches backend (:8000) and React frontend (:5173)
+```
+
+Or run each service individually:
+
+### Backend (FastAPI)
+
+```bash
+cd backend
 python3.13 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 cp .env.example .env
-# set STANDUP_SECRET_KEY in .env (required, 32+ chars):
-python -c "import secrets; print(secrets.token_urlsafe(48))"
-
+# Set STANDUP_SECRET_KEY in .env (32+ chars)
 alembic upgrade head
-python -m scripts.seed_demo --days 2   # made-up updates; prints a login link per member and the serve command
+python -m scripts.seed_demo --days 2
 uvicorn standup.main:app --port 8000
 
 # or, all in one: ./run.sh
-# or containerised (Postgres + the API); reads STANDUP_SECRET_KEY from your shell:
+```
+
+### Frontend (React JSX)
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open `http://localhost:5173` in your browser.
+
+### Containerised (Docker Compose)
+
+```bash
+export STANDUP_SECRET_KEY=...
 docker compose up --build
 ```
 
 Open a member's login link to sign in as them. Then follow [`docs/DEMO.md`](docs/DEMO.md).
 
+---
+
 ## Testing
 
 ```bash
-pytest                       # the full suite
+cd backend
+pytest                       # the full suite (266 tests)
 scripts/demo_check.sh        # the demo, end to end, against a real server
-ruff check . && mypy src && lint-imports
+ruff check . && mypy src && PYTHONPATH=src lint-imports
 ```
 
-CI runs these on every pull request: lint, strict types, the import-linter layer contracts, the full suite in strict faithfulness mode with a 90% coverage gate on `summarize/` and `privacy/`, migrations and the integration tests on Postgres, the demo check, and a Docker build. Testing conventions are in CLAUDE.md.
+CI runs these on every pull request: lint, strict types, the import-linter layer contracts, the full suite in strict faithfulness mode with a 90% coverage gate on `summarize/` and `privacy/`, migrations and the integration tests on Postgres, the demo check, a frontend build check, and Docker builds. Testing conventions are in CLAUDE.md.
 
 ---
 

@@ -8,6 +8,9 @@ on:
 jobs:
   checks:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -17,9 +20,7 @@ jobs:
       - run: pip install -e ".[dev]"
       - run: ruff check .
       - run: mypy src
-      # The console script, never "python -m importlinter.cli": the module
-      # form exits 0 without reading pyproject.toml (see CLAUDE.md).
-      - run: lint-imports
+      - run: PYTHONPATH=src lint-imports
       - name: tests (strict faithfulness)
         env:
           STANDUP_VALIDATOR_STRICT: "true"
@@ -31,6 +32,9 @@ jobs:
 
   postgres:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
     services:
       db:
         image: postgres:16-alpine
@@ -62,9 +66,10 @@ jobs:
         run: pytest tests/integration tests/e2e
 
   demo:
-    # docs/DEMO.md, run end to end against a real server: every feature must
-    # stay demoable without external accounts.
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -74,8 +79,22 @@ jobs:
       - run: python -m venv .venv && .venv/bin/pip install -e ".[dev]"
       - run: scripts/demo_check.sh
 
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm ci
+      - run: npm run build
+
   docker:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: docker build -t status-unblocked:ci .
+      - run: docker build -t status-unblocked-backend:ci backend/
+      - run: docker build -t status-unblocked-frontend:ci frontend/
