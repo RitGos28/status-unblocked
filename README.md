@@ -2,8 +2,8 @@
 
 > An async standup bot for distributed teams. Collects short updates through a web form or a Microsoft Teams bot and produces a **faithful, citation-backed** digest each day at the team's cutoff — without becoming a surveillance tool. Each blocker is written back to GitHub Issues as a durable tracked object; see [Roadmap](#roadmap) for what exists today.
 
-**Stack:** Python 3.13 · FastAPI · SQLAlchemy 2.0 + Alembic · Postgres (SQLite in dev) · Docker
-**Status:** Week 1 complete — the walking skeleton runs end to end: submit → digest → click through to the verbatim source, behind per-member sign-in with team-scoped access, from the web form or the Teams bot, with blockers written back to GitHub Issues and the digest built daily at each team's cutoff. 179 tests green. See [Roadmap](#roadmap).
+**Stack:** Python 3.13 · FastAPI · SQLAlchemy 2.0 + Alembic · React 18 (Vite + JSX) · Postgres (SQLite in dev) · Docker
+**Status:** Walking skeleton runs end to end across both backend and the migrated React frontend: submit → digest → click through to the verbatim source, behind per-member sign-in with team-scoped access, from the web form or the Teams bot, with blockers written back to GitHub Issues and the digest built daily at each team's cutoff. 266 tests green. See [Roadmap](#roadmap).
 
 ---
 
@@ -275,24 +275,51 @@ Week 1 covers: normalizer span round-tripping (including a Hypothesis property o
 
 ---
 
+## Repository Structure
+
+- **[`backend/`](backend/)**: Python 3.13 FastAPI backend, SQLAlchemy database models, Alembic migrations, extractive rules summarizer, Microsoft Teams bot adapter, and structured REST JSON API.
+- **[`frontend/`](frontend/)**: Modern React application built with Vite, JSX components, responsive design system, and dark/light mode.
+
+---
+
 ## Getting started
 
+### Quick start (monorepo runner)
+
 ```bash
-git clone https://github.com/RitGos28/status-unblocked.git
-cd status-unblocked
-cp .env.example .env
-# set STANDUP_SECRET_KEY in .env (required, 32+ chars):
-python -c "import secrets; print(secrets.token_urlsafe(48))"
+./run.sh all          # launches backend (:8000) and React frontend (:5173)
+```
 
-# local (SQLite, no containers)
+Or run each service individually:
+
+### Backend (FastAPI)
+
+```bash
+cd backend
+python3.13 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
+cp .env.example .env
+# Set STANDUP_SECRET_KEY in .env (32+ chars)
 alembic upgrade head
-python -m scripts.seed_demo --days 2   # two days of made-up updates; prints a login link per member
+python -m scripts.seed_demo --days 2
 uvicorn standup.main:app --reload
+```
 
-# or containerised (Postgres + the API); reads STANDUP_SECRET_KEY from your shell
+### Frontend (React JSX)
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open `http://localhost:5173` in your browser.
+
+### Containerised (Docker Compose)
+
+```bash
 export STANDUP_SECRET_KEY=...
-docker compose up --build          # the seed's links appear in the logs
+docker compose up --build
 ```
 
 Open a member's login link to sign in as them, then use **Submit update** and **Digests**. `python -m scripts.issue_links` prints fresh links at any time.

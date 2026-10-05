@@ -1,25 +1,29 @@
 #!/bin/sh
+# Start Status Unblocked services (backend / frontend)
 set -eu
 
 cd "$(dirname "$0")"
 
-PYTHON=".venv/bin/python"
-if [ ! -x "$PYTHON" ]; then
-    echo "Missing .venv. Set up the project environment first (see README.md)." >&2
+TARGET="${1:-backend}"
+
+case "$TARGET" in
+  backend)
+    echo "Starting FastAPI backend from backend/..."
+    exec backend/run.sh
+    ;;
+  frontend)
+    echo "Starting React frontend from frontend/..."
+    cd frontend && npm run dev
+    ;;
+  all)
+    echo "Starting both backend and frontend..."
+    backend/run.sh &
+    BACKEND_PID=$!
+    trap 'kill $BACKEND_PID 2>/dev/null || true' EXIT
+    cd frontend && npm run dev
+    ;;
+  *)
+    echo "Usage: ./run.sh [backend|frontend|all]"
     exit 1
-fi
-
-export STANDUP_DATABASE_URL="${STANDUP_DATABASE_URL:-sqlite:///./standup.db}"
-if [ -z "${STANDUP_SECRET_KEY:-}" ]; then
-    SECRET_FILE=".local-secret-key"
-    if [ ! -s "$SECRET_FILE" ]; then
-        (umask 077; $PYTHON -c 'import secrets; print(secrets.token_urlsafe(48))' > "$SECRET_FILE")
-    fi
-    STANDUP_SECRET_KEY="$(cat "$SECRET_FILE")"
-    export STANDUP_SECRET_KEY
-    echo "Using the local signing key in $SECRET_FILE."
-fi
-
-.venv/bin/alembic upgrade head
-$PYTHON -m scripts.seed_demo --with-updates
-exec .venv/bin/uvicorn standup.main:app --app-dir src --host "${HOST:-127.0.0.1}" --port "${PORT:-8000}"
+    ;;
+esac

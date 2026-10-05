@@ -5,10 +5,11 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from starlette.middleware.sessions import SessionMiddleware
 
-from standup.api import auth, digests, evidence, health, me, web_forms
+from standup.api import api_router, auth, digests, evidence, health, me, web_forms
 from standup.config import get_settings
 from standup.db.models import Member
 from standup.db.session import create_all, session_scope
@@ -112,12 +113,26 @@ def create_app() -> FastAPI:
         max_age=settings.login_link_days * 86400,
     )
 
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+        ],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
     app.include_router(health.router)
     app.include_router(auth.router)
     app.include_router(web_forms.router)
     app.include_router(digests.router)
     app.include_router(evidence.router)
     app.include_router(me.router)
+    app.include_router(api_router.router)
     if settings.teams_enabled:
         # Imported only when switched on, so the SDK is not loaded otherwise.
         from standup.api.teams_router import mount_teams

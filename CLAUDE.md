@@ -38,13 +38,21 @@ Docs must not claim more than the code does. If you write "there is a test for X
 
 ---
 
+## Repository Layout
+
+- `backend/`: Python 3.13 FastAPI backend, models, migrations, summarizer, tests, and REST API.
+- `frontend/`: React (Vite + JSX) single-page application.
+
 ## Commands
 
+### Backend commands (run inside `backend/`):
+
 ```bash
+cd backend
 python3.13 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 
-pytest                                    # full suite
+pytest                                    # full suite (266 tests)
 pytest tests/unit                         # fast pass
 pytest tests/e2e -v                       # end-to-end smoke
 pytest tests/unit/test_validator.py       # one file
@@ -55,6 +63,7 @@ pytest --cov=standup --cov-report=term-missing
 ruff check .
 ruff check --fix .
 mypy src                                  # strict; clean as of Phase 1, keep it that way
+PYTHONPATH=src lint-imports
 python -m scripts.verify_integrity        # audit chain + stored-text hashes; exits 1 on tampering
 python -m scripts.tick [--at ISO]         # one scheduler pass: build due digests, notify, drain the outbox
 scripts/demo_check.sh                     # the whole docs/DEMO.md flow against a real server; also a CI job
@@ -65,6 +74,15 @@ python -m scripts.drain_outbox            # retry queued GitHub writes now
 
 alembic revision --autogenerate -m "description"
 alembic upgrade head
+```
+
+### Frontend commands (run inside `frontend/`):
+
+```bash
+cd frontend
+npm install
+npm run dev           # local dev server on :5173
+npm run build         # bundle production React app
 ```
 
 **Coverage gate: >=90% on `summarize/` and `privacy/`.** Those are the modules where a silent regression is a correctness or compliance failure rather than a bug. CI enforces it with `coverage report --fail-under=90 --include='src/standup/summarize/*,src/standup/privacy/*'`; `pyproject.toml` also sets an overall `fail_under = 90`.
