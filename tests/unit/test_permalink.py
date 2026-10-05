@@ -38,3 +38,4 @@ def test_missing_permalinks_are_described_in_plain_words():
         "No link to the original message: activity carried no message id."
     )
     assert describe_missing_permalink(None) == "No link to the original message."
+    assert "spreadsheet" in describe_missing_permalink("csv import: no platform message to link to")

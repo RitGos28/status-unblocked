@@ -1,0 +1,3 @@
+date,team,member,progress,blockers,plan
+2026-10-01,mobile,Dana Park,Profiled the cold start.,Waiting on the signing certificate from IT.,Cut the cold start time.
+2026-10-02,mobile,Dana Park,Cut cold start by 40%.,Waiting on the signing certificate from IT.,Ship the beta build.

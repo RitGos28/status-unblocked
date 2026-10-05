@@ -9,6 +9,7 @@ class SourceKind(StrEnum):
     WEBFORM = "webform"
     TEAMS = "teams"
     CLI = "cli"
+    CSV = "csv"
 
 
 class ItemKind(StrEnum):

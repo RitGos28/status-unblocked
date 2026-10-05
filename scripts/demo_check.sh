@@ -131,6 +131,20 @@ pass "Chen types 'Blockers:' inside Progress; the submission is stored correctly
     --data-urlencode "blockers=None")" = 303 ] || fail "Bruno submits"
 pass "Bruno answers 'None' for blockers and mentions a wait inside Progress"
 
+# --- made-up updates from a spreadsheet: two earlier days for Mobile --------
+D2="$($PY -c 'from datetime import UTC, datetime, timedelta; print((datetime.now(UTC) - timedelta(days=2)).date())')"
+D1="$($PY -c 'from datetime import UTC, datetime, timedelta; print((datetime.now(UTC) - timedelta(days=1)).date())')"
+printf '%s\n' "date,team,member,progress,blockers,plan" \
+    "$D2,mobile,Dana Park,Profiled the cold start.,Waiting on the signing certificate from IT.,Cut the cold start time." \
+    "$D1,mobile,Dana Park,Cut cold start by 40 percent.,Waiting on the signing certificate from IT.,Ship the beta build." \
+    >"$WORK/mobile.csv"
+$PY -m scripts.import_updates_csv "$WORK/mobile.csv" 2>/dev/null | grep -q "imported 2, skipped 0" || fail "two CSV rows import"
+$PY -m scripts.import_updates_csv "$WORK/mobile.csv" 2>/dev/null | grep -q "imported 0, skipped 2" || fail "re-importing the same CSV changes nothing"
+printf '%s\n' "date,team,member,progress,blockers,plan" "$D1,mobile,Nobody,x,," >"$WORK/bad.csv"
+if $PY -m scripts.import_updates_csv "$WORK/bad.csv" >"$WORK/bad.out" 2>/dev/null; then fail "a CSV with a bad row is refused"; fi
+grep -q "line 2: no active member 'Nobody' in team 'mobile'" "$WORK/bad.out" || fail "the refusal names the line and the problem"
+pass "spreadsheet import: two earlier days for Mobile load; re-import changes nothing; a bad row is refused with its line"
+
 # --- the daily build, at the cutoff (demo clock) -----------------------------
 AT="$($PY - <<'EOF'
 from datetime import UTC, datetime, timedelta
@@ -150,8 +164,9 @@ TICK2=$!
 wait "$TICK1" "$TICK2"
 TICK="$(cat "$WORK/tick1.txt") / $(cat "$WORK/tick2.txt")"
 BUILT=$(grep -Eho "built [0-9]+" "$WORK/tick1.txt" "$WORK/tick2.txt" | awk '{s += $2} END {print s}')
-# Core Platform has two days and Mobile one: three digests, each built once.
-[ "$BUILT" = 3 ] || fail "two simultaneous passes build each day's digest exactly once (got: $TICK)"
+# Core Platform has two days and Mobile three (one seeded, two imported):
+# five digests, each built once.
+[ "$BUILT" = 5 ] || fail "two simultaneous passes build each day's digest exactly once (got: $TICK)"
 pass "two scheduler passes at once ($AT) build each digest once; no base URL refuses"
 
 ISSUES="$(curl -s -H 'authorization: Bearer demo-token' "$GH/repos/demo/core/issues?labels=standup-blocker&state=all")"
@@ -244,7 +259,9 @@ pass "20 simultaneous evidence views leave the audit chain intact; an edited upd
 NOTFOUND="$(curl -s -H 'accept: text/html' -b "$WORK/dana.jar" "$BASE/digest/$DIGEST_ID")"
 grep -q "Dana Park" <<<"$NOTFOUND" || fail "the 404 page keeps Dana's signed-in header"
 ! grep -q "$DIGEST_ID" <<<"$NOTFOUND" || fail "the 404 page does not echo the digest id"
-pass "Dana (Mobile) gets 404 on Core Platform's digest and evidence"
+DANA_LIST="$(curl -s -b "$WORK/dana.jar" "$BASE/digests")"
+[ "$(grep -c 'Read digest' <<<"$DANA_LIST")" = 3 ] || fail "Dana sees Mobile's three days, two of them imported"
+pass "Dana (Mobile) gets 404 on Core Platform's digest and evidence, and sees Mobile's three days"
 
 # --- ops and error pages -----------------------------------------------------
 curl -s "$BASE/scope" | grep -q '"scope_violations":1' || fail "/scope counts the one refused channel message"

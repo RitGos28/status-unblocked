@@ -72,8 +72,14 @@ def ingest(
     *,
     permalink: str | None = None,
     permalink_reason: str | None = None,
+    actor_kind: str = "member",
+    actor_id: str | None = None,
 ) -> Update:
-    """Store one submission for ``member`` and return the new ``Update``."""
+    """Store one submission for ``member`` and return the new ``Update``.
+
+    The audit row names who stored it: the member themselves by default, or
+    another actor (a CSV import) when one files updates on members' behalf.
+    """
     if submission.is_empty():
         raise EmptySubmissionError("submission contained no text")
 
@@ -139,8 +145,8 @@ def ingest(
 
     record_audit(
         session,
-        actor_kind="member",
-        actor_id=member.id,
+        actor_kind=actor_kind,
+        actor_id=actor_id or member.id,
         action=AuditAction.UPDATE_INGESTED,
         subject_member_id=member.id,
         # The content hash goes into the hash chain, so editing raw_text later

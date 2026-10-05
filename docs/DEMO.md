@@ -46,6 +46,16 @@ Activities are replayed to the bot as Teams would send them (`scripts/teams_repl
 - As Ada, **Submit update**. The seed already gave her an update today, so this one replaces it in the digest; so does every later one (the earlier ones are kept unedited, because stored text is never rewritten). Double-clicking Submit is safe.
 - On **Digests**, each day also has a **Build digest** (or **Rebuild**) button: anyone on the team can build the digest by hand before the scheduler does. The scheduler still announces it at the cutoff, once.
 
+## 2b. Made-up updates from a spreadsheet
+`docs/sample_updates.csv` shows the format: `date,team,member,progress,blockers,plan` (and an optional `time`, default 09:00). Dates are UTC; `team` is a slug; `member` a display name. Edit the dates to the two days before today, then:
+
+```bash
+python -m scripts.import_updates_csv docs/sample_updates.csv   # "imported 2, skipped 0 unchanged, errors 0"
+python -m scripts.import_updates_csv docs/sample_updates.csv   # again: "imported 0, skipped 2": nothing changes
+```
+
+Every row goes through the same path as the web form, filed on its own date, and is audited as an import (not as Dana). A file with any bad row imports nothing and names each problem by line. Sign in as Dana to see Mobile's days; the evidence page says the update came "via a spreadsheet import".
+
 ## 3. The daily digest, built by the scheduler
 The digest builds itself at each team's cutoff (11:00 UTC for the demo teams). To show it at any hour, run one scheduler pass on a demo clock:
 
@@ -54,7 +64,7 @@ python -m scripts.tick                                   # after 11:00 UTC: the 
 python -m scripts.tick --at <today>T11:06:00Z           # before 11:00 UTC; <today> is today's UTC date
 ```
 
-It reports `built 3 digest(s)`: Core Platform's yesterday and today, and Mobile's today (fewer if you already built one by hand with **Build digest**). Then open **Digests** and today's digest. If you use `--at` with a time earlier than your submissions, the digest's "built" time will read earlier than the updates it contains; that is the demo clock, not the app.
+It reports `built 3 digest(s)`: Core Platform's yesterday and today, and Mobile's today; `built 5` if you imported Mobile's two earlier days in 2b (fewer if you already built one by hand with **Build digest**). Then open **Digests** and today's digest. If you use `--at` with a time earlier than your submissions, the digest's "built" time will read earlier than the updates it contains; that is the demo clock, not the app.
 
 Run it again, or twice at once: nothing is built twice and no one is told twice, because only one pass may run at a time (a database lease) and each cycle is announced once. Run it with `STANDUP_BASE_URL` unset and it refuses, because its links go into GitHub issues and Teams messages.
 
