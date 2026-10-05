@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.sessions import SessionMiddleware
 
 from standup.api import auth, digests, evidence, health, me, web_forms
@@ -37,6 +38,34 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     if scheduler is not None:
         scheduler.cancel()
     log.info("app.stopped")
+
+
+_FRAMEWORK_ERRORS = {
+    404: ("Not found", "There is no page at this address."),
+    405: ("Not allowed", "This address does not accept that kind of request."),
+}
+
+
+def _error_response(
+    request: Request, status: int, title: str, detail: str, kind: str
+) -> Response:
+    """RFC-9457 problem+json, so clients get a machine-readable shape.
+
+    A browser asking for HTML gets the same status as a readable page, with
+    the signed-in header kept. problem+json stays the default for API clients.
+    """
+    if "text/html" in request.headers.get("accept", ""):
+        return templates.TemplateResponse(
+            request=request,
+            name="error.html",
+            context={"title": title, "detail": detail, "viewer": _viewer(request)},
+            status_code=status,
+        )
+    return JSONResponse(
+        status_code=status,
+        media_type="application/problem+json",
+        content={"type": f"about:blank#{kind}", "title": title, "status": status, "detail": detail},
+    )
 
 
 def _viewer(request: Request) -> Member | None:
@@ -77,28 +106,18 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(StandupError)
     async def handle_standup_error(request: Request, exc: StandupError) -> Response:
-        """RFC-9457 problem+json, so clients get a machine-readable shape.
-
-        A browser asking for HTML gets the same status as a readable page
-        instead of raw JSON. problem+json stays the default for API clients.
-        """
-        if "text/html" in request.headers.get("accept", ""):
-            return templates.TemplateResponse(
-                request=request,
-                name="error.html",
-                context={"title": exc.title, "detail": str(exc), "viewer": _viewer(request)},
-                status_code=exc.status_code,
-            )
-        return JSONResponse(
-            status_code=exc.status_code,
-            media_type="application/problem+json",
-            content={
-                "type": f"about:blank#{type(exc).__name__}",
-                "title": exc.title,
-                "status": exc.status_code,
-                "detail": str(exc),
-            },
+        return _error_response(
+            request, exc.status_code, exc.title, str(exc), type(exc).__name__
         )
+
+    @app.exception_handler(StarletteHTTPException)
+    async def handle_http_error(request: Request, exc: StarletteHTTPException) -> Response:
+        """The framework's own errors (unknown URL, wrong method) get the same
+        treatment as ours, instead of raw {"detail": "Not Found"} JSON."""
+        title, detail = _FRAMEWORK_ERRORS.get(
+            exc.status_code, ("Error", str(exc.detail))
+        )
+        return _error_response(request, exc.status_code, title, detail, f"HTTP{exc.status_code}")
 
     settings = get_settings()
     # Signed cookie holding only the member id. Lax, so a login link opened

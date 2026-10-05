@@ -10,10 +10,12 @@ at any hour (the demo uses it; production cron never should).
 
 import argparse
 import asyncio
+import sys
 from datetime import UTC, datetime
 
 from standup.config import get_settings
 from standup.deps import set_clock
+from standup.domain.errors import ConfigurationError
 from standup.domain.models import FakeClock
 from standup.scheduling.jobs import DigestNotifier, run_once
 
@@ -36,7 +38,11 @@ def main() -> None:
         from standup.api.teams_router import build_teams_notifier
 
         notifier = build_teams_notifier()
-    report = asyncio.run(run_once(notifier))
+    try:
+        report = asyncio.run(run_once(notifier))
+    except ConfigurationError as exc:
+        print(f"tick: {exc}", file=sys.stderr)
+        raise SystemExit(2) from None
     print(
         f"built {len(report.built)} digest(s), notified {report.notified}, "
         f"notify failures {report.notify_failures}, tracker writes {report.drained}, "
