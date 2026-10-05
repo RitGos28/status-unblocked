@@ -13,6 +13,8 @@ import asyncio
 import sys
 from datetime import UTC, datetime
 
+from pydantic import ValidationError
+
 from standup.config import get_settings
 from standup.deps import set_clock
 from standup.domain.errors import ConfigurationError
@@ -32,7 +34,13 @@ def main() -> None:
     if args.at is not None:
         set_clock(FakeClock(current=args.at))
 
-    settings = get_settings()
+    try:
+        settings = get_settings()
+    except ValidationError as exc:
+        # One line per problem, not a traceback: this is a configuration error.
+        for error in exc.errors():
+            print(f"tick: {error['msg'].removeprefix('Value error, ')}", file=sys.stderr)
+        raise SystemExit(2) from None
     notifier: DigestNotifier | None = None
     if settings.teams_enabled:
         from standup.api.teams_router import build_teams_notifier

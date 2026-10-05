@@ -67,7 +67,7 @@ python -m scripts.tick --at <today>T11:06:00Z           # before 11:00 UTC; <tod
 
 It reports `built 3 digest(s)`: Core Platform's yesterday and today, and Mobile's today; `built 5` if you imported Mobile's two earlier days in 2b (fewer if you already built one by hand with **Build digest**). Then open **Digests** and today's digest. If you use `--at` with a time earlier than your submissions, the digest's "built" time will read earlier than the updates it contains; that is the demo clock, not the app.
 
-Run it again, or twice at once: nothing is built twice and no one is told twice, because only one pass may run at a time (a database lease) and each cycle is announced once. Run it with `STANDUP_BASE_URL` unset and it refuses, because its links go into GitHub issues and Teams messages.
+Run it again, or twice at once: nothing is built twice and no one is told twice, because only one pass may run at a time (a database lease) and each cycle is announced once. Run it with `STANDUP_BASE_URL` unset, or set to something that is not an absolute http(s) URL (`localhost:8000`), and it refuses in one line, because its links go into GitHub issues and Teams messages.
 
 ## 4. What the digest shows
 - **Still blocked comes first.** Ada reported "Waiting on staging credentials from infra." yesterday and again today, so it is under **Still blocked**, with "Also reported on <yesterday>, and still open." It is today's words, verbatim, and it has two **source** links: today's and yesterday's.
