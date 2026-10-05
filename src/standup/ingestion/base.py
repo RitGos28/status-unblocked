@@ -9,6 +9,7 @@ This is what makes Teams optional: if a tenant blocks sideloading, the web
 adapter still exercises the entire pipeline.
 """
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Protocol
@@ -41,3 +42,18 @@ class IngestionAdapter(Protocol):
     source_kind: SourceKind
 
     def to_raw_submission(self, payload: Any) -> RawSubmission: ...
+
+
+# The three answers every source collects, by the field name each adapter
+# reads (form field, card input id, CSV column). One map, so renaming a field
+# in one place cannot silently drop every blocker in another.
+FORM_FIELDS: dict[str, ItemKind] = {
+    "progress": ItemKind.PROGRESS,
+    "blockers": ItemKind.BLOCKER,
+    "plan": ItemKind.PLAN,
+}
+
+
+def text_fields_from(values: Mapping[str, Any]) -> dict[ItemKind, str]:
+    """Map raw source values to the three standup fields, as stripped-or-empty strings."""
+    return {kind: str(values.get(name, "") or "") for name, kind in FORM_FIELDS.items()}

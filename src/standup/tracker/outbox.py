@@ -29,6 +29,7 @@ from standup.db.models import (
     UpdateItem,
 )
 from standup.domain.enums import AuditAction, ClaimKind
+from standup.domain.urls import digest_url
 from standup.logging_conf import get_logger
 from standup.privacy.audit import record_audit
 from standup.tracker.base import TrackerAdapter, TrackerError
@@ -97,7 +98,7 @@ def enqueue_blocker_issues(
                     "author": claim.member_name,
                     "date": cycle.local_date.isoformat(),
                     "evidence_url": citation.get("evidence_url", ""),
-                    "digest_url": f"{base}/digest/{digest.id}",
+                    "digest_url": digest_url(base, digest.id),
                 },
             )
         )

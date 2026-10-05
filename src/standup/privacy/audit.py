@@ -17,9 +17,10 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
-from sqlalchemy.sql.expression import Executable
 
+from standup.db.upsert import insert_ignoring_conflict
 from standup.domain.enums import AuditAction
+from standup.domain.text import content_sha256
 
 if TYPE_CHECKING:
     from standup.db.models import AuditLog
@@ -79,28 +80,7 @@ def _lock_chain(session: Session) -> None:
     """
     from standup.db.models import AuditChainHead
 
-    dialect = session.get_bind().dialect.name
-    create_head: Executable
-    if dialect == "postgresql":
-        from sqlalchemy.dialects.postgresql import insert as pg_insert
-
-        create_head = (
-            pg_insert(AuditChainHead)
-            .values(id=1, seq=0)
-            .on_conflict_do_nothing(index_elements=["id"])
-        )
-    elif dialect == "sqlite":
-        from sqlalchemy.dialects.sqlite import insert as sqlite_insert
-
-        create_head = (
-            sqlite_insert(AuditChainHead)
-            .values(id=1, seq=0)
-            .on_conflict_do_nothing(index_elements=["id"])
-        )
-    else:
-        raise RuntimeError(f"audit chain locking is not implemented for {dialect!r}")
-
-    session.execute(create_head)
+    insert_ignoring_conflict(session, AuditChainHead, {"id": 1, "seq": 0}, ["id"])
     session.execute(
         update(AuditChainHead).where(AuditChainHead.id == 1).values(seq=AuditChainHead.seq + 1)
     )
@@ -213,7 +193,7 @@ def verify_evidence(session: Session) -> list[str]:
     for stored in session.execute(select(Update)).scalars():
         if stored.raw_text is None:
             continue
-        actual = hashlib.sha256(stored.raw_text.encode("utf-8")).hexdigest()
+        actual = content_sha256(stored.raw_text)
         if pinned.get(stored.id) != actual:
             tampered.append(stored.id)
     return tampered

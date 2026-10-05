@@ -10,13 +10,13 @@ only *finds boundaries*. Anything that would alter characters happens later and
 carries its own offsets.
 """
 
-import hashlib
 import re
 import unicodedata
 from dataclasses import dataclass
 
 from standup.domain.enums import ItemKind
 from standup.domain.errors import SpanDriftError
+from standup.domain.text import content_sha256
 from standup.ingestion.base import RawSubmission
 
 # Order matters: it is the order fields appear in the composed raw text.
@@ -171,7 +171,7 @@ def _segment(block_text: str, block_offset: int) -> list[tuple[str, int, int]]:
 def normalize(submission: RawSubmission) -> NormalizedUpdate:
     """Compose the raw text and split it into items with verified spans."""
     raw_text, block_starts = _compose(submission)
-    digest = hashlib.sha256(raw_text.encode("utf-8")).hexdigest()
+    digest = content_sha256(raw_text)
 
     items: list[NormalizedItem] = []
     order = 0

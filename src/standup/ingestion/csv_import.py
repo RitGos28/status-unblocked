@@ -20,13 +20,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from standup.db.models import Member, StandupCycle, Team, Update
-from standup.domain.enums import ItemKind, SourceKind
+from standup.domain.enums import SourceKind
 from standup.domain.timezones import local_cycle_date
-from standup.ingestion.base import RawSubmission
+from standup.ingestion.base import FORM_FIELDS, RawSubmission, text_fields_from
 from standup.ingestion.normalizer import normalize
 from standup.ingestion.service import ingest
 
-REQUIRED = ("date", "team", "member", "progress", "blockers", "plan")
+REQUIRED = ("date", "team", "member", *FORM_FIELDS)
 DEFAULT_TIME = time(9, 0)
 
 
@@ -109,11 +109,7 @@ def _validate(
         errors.append(f"line {line}: no active member {value('member')!r} in team {team.slug!r}")
         return None
 
-    fields = {
-        ItemKind.PROGRESS: value("progress"),
-        ItemKind.BLOCKER: value("blockers"),
-        ItemKind.PLAN: value("plan"),
-    }
+    fields = text_fields_from({name: value(name) for name in FORM_FIELDS})
     if not any(fields.values()):
         errors.append(f"line {line}: progress, blockers and plan are all empty")
         return None

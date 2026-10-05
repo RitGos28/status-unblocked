@@ -10,6 +10,12 @@ from datetime import UTC, date, datetime, time
 from zoneinfo import ZoneInfo
 
 
+def as_utc(value: datetime) -> datetime:
+    """An aware UTC datetime. Naive values are UTC already: SQLite returns
+    stored timestamps without their zone, and every stored timestamp is UTC."""
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+
+
 def local_cycle_date(now: datetime, tz_name: str) -> date:
     """The team-local calendar date that ``now`` falls on."""
     return now.astimezone(ZoneInfo(tz_name)).date()

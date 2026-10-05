@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from standup.config import get_settings
 from standup.domain.enums import AuditAction, ClaimKind, CycleState, ItemKind
 from standup.domain.errors import NotFoundError, ValidationFailure
+from standup.domain.urls import evidence_url
 from standup.logging_conf import get_logger
 from standup.privacy.audit import record_audit
 from standup.summarize.base import (
@@ -35,10 +36,6 @@ log = get_logger(__name__)
 
 # How far back a blocker counts as "reported before" for carry-over.
 CARRYOVER_DAYS = 7
-
-
-def evidence_url(base_url: str, item_id: str) -> str:
-    return f"{base_url.rstrip('/')}/evidence/{item_id}"
 
 
 def build_request(session: Session, cycle_id: str, base_url: str) -> SummaryRequest:
