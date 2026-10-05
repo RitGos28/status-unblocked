@@ -45,7 +45,7 @@ Only part of each is built today; the Roadmap says which.
 1. **Blocker lifecycle, not blocker mention.** Each blocker becomes a GitHub Issue, linked from its digest line with its age (`#42 · 3d`). The same blocker on a later day adds a comment rather than a new issue, and the digest lists it under **Still blocked**, citing both days. *(Not yet: syncing the issue's open/closed state back into the digest.)* This automates the manual ritual teams converge on — a rotating owner spending three minutes a day checking yesterday's blockers.
 2. **Faithfulness as an enforced invariant, not a prompt instruction.** A validator that runs after every summarizer and drops any claim that fails (strict mode fails the build instead): every claim carries at least one citation; every quote must be a verifiable substring of the immutable source. Incumbents ship AI summaries with no provenance at all.
 3. **Write-back, not read-only.** Geekbot's explicit weakness, inverted into the core feature.
-4. **Privacy as architecture with a user-facing surface.** Not a policy page. Built today: a hash-chained audit log of reads. Planned for week 4: a `/me/data` view, redaction, retention jobs, and a **contest/correct** action on any digest line.
+4. **Privacy as architecture with a user-facing surface.** Not a policy page. Built: a hash-chained audit log of reads that the person it is about can read on **My data** (`/me/data`, including who opened their updates), a JSON export of all their data (`/me/export`), and retention that removes stored submissions after the team's period while digests stay readable. Planned: redaction, consent for external processing, member-initiated deletion, and a contest/correct action on digest lines.
 
 ---
 
@@ -261,7 +261,7 @@ Layout today: `tests/{unit,integration,e2e}/`. Stack: pytest · FastAPI `TestCli
 Run them:
 
 ```bash
-pytest                      # everything (278 tests, a few seconds)
+pytest                      # everything (282 tests, a few seconds)
 pytest tests/unit           # fast unit pass
 pytest tests/e2e -v         # end-to-end smoke
 pytest --cov=standup --cov-report=term-missing
@@ -273,7 +273,7 @@ python -m scripts.verify_integrity   # audit chain + stored-text hashes
 
 CI (`.github/workflows/ci.yml`) runs all of the above with `STANDUP_VALIDATOR_STRICT=true`, gates `summarize/` and `privacy/` at 90% coverage, runs migrations plus the integration and e2e tests against Postgres 16, and builds the Docker image.
 
-Current: **278 passing, 97% coverage overall.** The gate that matters is `summarize/` and `privacy/` at >=90% — those are the modules where a silent regression is a correctness or compliance failure rather than a bug. `normalizer.py`, `summarize/base.py`, `logging_conf.py` and `main.py` sit at 100%; `validator.py` at 99%.
+Current: **282 passing, 97% coverage overall.** The gate that matters is `summarize/` and `privacy/` at >=90% — those are the modules where a silent regression is a correctness or compliance failure rather than a bug. `normalizer.py`, `summarize/base.py`, `logging_conf.py` and `main.py` sit at 100%; `validator.py` at 99%.
 
 > `lint-imports` must be run as the console script. `python -m importlinter.cli` exits 0 *without reading* `pyproject.toml`, so it reports success while enforcing nothing — confirmed by adding a deliberate boundary violation and watching it pass.
 

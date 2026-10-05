@@ -168,12 +168,12 @@ src/standup/
   config.py        pydantic-settings, STANDUP_ prefix
   deps.py          DI: get_db, get_clock, get_summarizer; Jinja templates
   logging_conf.py  structlog + secret scrubbing
-  api/             health (+ /scope), auth, me, web_forms, evidence, digests, teams_router
+  api/             health (+ /scope), auth, me (/me/teams, /me/data, /me/export), web_forms, evidence, digests, teams_router
   auth/            tokens (signed, expiring per-member login links)
   domain/          enums, errors, models (Clock, SystemClock, FakeClock), timezones   (pure, zero I/O)
   ingestion/       base, web_adapter, teams_adapter (+ scope gate, card), permalink, normalizer, service (the one ingest() path)
   summarize/       base, rules, validator, render, service
-  privacy/         audit  (hash-chained log)
+  privacy/         audit (hash-chained log), retention (purge past team.retention_days)
   tracker/         base (TrackerAdapter protocol), github, noop, idempotency, outbox
   scheduling/      tick (pure: what is due), jobs (runs it under the `scheduler` lease, in worker threads: build, notify once per cycle via `notified_at`, drain)
   db/              models, session
@@ -183,7 +183,7 @@ src/standup/
 
 Planned but **not yet written** — do not import these, and do not assume they exist:
 
-`api/privacy.py`, `api/admin.py`, `summarize/llm.py`, `summarize/prompts.py`, the tracker reconcile job, proactive "time to file" prompts, and `privacy/{consent,visibility,redaction,retention,export}.py`.
+`api/privacy.py`, `api/admin.py`, `summarize/llm.py`, `summarize/prompts.py`, the tracker reconcile job, proactive "time to file" prompts, `privacy/{consent,visibility,redaction}.py`, and member-initiated deletion (`/me/delete`). (Export exists as `/me/export` in `api/me.py`; retention as `privacy/retention.py`.)
 
 **Auth is per-member magic links, and team scoping is enforced.** `deps.CurrentMember` resolves the signed-in member from the session cookie (401 otherwise). Every route that touches a team's data checks `deps.ensure_same_team()`, which answers 404 for another team's resources. A new route that reads digests, evidence or updates must do the same.
 
@@ -209,7 +209,7 @@ Wanting to import a SQLAlchemy model into `summarize/` is the signal you are abo
 
 1. **The validator runs after the summarizer, never inside one.** `service.py` calls `summarize()` then `validate()`. A summarizer must never call the validator itself, or the check becomes bypassable by the next implementation.
 
-2. **`update.raw_text` and `raw_payload_json` are immutable.** Written once at ingestion. Retention nulls them; nothing else touches them. Every citation's verifiability rests on this.
+2. **`update.raw_text` and `raw_payload_json` are immutable.** Written once at ingestion. Retention (`privacy/retention.purge_expired`, run by the scheduler per `team.retention_days`) nulls them; nothing else touches them. The quoted lines (`UpdateItem.text`, digest citations) stay, so digests remain readable and verifiable. Every citation's verifiability rests on this.
 
 3. **Character offsets are real offsets.** `raw_text[span_start:span_end] == item.text` must hold. If you normalize or strip text, adjust the offsets. There is a Hypothesis property over arbitrary text guarding this.
 

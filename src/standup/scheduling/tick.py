@@ -10,7 +10,8 @@ The rules, once a cycle's cutoff has passed and it has updates:
 - notify the team exactly once per cycle, whenever it has not been notified
   yet: with the first scheduled build, or on its own when someone already
   built the digest by hand before the cutoff;
-- and on every tick, drain the tracker outbox so retries run without a build.
+- and on every tick, apply retention and drain the tracker outbox (so
+  retries run without a build).
 """
 
 from dataclasses import dataclass
@@ -43,11 +44,16 @@ class NotifyDigest:
 
 
 @dataclass(frozen=True)
+class PurgeExpired:
+    """Remove stored submissions past their team's retention period."""
+
+
+@dataclass(frozen=True)
 class DrainOutbox:
     pass
 
 
-Job = BuildDigest | NotifyDigest | DrainOutbox
+Job = BuildDigest | NotifyDigest | PurgeExpired | DrainOutbox
 
 
 def tick(now: datetime, cycles: list[CycleView]) -> list[Job]:
@@ -62,5 +68,6 @@ def tick(now: datetime, cycles: list[CycleView]) -> list[Job]:
             jobs.append(BuildDigest(cycle.cycle_id, notify=not cycle.notified))
         elif not cycle.notified:
             jobs.append(NotifyDigest(cycle.cycle_id))
+    jobs.append(PurgeExpired())
     jobs.append(DrainOutbox())
     return jobs
