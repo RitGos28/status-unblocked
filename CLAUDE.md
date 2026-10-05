@@ -144,7 +144,7 @@ Tests and invariants refer to these by number. Defined in the `validator.py` doc
 
 ### The two seams that matter
 
-**`ingestion/base.py` — `RawSubmission`.** Every source normalises to this. The web form is one adapter; `TeamsAdapter` is the second (written, but no route serves it yet). Everything downstream is platform-agnostic, which is what makes Teams *optional* — if a tenant blocks sideloading, the web adapter still exercises the entire pipeline.
+**`ingestion/base.py` — `RawSubmission`.** Every source normalises to this. The web form, `TeamsAdapter` (served by `api/teams_router.py`) and the CSV importer (`ingestion/csv_import.py`) are the adapters; all three end in `ingestion/service.ingest()`. Everything downstream is platform-agnostic, which is what makes Teams *optional* — if a tenant blocks sideloading, the web adapter still exercises the entire pipeline.
 
 **`summarize/base.py` — `SummaryRequest`.** The entire input surface of any summarizer. No ORM objects, no session, no emails, no unredacted text. When the LLM implementation lands, whatever crosses this line is what leaves the building, so keeping it narrow is cheaper than auditing a prompt builder that can reach anywhere.
 
@@ -191,7 +191,7 @@ Planned but **not yet written** — do not import these, and do not assume they 
 
 ## The dependency rule
 
-Partly enforced by import-linter. `pyproject.toml` has four contracts: `domain` is pure; the summarizer core (`base/rules/validator/render`) is pure; and `microsoft_agents` may be imported directly only by `api/teams_router.py` and `ingestion/teams_adapter.py` (invariant 9; `include_external_packages = true` makes that checkable); and `scheduling.tick` imports nothing that does I/O. Neither contract forbids `standup.deps`, `standup.main` or `standup.logging_conf`, so check those imports by eye.
+Partly enforced by import-linter. `pyproject.toml` has four contracts: `domain` is pure; the summarizer core (`base/rules/validator/render`) is pure; and `microsoft_agents` may be imported directly only by `api/teams_router.py` and `ingestion/teams_adapter.py` (invariant 9; `include_external_packages = true` makes that checkable); and `scheduling.tick` imports nothing that does I/O. No contract forbids `standup.deps`, `standup.main` or `standup.logging_conf`, so check those imports by eye.
 
 | Layer | May import |
 |---|---|
@@ -241,7 +241,7 @@ Wanting to import a SQLAlchemy model into `summarize/` is the signal you are abo
 - **No network.** `respx` mocks the GitHub API in tracker tests. The one exception is `@pytest.mark.live_github`, a read-only test skipped unless `STANDUP_LIVE_GITHUB_TOKEN` and `STANDUP_LIVE_GITHUB_REPO` are set.
 - **Teams is tested from fixtures in `tests/fixtures/teams/`**, loaded with `tests/teams_fixtures.activity(name)`. They are hand-written today; replace them with Agents Playground recordings when available, keeping the names. Bot tests drive `StandupAgent.on_turn` with a `FakeTurnContext`, so they need no network.
 - **Keep pydantic >= 2.11.** The Agents SDK's models rely on `validate_by_name`; on 2.10 its own constructors fail. `tests/unit/test_teams_sdk_compat.py` guards this.
-- **The validator suite is parametrized over every summarizer implementation.** When you add one, add it to that list — do not write it a softer test.
+- **The summarizer-facing validator tests run against every summarizer implementation.** `tests/unit/test_validator.py` parametrizes them (`@pytest.mark.parametrize("summarizer", ...)`); a new summarizer goes into that list and gets no softer test. Most validator tests exercise the validator directly and are summarizer-independent.
 - Tests run on a throwaway SQLite file by default. Set `STANDUP_TEST_DATABASE_URL` to a Postgres URL to run them there (CI does, for `tests/integration` and `tests/e2e`); each test then creates and drops its tables.
 - `tests/e2e/test_smoke_cycle.py` is the regression net; `scripts/demo_check.sh` is the demo, run in CI. **Every feature must be demoable without accounts:** a new feature adds its steps to `docs/DEMO.md` and `scripts/demo_check.sh` in the same change.
 - Two test doubles carry most of the weight: `HallucinatingSummarizer` (fluent, plausible, entirely unsourced — must be rejected 100%) and Hypothesis mutation properties (shift an offset by one, swap a source id, inject a digit — every mutation must be caught).
@@ -252,7 +252,7 @@ Ruff excludes `src/standup/migrations/versions/` — Alembic writes those.
 
 ## Secrets and config
 
-- `SecretStr` for every credential, declared as a required field so startup fails naming all missing keys. Today `config.py` has no credentials and every setting has a default; the first secrets (Teams app ID/secret, GitHub token) must follow this rule.
+- `SecretStr` for every credential. `config.py` requires `STANDUP_SECRET_KEY` (32+ chars); `STANDUP_GITHUB_TOKEN` becomes required with `STANDUP_TRACKER=github`, the three Teams `CONNECTIONS__…` keys with `STANDUP_TEAMS_ENABLED=true` (unless anonymous Playground mode, which is refused outside `local`/`test`), and `STANDUP_BASE_URL` with `STANDUP_SCHEDULER=true`. Startup names every missing key at once. Alembic reads only `DatabaseSettings`, so migrations need no secrets.
 - `.env` is gitignored; **`.env.example` must stay complete** — every key present, no values.
 - `logging_conf.py` scrubs sensitive key names and secret-shaped values (GitHub tokens, AWS keys, JWTs) from every log line. `tests/unit/test_logging.py` asserts a known secret never reaches the stream. It also redacts `/login/<token>` from uvicorn's access log (`RedactLoginTokens`), since a login link is a credential.
 
@@ -266,6 +266,14 @@ Ruff excludes `src/standup/migrations/versions/` — Alembic writes those.
 - Errors surface as RFC-9457 `application/problem+json` via the handler in `main.py`.
 
 ---
+
+## Unverified against real accounts
+
+Built and tested against fakes; confirm when real accounts are available:
+- The Teams `manifestVersion` (1.17) against a tenant; the toolkit changelog says 1.23 is current.
+- Whether a tenant ever sends a `19:`-form chat id in a 1:1 bot payload (the design assumes not; `ingestion/permalink.py` handles both).
+- GitHub's current REST rate limits for a fine-grained token (the client honours `retry-after` and `x-ratelimit-remaining`; `@pytest.mark.live_github` is read-only).
+- Activity fixtures in `tests/fixtures/teams/` are hand-written, not recorded from Agents Playground.
 
 ## When in doubt
 
