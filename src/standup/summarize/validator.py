@@ -31,9 +31,6 @@ from standup.domain.enums import ClaimKind
 from standup.summarize.base import Claim, SourceDoc, SummaryRequest, SummaryResult
 from standup.summarize.rules import classify
 
-# Derived values a claim may state without them appearing verbatim in a source.
-DERIVED_METRICS = frozenset({"days_open", "source_count"})
-
 _NUMBER = re.compile(r"\b\d+(?:[.,]\d+)?\b")
 
 

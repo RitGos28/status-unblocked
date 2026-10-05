@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-Problem framing, competitive analysis, and the 4-week roadmap live in [`README.md`](./README.md). This file is the operating rules and the architecture map. The original hackathon brief is in [`projectstatement.txt`](./projectstatement.txt); its three "enterprise-grade" bullets are the graded requirements named at the bottom of this file.
+Problem framing, competitive analysis, design decisions and what is not built yet live in [`README.md`](./README.md); the demo is [`docs/DEMO.md`](./docs/DEMO.md). This file is the operating rules and the architecture map, and the source of truth for the code. The original hackathon brief is in [`projectstatement.txt`](./projectstatement.txt); its three "enterprise-grade" bullets are the graded requirements named at the bottom of this file.
 
 ---
 
@@ -28,7 +28,7 @@ A meaningful change is a coherent unit that leaves the tree working — a module
 
 Before each push:
 
-1. Update `README.md` if behaviour, endpoints, setup, or roadmap status changed
+1. Update `README.md` if behaviour, setup, or what is built changed, and `docs/DEMO.md` plus `scripts/demo_check.sh` if a feature changed
 2. Update this file if a convention, invariant, or command changed
 3. Update `.env.example` if a setting was added
 4. Run `pytest` and `ruff check .` — do not push a red tree
@@ -54,14 +54,17 @@ pytest --cov=standup --cov-report=term-missing
 
 ruff check .
 ruff check --fix .
-mypy src                                  # strict; clean as of Phase 1, keep it that way
+mypy src                                  # strict; keep it clean
 python -m scripts.verify_integrity        # audit chain + stored-text hashes; exits 1 on tampering
 python -m scripts.tick [--at ISO]         # one scheduler pass: build due digests, notify, drain the outbox
 scripts/demo_check.sh                     # the whole docs/DEMO.md flow against a real server; also a CI job
 python -m scripts.fake_github             # local GitHub Issues API stand-in (demo; STANDUP_GITHUB_API_URL)
 python -m scripts.fake_teams_connector    # local stand-in for Teams; records what the bot sends
 python -m scripts.teams_replay <fixture>  # post a tests/fixtures/teams activity to /api/messages
-python -m scripts.drain_outbox            # retry queued GitHub writes now
+python -m scripts.drain_outbox            # deliver due GitHub writes now (failed ones wait out their backoff)
+python -m scripts.faithfulness_demo       # the validator on a real day: real lines pass, 7 bad claims are withheld
+python -m scripts.import_updates_csv FILE # load dated updates from a CSV (all or nothing)
+python -m scripts.set_github_repo --team core --repo owner/name   # also requeues this week's skipped blockers
 
 alembic revision --autogenerate -m "description"
 alembic upgrade head
@@ -91,7 +94,7 @@ This enforces the prompt boundary, so it is worth getting right:
 lint-imports
 ```
 
-Two traps, both hit during week 1:
+Two traps, both hit early on:
 
 - **`python -m importlinter.cli` exits 0 without reading `pyproject.toml`.** It reports success while enforcing nothing. Verified by adding a deliberate violation and watching it pass. Only the console script works.
 - If `lint-imports` is "not found", the console script is not on PATH (on the original Windows setup it lived under `.../Python313/Scripts/lint-imports.exe`; in a venv it is `.venv/bin/lint-imports`). Use the full path rather than falling back to the module form.
@@ -103,22 +106,27 @@ Two traps, both hit during week 1:
 One request path carries the whole design. Follow it once and the layering makes sense:
 
 ```
-POST /submit                         api/web_forms.py
+POST /submit                         api/web_forms.py   (Teams card, CSV rows: same from here)
   -> WebFormAdapter.to_raw_submission()     ingestion/web_adapter.py
        produces RawSubmission               ingestion/base.py      <-- the source-agnostic seam
-  -> normalize()                            ingestion/normalizer.py
-       composes raw_text, splits into UpdateItems with char offsets
-  -> persisted as Update + UpdateItem[]     db/models.py
-  -> record_audit()                         privacy/audit.py
+  -> ingest()                               ingestion/service.py   <-- the one ingestion path
+       locks the member, finds/creates the day's cycle, supersedes earlier updates
+     -> normalize()                         ingestion/normalizer.py
+          composes raw_text, splits into UpdateItems with char offsets
+     -> persisted as Update + UpdateItem[]  db/models.py
+     -> record_audit() with content_sha256  privacy/audit.py
 
-POST /digests/build/{cycle_id}       api/digests.py
-  -> build_request()                        summarize/service.py
-       maps ORM rows -> SourceDoc[]         <-- the prompt boundary; ORM stops here
-  -> Summarizer.summarize()                 summarize/rules.py
-       emits Claims whose text IS a verbatim span
-  -> FaithfulnessValidator.validate()       summarize/validator.py
-       failing claims are DROPPED, counted as withheld
-  -> render_markdown() + persist Digest/DigestClaim
+POST /digests/build/{cycle_id}       api/digests.py   (or the scheduler: scheduling/jobs.py)
+  -> build_digest()                         summarize/service.py
+       locks the day (build_seq); same inputs -> same digest
+     -> build_request()
+          maps ORM rows -> SourceDoc[]      <-- the prompt boundary; ORM stops here
+     -> Summarizer.summarize()              summarize/rules.py
+          emits Claims whose text IS a verbatim span
+     -> FaithfulnessValidator.validate()    summarize/validator.py
+          failing claims are DROPPED, counted as withheld
+     -> render_markdown() + persist Digest/DigestClaim
+     -> enqueue_blocker_issues()            tracker/outbox.py   (delivered later by drain())
 ```
 
 Teams enters at the same seam. `POST /api/messages` (`api/teams_router.py`, mounted only when `STANDUP_TEAMS_ENABLED=true`) runs `StandupAgent.on_turn`: `classify_scope()` (in `ingestion/teams_adapter.py`) decides whether an activity is a 1:1 card submit, a 1:1 command, a channel @mention, an ignorable system event, or out of scope. A card submit becomes a `RawSubmission` via `TeamsAdapter` and goes through the same `ingest()`. The member comes from `Member.teams_aad_id`, set by `link <code>` with a code from `/me/teams`. Out-of-scope messages become content-free `IngestRejection` rows, counted at `GET /scope`.
@@ -127,22 +135,9 @@ Local bot testing: `STANDUP_TEAMS_ENABLED=true` plus `CONNECTIONS__SERVICE_CONNE
 
 ### Validator rules
 
-Tests and invariants refer to these by number. Defined in the `validator.py` docstring; README has the full table.
+Tests and invariants refer to the rules by number: V1 citation present, V2 known source, V3 quote matches its offsets, V4 numbers, V5 entities, V6 same member, V7 consent (**not implemented**), V8 length, V9 text is its quote, V10 section follows `rules.classify`. The `validator.py` docstring is the definition; README's table explains each for readers.
 
-| Rule | Rejects |
-|---|---|
-| V1 | claim with no citation |
-| V2 | cited `source_id` not in the request |
-| V3 | quote != `source.text[start:end]` (after NFKC + whitespace collapse) |
-| V4 | number not in a cited quote and not a derived metric |
-| V5 | entity ref (`#123`, URL, `@handle`, `ABC-12`) not in a cited quote |
-| V6 | claim's member differs from a cited source's member |
-| V7 | source outside consented/visible scope — **not implemented** (week 4) |
-| V8 | abstractive claim >1.3x the length of its evidence |
-| V9 | extractive claim whose text is not its first cited quote |
-| V10 | claim whose section differs from `rules.classify(source.kind, quote)` for its first citation; a carry-over citing no earlier report |
-
-`STANDUP_VALIDATOR_STRICT=true` makes a failing claim raise instead of being dropped. CI (`.github/workflows/ci.yml`) runs the suite strict. Its jobs: ruff, mypy, `lint-imports`, strict pytest plus the coverage gate; migrations and the integration/e2e tests against Postgres 16; and a Docker build.
+`STANDUP_VALIDATOR_STRICT=true` makes a failing claim raise instead of being dropped. CI (`.github/workflows/ci.yml`) runs the suite strict. Its jobs: ruff, mypy, `lint-imports`, strict pytest plus the coverage gate; migrations and the integration/e2e tests against Postgres 16; `scripts/demo_check.sh` against a real server; and a Docker build.
 
 ### The two seams that matter
 
@@ -170,22 +165,22 @@ src/standup/
   config.py        pydantic-settings, STANDUP_ prefix
   deps.py          DI: get_db, get_clock, get_summarizer; Jinja templates
   logging_conf.py  structlog + secret scrubbing
-  api/             health (+ /scope), auth, me (/me/teams, /me/data, /me/export), web_forms, evidence, digests, teams_router
+  api/             health (+ /scope, /version), auth, me (/me/teams, /me/data, /me/export), web_forms, evidence, digests (+ .md, .csv), teams_router
   auth/            tokens (signed, expiring per-member login links)
   domain/          enums, errors, models (Clock, SystemClock, FakeClock), timezones (+ as_utc), text (content_sha256), urls   (pure, zero I/O)
-  ingestion/       base, web_adapter, teams_adapter (+ scope gate, card), permalink, normalizer, service (the one ingest() path)
+  ingestion/       base, web_adapter, teams_adapter (+ scope gate, card), csv_import, permalink, normalizer, service (the one ingest() path)
   summarize/       base, rules, validator, render, service
   privacy/         audit (hash-chained log), retention (purge past team.retention_days)
   tracker/         base (TrackerAdapter protocol), github, noop, idempotency, outbox
   scheduling/      tick (pure: what is due), jobs (runs it under the `scheduler` lease, in worker threads: build, notify once per cycle via `notified_at`, drain)
-  db/              models, session
-  templates/       base, index, submit, digests, digest, evidence, error
+  db/              models, session, upsert (insert ignoring conflict), lease (single-runner jobs)
+  templates/       base, index, submit, digests, digest, evidence, error, me_data, me_teams
   migrations/      alembic
 ```
 
 Planned but **not yet written** — do not import these, and do not assume they exist:
 
-`api/privacy.py`, `api/admin.py`, `summarize/llm.py`, `summarize/prompts.py`, the tracker reconcile job, proactive "time to file" prompts, `privacy/{consent,visibility,redaction}.py`, and member-initiated deletion (`/me/delete`). (Export exists as `/me/export` in `api/me.py`; retention as `privacy/retention.py`.)
+`api/privacy.py`, `api/admin.py`, `summarize/llm.py`, `summarize/prompts.py`, `privacy/{consent,visibility,redaction}.py`, member-initiated deletion (`/me/delete`), contest/correct on digest lines, syncing GitHub issue state back (the tracker reconcile job), proactive "time to file" prompts, `docs/LIA.md`, and deployment. README's "Not built yet" is the same list. (Export exists as `/me/export` in `api/me.py`; retention as `privacy/retention.py`.)
 
 **Auth is per-member magic links, and team scoping is enforced.** `deps.CurrentMember` resolves the signed-in member from the session cookie (401 otherwise). Every route that touches a team's data checks `deps.ensure_same_team()`, which answers 404 for another team's resources. A new route that reads digests, evidence or updates must do the same.
 
@@ -193,7 +188,7 @@ Planned but **not yet written** — do not import these, and do not assume they 
 
 ## The dependency rule
 
-Partly enforced by import-linter. `pyproject.toml` has four contracts: `domain` is pure; the summarizer core (`base/rules/validator/render`) is pure; and `microsoft_agents` may be imported directly only by `api/teams_router.py` and `ingestion/teams_adapter.py` (invariant 9; `include_external_packages = true` makes that checkable); and `scheduling.tick` imports nothing that does I/O. No contract forbids `standup.deps`, `standup.main` or `standup.logging_conf`, so check those imports by eye.
+Partly enforced by import-linter. `pyproject.toml` has four contracts: `domain` is pure; the summarizer core (`base/rules/validator/render`) is pure; and `microsoft_agents` may be imported directly only by `api/teams_router.py` and `ingestion/teams_adapter.py` (invariant 9; `include_external_packages = true` makes that checkable); and `scheduling.tick` imports nothing that does I/O. Only the `scheduling.tick` contract forbids `standup.deps`, `standup.main` and `standup.logging_conf`; elsewhere check those imports by eye.
 
 | Layer | May import |
 |---|---|
@@ -221,19 +216,19 @@ Wanting to import a SQLAlchemy model into `summarize/` is the signal you are abo
 
 5. **Negation is checked before markers, always.** `no blockers` / `not blocked` / `no longer blocked` must never yield a blocker. This is the most common bug in this category of tool and has a parametrized test.
 
-6. **Redaction runs before `SourceDoc` construction** (week 4), so a secret cannot reach a third-party model even by accident.
+6. **Redaction must run before `SourceDoc` construction** once it exists (not built yet), so a secret cannot reach a third-party model even by accident.
 
 7. **No manager role.** No role hierarchy, no manager-only view, no per-person metrics. Digests are team-scoped and visible to every member equally. If a request needs "so the lead can see who didn't submit", that is the surveillance anti-pattern — push back rather than building it.
 
 8. **External writes go through the outbox.** `build_digest` only calls `tracker.outbox.enqueue_blocker_issues`; HTTP happens in `drain()`, after the response or from `scripts/drain_outbox`. `drain()` is single-runner: it must hold the `outbox-drain` lease (`db/lease.py`), because two drains could both see "no issue yet" for the same blocker and both create one. The build route commits before scheduling the drain, because FastAPI runs background tasks before `get_db` teardown commits. Pass the injected clock's `now` through (`build_digest(now=...)`), or outbox rows will not be due under a `FakeClock`.
 
-9. **All Microsoft Agents SDK imports stay inside `api/teams_router.py` and `ingestion/teams_adapter.py`** (week 2). That SDK is about a year old and still moving; keep the blast radius of a breaking change to two files. Note `botbuilder-python` is archived and must not be used.
+9. **All Microsoft Agents SDK imports stay inside `api/teams_router.py` and `ingestion/teams_adapter.py`**. That SDK is about a year old and still moving; keep the blast radius of a breaking change to two files. Note `botbuilder-python` is archived and must not be used.
 
 10. **Every ingestion path pins the content hash.** The `update.ingested` audit row's `object_ids` must carry `content_sha256`, or `verify_evidence` reports that update as tampered. Any new adapter route (Teams, CSV import) must record it the same way `api/web_forms.py` does.
 
 11. **A cycle is the team's local date, never the UTC date.** Use `domain/timezones.local_cycle_date(now, team.tz_default)`; `now.date()` splits one working day across two cycles for teams far from UTC.
 
-12. **Who submitted comes from the session, never the request body.** Every ingestion path goes through `ingestion/service.ingest(session, submission, member, now)` with a member resolved by auth (or, for Teams, by `Member.source_keys`). A resubmission sets `superseded_by` on the earlier update(s); it never edits them. `ingest()` first bumps `Member.submission_seq`, which takes a row/write lock so one member's concurrent submissions queue, and the day's cycle is created with `db.upsert.insert_ignoring_conflict`. Neither needs SAVEPOINT, which pysqlite lacks.
+12. **Who submitted comes from the session, never the request body.** Every ingestion path goes through `ingestion/service.ingest(session, submission, member, now)` with a member resolved by auth (or, for Teams, by `Member.teams_aad_id`, set by a single-use link code). A resubmission sets `superseded_by` on the earlier update(s); it never edits them. `ingest()` first bumps `Member.submission_seq`, which takes a row/write lock so one member's concurrent submissions queue, and the day's cycle is created with `db.upsert.insert_ignoring_conflict`. Neither needs SAVEPOINT, which pysqlite lacks.
 
 13. **Audit appends go through `record_audit`, which locks `audit_chain_head` first.** Never insert `AuditLog` rows directly: reading the last row without that lock is how concurrent requests forked the chain. `UNIQUE(prev_hash)` turns any fork into a loud error.
 
@@ -283,4 +278,4 @@ Built and tested against fakes; confirm when real accounts are available:
 
 ## When in doubt
 
-The three graded requirements are **faithful citations**, **structured write-back**, and **privacy boundaries**. If a change trades one of those for convenience, it is the wrong change. README's cut-line ordering says what may be dropped under time pressure; the "never cut" list says what may not.
+The three graded requirements are **faithful citations**, **structured write-back**, and **privacy boundaries**. If a change trades one of those for convenience, it is the wrong change.
