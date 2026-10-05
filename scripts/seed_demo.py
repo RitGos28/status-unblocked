@@ -157,8 +157,9 @@ def serve_command() -> str:
     from urllib.parse import urlsplit
 
     from standup.config import get_settings
+    from standup.domain.urls import LOCAL_BASE_URL
 
-    port = urlsplit(get_settings().base_url or "http://localhost:8000").port or 8000
+    port = urlsplit(get_settings().base_url or LOCAL_BASE_URL).port or 8000
     return f"uvicorn standup.main:app --port {port}"
 
 

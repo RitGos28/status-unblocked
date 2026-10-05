@@ -207,7 +207,7 @@ Wanting to import a SQLAlchemy model into `summarize/` is the signal you are abo
 
 ---
 
-**Shared helpers, so copies cannot drift:** `domain/text.content_sha256` (pinned and re-checked hashes), `domain/urls` (every absolute link), `domain/timezones.as_utc` (naive DB timestamps), `ingestion/base.FORM_FIELDS` / `text_fields_from` (web form, Teams card, CSV), `db/upsert.insert_ignoring_conflict` and `db/lease` (concurrency without SAVEPOINT), `summarize/render.group_sections` (HTML and Markdown digests). Use them rather than re-deriving.
+**Shared helpers, so copies cannot drift:** `domain/text.content_sha256` (pinned and re-checked hashes), `domain/urls` (every absolute link: `app_url`, `digest_url`, …; `public_base_url` for the configured-or-request base, `LOCAL_BASE_URL` for scripts), `domain/enums.BLOCKER_KINDS` (which claims are blockers), `summarize/service.latest_digest` (a day's current digest), `domain/timezones.as_utc` (naive DB timestamps), `ingestion/base.FORM_FIELDS` / `text_fields_from` (web form, Teams card, CSV), `db/upsert.insert_ignoring_conflict` and `db/lease` (concurrency without SAVEPOINT), `summarize/render.group_sections` (HTML and Markdown digests), and in tests `tests/helpers.login_as` / `submit` / `build_latest`. Use them rather than re-deriving. Job dispatch in `scheduling/jobs.py` ends in `assert_never`, so a job type `tick()` can return but nothing runs fails mypy.
 
 ## Invariants — do not break these
 

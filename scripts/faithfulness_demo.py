@@ -18,7 +18,7 @@ from sqlalchemy import select
 from standup.config import get_settings
 from standup.db.models import StandupCycle, Team
 from standup.db.session import session_scope
-from standup.domain.enums import ClaimKind
+from standup.domain.enums import BLOCKER_KINDS, ClaimKind
 from standup.summarize.base import Citation, Claim, SourceDoc, SummaryRequest
 from standup.summarize.rules import RulesSummarizer
 from standup.summarize.service import build_request
@@ -27,7 +27,7 @@ from standup.summarize.validator import FaithfulnessValidator
 
 def bad_claims(request: SummaryRequest, good: tuple[Claim, ...]) -> list[tuple[str, Claim]]:
     """Each one is a way a fluent summarizer goes wrong, built from real claims."""
-    blocker = next(c for c in good if c.kind in (ClaimKind.BLOCKER, ClaimKind.CARRYOVER))
+    blocker = next(c for c in good if c.kind in BLOCKER_KINDS)
     progress = next(c for c in good if c.kind is ClaimKind.PROGRESS)
     other = next(s for s in request.sources if s.member_id != blocker.member_id)
     first = blocker.citations[0]

@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from standup.config import get_settings
 from standup.db.models import Digest, DigestClaim, StandupCycle, Team, Update, UpdateItem
-from standup.domain.enums import AuditAction, ClaimKind, CycleState, ItemKind
+from standup.domain.enums import BLOCKER_KINDS, AuditAction, CycleState, ItemKind
 from standup.domain.errors import ConflictError, NotFoundError, ValidationFailure
 from standup.domain.text import content_sha256
 from standup.domain.urls import evidence_url
@@ -111,7 +111,7 @@ def _prior_blockers(
         .where(StandupCycle.team_id == cycle.team_id)
         .where(StandupCycle.local_date < cycle.local_date)
         .where(StandupCycle.local_date >= since)
-        .where(DigestClaim.kind.in_([ClaimKind.BLOCKER.value, ClaimKind.CARRYOVER.value]))
+        .where(DigestClaim.kind.in_(sorted(BLOCKER_KINDS)))
     ).scalars()
 
     item_ids = {c["source_id"] for claim in claims for c in claim.citations_json}

@@ -38,6 +38,7 @@ from standup.db.models import IngestRejection, Member
 from standup.deps import AppClock, AppSettings, DbSession
 from standup.domain.errors import EmptySubmissionError
 from standup.domain.models import Clock
+from standup.domain.urls import app_url, public_base_url
 from standup.ingestion.permalink import teams_permalink
 from standup.ingestion.service import ingest
 from standup.ingestion.teams_adapter import (
@@ -79,7 +80,7 @@ class StandupAgent:
         self._session = session
         self._clock = clock
         self._secret_key = secret_key
-        self._base_url = base_url.rstrip("/")
+        self._base_url = base_url
 
     async def on_turn(self, context: ReplyContext) -> None:
         activity = context.activity
@@ -118,7 +119,8 @@ class StandupAgent:
         if member is None:
             await context.send_activity(
                 "This Teams account isn't linked to a member yet. Sign in to the web app, "
-                f"open {self._base_url}/me/teams, and send me **link** with the code it shows."
+                f"open {app_url(self._base_url, '/me/teams')}, and send me **link** with the "
+                "code it shows."
             )
             return
 
@@ -141,7 +143,7 @@ class StandupAgent:
 
         await context.send_activity(
             f"Recorded for {member.team.name}. Submitting again today replaces it. "
-            f"Digests: {self._base_url}/digests"
+            f"Digests: {app_url(self._base_url, '/digests')}"
         )
 
     def _link(self, activity: Activity, code: str) -> str:
@@ -221,7 +223,7 @@ async def messages(
         session=session,
         clock=clock,
         secret_key=settings.secret_key.get_secret_value(),
-        base_url=settings.base_url or str(request.base_url),
+        base_url=public_base_url(settings.base_url, str(request.base_url)),
     )
     response = await request.app.state.teams_adapter.process(request, agent)
     return response or Response(status_code=202)

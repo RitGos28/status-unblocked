@@ -11,7 +11,7 @@ at any hour (the demo uses it; production cron never should).
 import argparse
 import asyncio
 import sys
-from datetime import UTC, datetime
+from datetime import datetime
 
 from pydantic import ValidationError
 
@@ -19,12 +19,12 @@ from standup.config import get_settings
 from standup.deps import set_clock
 from standup.domain.errors import ConfigurationError
 from standup.domain.models import FakeClock
+from standup.domain.timezones import as_utc
 from standup.scheduling.jobs import DigestNotifier, run_once
 
 
 def _parse_at(value: str) -> datetime:
-    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    return parsed.astimezone(UTC) if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+    return as_utc(datetime.fromisoformat(value.replace("Z", "+00:00")))
 
 
 def main() -> None:

@@ -25,6 +25,7 @@ from standup.deps import (
 from standup.domain.enums import ClaimKind
 from standup.domain.errors import NotFoundError
 from standup.domain.timezones import as_utc
+from standup.domain.urls import public_base_url
 from standup.privacy.retention import day_was_purged
 from standup.summarize.render import SECTION_TITLES, group_sections
 from standup.summarize.service import build_digest, latest_digest
@@ -105,7 +106,7 @@ def build(
         session,
         cycle_id=cycle_id,
         summarizer=summarizer,
-        base_url=settings.base_url or str(request.base_url),
+        base_url=public_base_url(settings.base_url, str(request.base_url)),
         now=clock.now(),
         actor_id=member.id,
     )
