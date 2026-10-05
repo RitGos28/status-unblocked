@@ -8,8 +8,8 @@ in week 2 produces the identical ``RawSubmission``.
 from datetime import UTC, datetime
 from typing import Any
 
-from standup.domain.enums import ItemKind, SourceKind
-from standup.ingestion.base import RawSubmission
+from standup.domain.enums import SourceKind
+from standup.ingestion.base import RawSubmission, text_fields_from
 
 
 class WebFormAdapter:
@@ -26,11 +26,7 @@ class WebFormAdapter:
         return RawSubmission(
             source_kind=self.source_kind,
             external_user_key=str(payload.get("member_id", "")).strip(),
-            text_fields={
-                ItemKind.PROGRESS: str(payload.get("progress", "") or ""),
-                ItemKind.BLOCKER: str(payload.get("blockers", "") or ""),
-                ItemKind.PLAN: str(payload.get("plan", "") or ""),
-            },
+            text_fields=text_fields_from(payload),
             captured_at=captured_at,
             # A web submission has no platform message to link to; the evidence
             # view is the citation target. Recorded explicitly rather than left

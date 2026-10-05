@@ -3,7 +3,6 @@
 import csv
 import io
 from datetime import datetime
-from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Request, Response
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
@@ -25,7 +24,8 @@ from standup.deps import (
 )
 from standup.domain.enums import ClaimKind
 from standup.domain.errors import NotFoundError
-from standup.summarize.render import SECTION_TITLES
+from standup.domain.timezones import as_utc
+from standup.summarize.render import SECTION_TITLES, group_sections
 from standup.summarize.service import build_digest
 from standup.tracker.outbox import drain
 
@@ -213,15 +213,7 @@ def view_digest(
     }
 
     # Sections in reading order: what is blocking comes before what is done.
-    from standup.summarize.render import SECTION_ORDER, SECTION_TITLES
-
-    sections: list[dict[str, Any]] = []
-    for kind in SECTION_ORDER:
-        claims = [c for c in digest.claims if c.kind == kind.value]
-        if claims:
-            sections.append(
-                {"title": SECTION_TITLES[kind], "claims": sorted(claims, key=lambda c: c.order)}
-            )
+    sections = group_sections(sorted(digest.claims, key=lambda c: c.order))
 
     return templates.TemplateResponse(
         request=request,
@@ -238,10 +230,7 @@ def view_digest(
 
 
 def _age_days(now: datetime, created_at: datetime) -> int:
-    # SQLite returns naive datetimes; both sides are UTC.
-    if created_at.tzinfo is None:
-        now = now.replace(tzinfo=None)
-    return max((now - created_at).days, 0)
+    return max((as_utc(now) - as_utc(created_at)).days, 0)
 
 
 def drain_tracker_outbox() -> None:

@@ -8,7 +8,7 @@ in-app loop (``STANDUP_SCHEDULER=true``) or by ``python -m scripts.tick``.
 import asyncio
 import uuid
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import Any, Protocol
 
 from sqlalchemy import func, select
@@ -18,6 +18,8 @@ from standup.db.lease import acquire_lease, release_lease
 from standup.db.models import Digest, Member, StandupCycle, Team, Update
 from standup.domain.enums import ClaimKind
 from standup.domain.errors import ConfigurationError
+from standup.domain.timezones import as_utc
+from standup.domain.urls import digest_url
 from standup.logging_conf import get_logger
 from standup.privacy.retention import purge_expired
 from standup.scheduling.tick import (
@@ -57,10 +59,7 @@ class TickReport:
 
 
 def _aware(value: datetime | None) -> datetime | None:
-    # SQLite hands back naive datetimes; every stored value is UTC.
-    if value is None or value.tzinfo is not None:
-        return value
-    return value.replace(tzinfo=UTC)
+    return None if value is None else as_utc(value)
 
 
 def load_cycle_views(session: Session, now: datetime) -> list[CycleView]:
@@ -230,7 +229,7 @@ def _notice(
     # Name the digest's own date: a pass can announce yesterday's digest too.
     text = (
         f"The {team.name} digest for {cycle.local_date} is ready ({counts}): "
-        f"{base_url.rstrip('/')}/digest/{digest.id}"
+        f"{digest_url(base_url, digest.id)}"
     )
     members = session.execute(
         select(Member)

@@ -170,7 +170,7 @@ src/standup/
   logging_conf.py  structlog + secret scrubbing
   api/             health (+ /scope), auth, me (/me/teams, /me/data, /me/export), web_forms, evidence, digests, teams_router
   auth/            tokens (signed, expiring per-member login links)
-  domain/          enums, errors, models (Clock, SystemClock, FakeClock), timezones   (pure, zero I/O)
+  domain/          enums, errors, models (Clock, SystemClock, FakeClock), timezones (+ as_utc), text (content_sha256), urls   (pure, zero I/O)
   ingestion/       base, web_adapter, teams_adapter (+ scope gate, card), permalink, normalizer, service (the one ingest() path)
   summarize/       base, rules, validator, render, service
   privacy/         audit (hash-chained log), retention (purge past team.retention_days)
@@ -204,6 +204,8 @@ Partly enforced by import-linter. `pyproject.toml` has four contracts: `domain` 
 Wanting to import a SQLAlchemy model into `summarize/` is the signal you are about to break the seam. Map it to a domain dataclass in `service.py` instead.
 
 ---
+
+**Shared helpers, so copies cannot drift:** `domain/text.content_sha256` (pinned and re-checked hashes), `domain/urls` (every absolute link), `domain/timezones.as_utc` (naive DB timestamps), `ingestion/base.FORM_FIELDS` / `text_fields_from` (web form, Teams card, CSV), `db/upsert.insert_ignoring_conflict` and `db/lease` (concurrency without SAVEPOINT), `summarize/render.group_sections` (HTML and Markdown digests). Use them rather than re-deriving.
 
 ## Invariants — do not break these
 
