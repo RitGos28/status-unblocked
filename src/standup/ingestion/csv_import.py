@@ -6,9 +6,12 @@ a member's display name. Each row goes through the same ingest() path as the
 web form and Teams, filed at that date and time.
 
 All or nothing: every row is validated first, and one bad row means nothing is
-imported. A row identical to the member's current update for that day is
-skipped, so re-importing a file changes nothing. Imports are audited as
-actor "import", not as the member.
+imported, and so does a row dated in the future. A row identical to the
+member's current update for that day is skipped, so re-importing a file
+changes nothing. A row never replaces a later update the member already has
+for that day (``kept_later``). Days that already had a digest are listed in
+``stale_digests``: the digest predates the import and needs a rebuild.
+Imports are audited as actor "import", not as the member.
 """
 
 import csv
@@ -19,9 +22,9 @@ from datetime import UTC, date, datetime, time
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from standup.db.models import Member, StandupCycle, Team, Update
+from standup.db.models import Digest, Member, StandupCycle, Team, Update
 from standup.domain.enums import SourceKind
-from standup.domain.timezones import local_cycle_date
+from standup.domain.timezones import as_utc, local_cycle_date
 from standup.ingestion.base import FORM_FIELDS, RawSubmission, text_fields_from
 from standup.ingestion.normalizer import normalize
 from standup.ingestion.service import ingest
@@ -35,6 +38,10 @@ class ImportReport:
     imported: int = 0
     skipped: int = 0
     errors: list[str] = field(default_factory=list)
+    # Rows not imported because the member already has a later update that day.
+    kept_later: list[str] = field(default_factory=list)
+    # "team-slug YYYY-MM-DD" for each day whose existing digest predates the import.
+    stale_digests: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -45,9 +52,14 @@ class _Row:
     submission: RawSubmission
 
 
-def import_updates(session: Session, text: str, *, source_name: str) -> ImportReport:
+def import_updates(
+    session: Session, text: str, *, source_name: str, now: datetime | None = None
+) -> ImportReport:
     report = ImportReport()
-    reader = csv.DictReader(io.StringIO(text))
+    now = now or datetime.now(UTC)
+    # Excel's "CSV UTF-8" starts with a byte-order mark, which would otherwise
+    # become part of the first column's name.
+    reader = csv.DictReader(io.StringIO(text.removeprefix("\ufeff")))
     missing = [c for c in REQUIRED if c not in (reader.fieldnames or [])]
     if missing:
         report.errors.append(f"missing column(s): {', '.join(missing)}")
@@ -55,7 +67,7 @@ def import_updates(session: Session, text: str, *, source_name: str) -> ImportRe
 
     rows: list[_Row] = []
     for line, record in enumerate(reader, start=2):  # line 1 is the header
-        row = _validate(session, line, record, source_name, report.errors)
+        row = _validate(session, line, record, source_name, now, report.errors)
         if row is not None:
             rows.append(row)
     if report.errors:
@@ -64,6 +76,13 @@ def import_updates(session: Session, text: str, *, source_name: str) -> ImportRe
     for row in rows:
         if _unchanged(session, row):
             report.skipped += 1
+            continue
+        local_date = local_cycle_date(row.when, row.member.team.tz_default)
+        if _has_later_update(session, row, local_date):
+            report.kept_later.append(
+                f"line {row.line}: {row.member.display_name} already has a later update "
+                f"for {local_date}"
+            )
             continue
         ingest(
             session,
@@ -75,11 +94,19 @@ def import_updates(session: Session, text: str, *, source_name: str) -> ImportRe
             actor_id=f"csv:{source_name}",
         )
         report.imported += 1
+        day = f"{row.member.team.slug} {local_date}"
+        if day not in report.stale_digests and _has_digest(session, row, local_date):
+            report.stale_digests.append(day)
     return report
 
 
 def _validate(
-    session: Session, line: int, record: dict[str, str], source_name: str, errors: list[str]
+    session: Session,
+    line: int,
+    record: dict[str, str],
+    source_name: str,
+    now: datetime,
+    errors: list[str],
 ) -> _Row | None:
     def value(column: str) -> str:
         return (record.get(column) or "").strip()
@@ -115,6 +142,9 @@ def _validate(
         return None
 
     when = datetime.combine(day, at, tzinfo=UTC)
+    if when > now:
+        errors.append(f"line {line}: {day} {at:%H:%M} UTC is in the future")
+        return None
     submission = RawSubmission(
         source_kind=SourceKind.CSV,
         external_user_key=member.id,
@@ -129,12 +159,41 @@ def _validate(
 def _unchanged(session: Session, row: _Row) -> bool:
     """True when the member's current update that day has exactly this text."""
     local_date = local_cycle_date(row.when, row.member.team.tz_default)
-    current = session.execute(
-        select(Update.content_sha256)
+    current = (
+        session.execute(
+            select(Update.content_sha256)
+            .join(StandupCycle, Update.cycle_id == StandupCycle.id)
+            .where(StandupCycle.team_id == row.member.team_id)
+            .where(StandupCycle.local_date == local_date)
+            .where(Update.member_id == row.member.id)
+            .where(Update.is_live())
+        )
+        .scalars()
+        .all()
+    )
+    return normalize(row.submission).content_sha256 in current
+
+
+def _has_later_update(session: Session, row: _Row, local_date: date) -> bool:
+    captured = session.execute(
+        select(Update.captured_at)
         .join(StandupCycle, Update.cycle_id == StandupCycle.id)
         .where(StandupCycle.team_id == row.member.team_id)
         .where(StandupCycle.local_date == local_date)
         .where(Update.member_id == row.member.id)
         .where(Update.is_live())
-    ).scalars().all()
-    return normalize(row.submission).content_sha256 in current
+    ).scalars()
+    return any(as_utc(at) > row.when for at in captured)
+
+
+def _has_digest(session: Session, row: _Row, local_date: date) -> bool:
+    return (
+        session.execute(
+            select(Digest.id)
+            .join(StandupCycle, Digest.cycle_id == StandupCycle.id)
+            .where(StandupCycle.team_id == row.member.team_id)
+            .where(StandupCycle.local_date == local_date)
+            .limit(1)
+        ).first()
+        is not None
+    )

@@ -48,14 +48,15 @@ Activities are replayed to the bot as Teams would send them (`scripts/teams_repl
 - On **Digests**, each day also has a **Build digest** (or **Rebuild**) button: anyone on the team can build the digest by hand before the scheduler does. The scheduler still announces it at the cutoff, once.
 
 ## 2b. Made-up updates from a spreadsheet
-`docs/sample_updates.csv` shows the format: `date,team,member,progress,blockers,plan` (and an optional `time`, default 09:00). Dates are UTC; `team` is a slug; `member` a display name. Edit the dates to the two days before today, then:
+`docs/sample_updates.csv` shows the format: `date,team,member,progress,blockers,plan` (and an optional `time`, default 09:00). Dates are UTC; `team` is a slug; `member` a display name. Copy it, and change the copy's dates to the two days before today (the tracked file's dates are fixed, and old dates would load into old days):
 
 ```bash
-python -m scripts.import_updates_csv docs/sample_updates.csv   # "imported 2, skipped 0 unchanged, errors 0"
-python -m scripts.import_updates_csv docs/sample_updates.csv   # again: "imported 0, skipped 2": nothing changes
+cp docs/sample_updates.csv /tmp/mobile.csv                  # then edit the two dates
+python -m scripts.import_updates_csv /tmp/mobile.csv   # "imported 2, skipped 0 unchanged, kept 0 later update(s), errors 0"
+python -m scripts.import_updates_csv /tmp/mobile.csv   # again: "imported 0, skipped 2 unchanged, ...": nothing changes
 ```
 
-Every row goes through the same path as the web form, filed on its own date, and is audited as an import (not as Dana). A file with any bad row imports nothing and names each problem by line. Sign in as Dana to see Mobile's days; the evidence page says the update came "via a spreadsheet import".
+Every row goes through the same path as the web form, filed on its own date, and is audited as an import (not as Dana). A file with any bad row, or a date in the future, imports nothing and names each problem by line. A file saved from Excel as "CSV UTF-8" works; any other encoding is refused in one line. A row never replaces a later update the member already has that day (it says "already has a later update"), and if a day already had a digest the import tells you to rebuild it. Sign in as Dana to see Mobile's days; the evidence page says the update came "via a spreadsheet import".
 
 ## 3. The daily digest, built by the scheduler
 The digest builds itself at each team's cutoff (11:00 UTC for the demo teams). To show it at any hour, run one scheduler pass on a demo clock:
