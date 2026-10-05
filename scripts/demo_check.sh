@@ -139,13 +139,18 @@ D1="$($PY -c 'from datetime import UTC, datetime, timedelta; print((datetime.now
 printf '%s\n' "date,team,member,progress,blockers,plan" \
     "$D2,mobile,Dana Park,Profiled the cold start.,Waiting on the signing certificate from IT.,Cut the cold start time." \
     "$D1,mobile,Dana Park,Cut cold start by 40 percent.,Waiting on the signing certificate from IT.,Ship the beta build." \
-    >"$WORK/mobile.csv"
+    >"$WORK/mobile.body"
+# Saved as Excel's "CSV UTF-8": a byte-order mark in front of the header.
+{ printf '\xef\xbb\xbf'; cat "$WORK/mobile.body"; } >"$WORK/mobile.csv"
 $PY -m scripts.import_updates_csv "$WORK/mobile.csv" 2>/dev/null | grep -q "imported 2, skipped 0" || fail "two CSV rows import"
 $PY -m scripts.import_updates_csv "$WORK/mobile.csv" 2>/dev/null | grep -q "imported 0, skipped 2" || fail "re-importing the same CSV changes nothing"
 printf '%s\n' "date,team,member,progress,blockers,plan" "$D1,mobile,Nobody,x,," >"$WORK/bad.csv"
 if $PY -m scripts.import_updates_csv "$WORK/bad.csv" >"$WORK/bad.out" 2>/dev/null; then fail "a CSV with a bad row is refused"; fi
 grep -q "line 2: no active member 'Nobody' in team 'mobile'" "$WORK/bad.out" || fail "the refusal names the line and the problem"
-pass "spreadsheet import: two earlier days for Mobile load; re-import changes nothing; a bad row is refused with its line"
+printf '%s\n' "date,team,member,progress,blockers,plan" "2031-01-01,mobile,Dana Park,x,," >"$WORK/future.csv"
+if $PY -m scripts.import_updates_csv "$WORK/future.csv" >"$WORK/future.out" 2>/dev/null; then fail "a future-dated row is refused"; fi
+grep -q "is in the future" "$WORK/future.out" || fail "the refusal says the date is in the future"
+pass "spreadsheet import (Excel's CSV UTF-8): two earlier days for Mobile load; re-import changes nothing; a bad or future row is refused with its line"
 
 # --- the daily build, at the cutoff (demo clock) -----------------------------
 AT="$($PY - <<'EOF'
