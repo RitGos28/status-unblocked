@@ -263,6 +263,15 @@ DANA_LIST="$(curl -s -b "$WORK/dana.jar" "$BASE/digests")"
 [ "$(grep -c 'Read digest' <<<"$DANA_LIST")" = 3 ] || fail "Dana sees Mobile's three days, two of them imported"
 pass "Dana (Mobile) gets 404 on Core Platform's digest and evidence, and sees Mobile's three days"
 
+# --- my data: who opened my updates, and an export ----------------------------
+curl -s -o /dev/null -b "$WORK/bruno.jar" "$BASE$EVIDENCE" || fail "Bruno opens Ada's evidence"
+MINE="$(curl -s -b "$WORK/ada.jar" "$BASE/me/data")"
+grep -q "Bruno Silva" <<<"$(sed -n '/Who has opened your updates/,/Your updates/p' <<<"$MINE")" \
+    || fail "Ada's My data page shows Bruno opened her update"
+curl -s -b "$WORK/ada.jar" "$BASE/me/export" | $PY -c 'import json,sys; d=json.load(sys.stdin); assert d["member"]["display_name"] == "Ada Okafor" and d["updates"]' \
+    || fail "Ada's export is JSON with her updates"
+pass "My data: Ada sees that Bruno opened her update, and exports everything as JSON"
+
 # --- ops and error pages -----------------------------------------------------
 curl -s "$BASE/scope" | grep -q '"scope_violations":1' || fail "/scope counts the one refused channel message"
 ERR_TYPE="$(curl -s -o /dev/null -w '%{content_type}' -H 'accept: text/html' -b "$WORK/ada.jar" "$BASE/digest/nope")"
@@ -270,5 +279,15 @@ ERR_TYPE="$(curl -s -o /dev/null -w '%{content_type}' -H 'accept: text/html' -b 
 pass "/scope counts the refused channel message (content-free); browser errors are HTML pages"
 ! grep -Eq '/login/[A-Za-z0-9]' "$WORK/server.log" || fail "no login token appears in the server's access log"
 pass "the server's access log shows /login/[redacted], never a login token"
+
+# --- retention (last: it removes the demo's stored text) ----------------------
+LATER="$($PY -c 'from datetime import UTC, datetime, timedelta; print((datetime.now(UTC) + timedelta(days=40)).strftime("%Y-%m-%dT%H:%M:%SZ"))')"
+$PY -m scripts.tick --at "$LATER" 2>/dev/null | tail -1 | grep -Eq "purged [1-9]" || fail "a pass 40 days later purges old submissions"
+grep -q "Waiting on staging credentials" <<<"$(curl -s -b "$WORK/ada.jar" "$BASE/digest/$DIGEST_ID")" \
+    || fail "the digest still reads after retention"
+grep -q "expired" <<<"$(curl -s -b "$WORK/ada.jar" "$BASE$EVIDENCE")" || fail "the evidence page says the source expired"
+$PY -m scripts.verify_integrity >/dev/null || fail "the audit chain and pinned hashes still verify after retention"
+grep -q "removed by retention" <<<"$(curl -s -b "$WORK/ada.jar" "$BASE/me/data")" || fail "My data says the text was removed"
+pass "retention 40 days on: stored text removed, the digest still reads, evidence says expired, integrity holds"
 
 echo "All $STEP demo steps passed."

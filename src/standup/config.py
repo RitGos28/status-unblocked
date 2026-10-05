@@ -73,7 +73,6 @@ class Settings(DatabaseSettings):
     # being silently dropped. CI runs strict; production drops and reports.
     validator_strict: bool = False
 
-    retention_days: int = Field(default=30, ge=1)
 
     # Optional integrations. Each one's credentials become required only when
     # it is switched on, and the error names every missing key at once.

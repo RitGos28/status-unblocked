@@ -39,7 +39,8 @@ def main() -> None:
     report = asyncio.run(run_once(notifier))
     print(
         f"built {len(report.built)} digest(s), notified {report.notified}, "
-        f"notify failures {report.notify_failures}, tracker writes {report.drained}"
+        f"notify failures {report.notify_failures}, tracker writes {report.drained}, "
+        f"purged {report.purged}"
     )
 
 

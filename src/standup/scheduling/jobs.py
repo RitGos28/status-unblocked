@@ -19,7 +19,15 @@ from standup.db.models import Digest, Member, StandupCycle, Team, Update
 from standup.domain.enums import ClaimKind
 from standup.domain.errors import ConfigurationError
 from standup.logging_conf import get_logger
-from standup.scheduling.tick import BuildDigest, CycleView, DrainOutbox, NotifyDigest, tick
+from standup.privacy.retention import purge_expired
+from standup.scheduling.tick import (
+    BuildDigest,
+    CycleView,
+    DrainOutbox,
+    NotifyDigest,
+    PurgeExpired,
+    tick,
+)
 from standup.summarize.base import Summarizer
 from standup.summarize.service import build_digest
 from standup.tracker.base import TrackerAdapter
@@ -45,6 +53,7 @@ class TickReport:
     notified: int = 0
     notify_failures: int = 0
     drained: int = 0
+    purged: int = 0
 
 
 def _aware(value: datetime | None) -> datetime | None:
@@ -146,10 +155,18 @@ async def _run_jobs(
                 await _announce(session, notifier, job.cycle_id, base_url, now, report)
         elif isinstance(job, NotifyDigest):
             await _announce(session, notifier, job.cycle_id, base_url, now, report)
+        elif isinstance(job, PurgeExpired):
+            report.purged = await asyncio.to_thread(_purge, session, now)
         elif isinstance(job, DrainOutbox):
             drained = await asyncio.to_thread(drain, session, tracker, now)
             report.drained = drained.done
     return report
+
+
+def _purge(session: Session, now: datetime) -> int:
+    purged = purge_expired(session, now)
+    session.commit()
+    return purged
 
 
 def _build(

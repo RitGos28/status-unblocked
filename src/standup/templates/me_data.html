@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}My data{% endblock %}
+{% block content %}
+<h1>My data</h1>
+<p class="sub">Everything stored about you, and every recorded access to it. <a href="/me/export">Download it as JSON</a>.</p>
+
+<h2>Who has opened your updates</h2>
+<div class="card">
+  {% set views = events | selectattr("action", "equalto", "evidence.viewed") | list %}
+  {% if views %}
+  <table>
+    <tr><th>When (UTC)</th><th>Who</th></tr>
+    {% for e in views %}<tr><td>{{ e.when[:16].replace("T", " ") }}</td><td>{{ e.by }}</td></tr>{% endfor %}
+  </table>
+  {% else %}
+  <p style="margin:0">Nobody has opened your updates' evidence pages yet.</p>
+  {% endif %}
+</div>
+
+<h2>Your updates</h2>
+{% if not updates %}
+  <div class="card"><p style="margin:0">You have not filed any updates.</p></div>
+{% endif %}
+{% for u in updates %}
+<div class="card">
+  <p class="muted" style="margin-top:0">
+    {{ u.day }} &middot; via {{ {"webform": "the web form", "teams": "Teams", "cli": "the command line", "csv": "a spreadsheet import"}.get(u.source, u.source) }}
+    {% if u.replaced_by_a_later_update %}&middot; replaced by a later update that day{% endif %}
+    {% if u.removed_by_retention_at %}&middot; full text removed by retention on {{ u.removed_by_retention_at[:10] }}{% endif %}
+  </p>
+  {% if u.raw_text %}<pre class="raw">{{ u.raw_text }}</pre>{% else %}
+  <ul>{% for i in u.lines %}<li>{{ i.text }}</li>{% endfor %}</ul>{% endif %}
+</div>
+{% endfor %}
+
+<h2>Everything recorded about you</h2>
+<div class="card">
+  <table>
+    <tr><th>When (UTC)</th><th>Who</th><th>What</th></tr>
+    {% for e in events %}<tr><td>{{ e.when[:16].replace("T", " ") }}</td><td>{{ e.by }}</td><td>{{ e.what }}</td></tr>{% endfor %}
+  </table>
+</div>
+{% endblock %}

@@ -89,6 +89,19 @@ The scheduler pass in step 3 also delivered the blockers to the (fake) GitHub, t
 - `python -m scripts.verify_integrity` → "audit chain intact; every stored update matches its pinned hash". This holds under load too: the demo check opens the same evidence 20 times at once first, and every view is recorded on one unbroken chain.
 - Edit any stored update in a *copy* of the database and run it against the copy: it names the tampered update and exits 1. (`scripts/demo_check.sh` does exactly this.)
 
+## 5b. My data
+- As Ada, open **My data** in the header: her updates, everything recorded about her, and **Who has opened your updates**. Open one of Ada's evidence pages as Bruno first, and his name appears there. This is the audit log, readable by the person it is about.
+- **Download it as JSON** (`/me/export`): the same data as a file. The export is itself recorded.
+
+## 5c. Retention
+Stored submissions are kept for each team's retention period (30 days in the demo). The scheduler applies it on every pass. To see it:
+
+```bash
+python -m scripts.tick --at <a UTC date 40 days from now>T12:00:00Z   # "... purged N"
+```
+
+The full stored submissions are removed. The digest still reads, because it keeps the lines it quoted: the digest is the team's record. Evidence pages say the source expired, **My data** says when the text was removed, and `verify_integrity` still passes. Run this last: it removes the demo's stored text.
+
 ## 6. Ops
 - `/scope`: a JSON count of out-of-scope Teams messages the bot refused, by reason. It is an ops endpoint like `/healthz`, open without sign-in, because it holds counts only: nothing about the refused messages is stored.
 - `/healthz`, `/readyz`.

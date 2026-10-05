@@ -2,7 +2,14 @@
 
 from datetime import UTC, datetime, timedelta
 
-from standup.scheduling.tick import BuildDigest, CycleView, DrainOutbox, NotifyDigest, tick
+from standup.scheduling.tick import (
+    BuildDigest,
+    CycleView,
+    DrainOutbox,
+    NotifyDigest,
+    PurgeExpired,
+    tick,
+)
 
 CUTOFF = datetime(2026, 9, 15, 11, 0, tzinfo=UTC)
 
@@ -32,13 +39,13 @@ def test_first_build_after_the_cutoff_notifies():
 
 def test_an_up_to_date_notified_digest_is_left_alone():
     done = cycle(last_digest_at=CUTOFF + timedelta(minutes=1), notified=True)
-    assert tick(CUTOFF + timedelta(hours=1), [done]) == [DrainOutbox()]
+    assert tick(CUTOFF + timedelta(hours=1), [done]) == [PurgeExpired(), DrainOutbox()]
 
 
 def test_a_digest_built_by_hand_before_the_cutoff_is_announced_at_the_cutoff():
     manual = cycle(last_digest_at=CUTOFF - timedelta(minutes=30))
-    assert tick(CUTOFF - timedelta(minutes=1), [manual]) == [DrainOutbox()]
-    assert tick(CUTOFF, [manual]) == [NotifyDigest("c1"), DrainOutbox()]
+    assert tick(CUTOFF - timedelta(minutes=1), [manual]) == [PurgeExpired(), DrainOutbox()]
+    assert tick(CUTOFF, [manual]) == [NotifyDigest("c1"), PurgeExpired(), DrainOutbox()]
 
 
 def test_a_late_update_triggers_a_quiet_rebuild():
@@ -54,8 +61,8 @@ def test_a_cycle_without_updates_or_cutoff_is_skipped():
     assert builds(tick(CUTOFF, [cycle(has_updates=False), cycle(cutoff_at=None)])) == []
 
 
-def test_the_outbox_is_drained_every_tick():
-    assert tick(CUTOFF - timedelta(hours=5), []) == [DrainOutbox()]
+def test_retention_and_the_outbox_run_every_tick():
+    assert tick(CUTOFF - timedelta(hours=5), []) == [PurgeExpired(), DrainOutbox()]
 
 
 def test_simulating_three_days_is_a_loop():
