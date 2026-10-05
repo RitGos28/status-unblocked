@@ -108,6 +108,31 @@ def enqueue_blocker_issues(
     return queued
 
 
+# How far back requeue_skipped reaches: the same week carry-over looks back,
+# so connecting a repo files this week's blockers, not every blocker ever.
+REQUEUE_WINDOW = timedelta(days=7)
+
+
+def requeue_skipped(session: Session, team_id: str, now: datetime) -> int:
+    """Queue again the team's recent rows skipped for lack of a tracker or repo.
+
+    Call it after configuring one, so blockers reported before that are filed
+    too. Returns how many rows were requeued; the next drain delivers them.
+    """
+    rows = session.execute(
+        select(TrackerOutbox)
+        .where(TrackerOutbox.team_id == team_id)
+        .where(TrackerOutbox.status == "skipped")
+        .where(TrackerOutbox.created_at >= now - REQUEUE_WINDOW)
+    ).scalars().all()
+    for row in rows:
+        row.status = "pending"
+        row.next_attempt_at = now
+        row.last_error = ""
+    session.flush()
+    return len(rows)
+
+
 DRAIN_LEASE = "outbox-drain"
 DRAIN_LEASE_TTL = timedelta(minutes=5)
 

@@ -190,6 +190,12 @@ grep -q '&#34;days_reported&#34;: 2\|&quot;days_reported&quot;: 2\|"days_reporte
     || fail "the day-2 comment carries a JSON update with days_reported 2"
 grep -q "standup_blocker" <<<"$ADA_PAGE" || fail "the issue carries a structured JSON record"
 pass "blockers became GitHub issues: Ada's two-day blocker is one issue plus a 'Still blocked' comment"
+grep -q "requeued [1-9]" <<<"$($PY -m scripts.set_github_repo --team mobile --repo demo/mobile)" \
+    || fail "connecting Mobile's repo requeues the blockers skipped without one"
+$PY -m scripts.drain_outbox >/dev/null || fail "drain_outbox runs"
+MOBILE_ISSUES="$(curl -s -H 'authorization: Bearer demo-token' "$GH/repos/demo/mobile/issues?labels=standup-blocker&state=all")"
+grep -q '"number"' <<<"$MOBILE_ISSUES" || fail "Mobile's earlier blockers are filed once its repo is set"
+pass "a team's repo set later still gets this week's blockers: Mobile's skipped rows are filed"
 NOTICES="$(bot_said | grep -o 'Core Platform digest for [0-9-]* is ready' | sort -u | wc -l | tr -d ' ')"
 TOTAL_NOTICES="$(bot_said | grep -o 'digest for [0-9-]* is ready' | wc -l | tr -d ' ')"
 [ "$TOTAL_NOTICES" = "$NOTICES" ] || fail "no digest was announced twice ($TOTAL_NOTICES notices for $NOTICES digests)"
