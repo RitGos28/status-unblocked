@@ -16,6 +16,8 @@ def describe_missing_permalink(reason: str | None) -> str:
     reason = reason or ""
     if reason.startswith("webform"):
         return "Submitted through the web form, so there is no chat message to link to."
+    if reason.startswith("csv"):
+        return "Imported from a spreadsheet, so there is no chat message to link to."
     if "a:-form" in reason:
         return "Sent in a 1:1 Teams chat; Teams offers no link to individual messages there."
     if reason:
