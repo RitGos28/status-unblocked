@@ -26,6 +26,8 @@ uvicorn standup.main:app --port 8000
 
 `./run.sh` does the same with today's updates only.
 
+The seed prints `Now run: uvicorn standup.main:app --port <port>`: use that port, because the login links point at `STANDUP_BASE_URL`. All dates in the demo are **UTC dates**: "today" and "yesterday" mean the UTC calendar day, which can differ from your local date (for example, early morning in India is still the previous day in UTC).
+
 ## 1. Sign-in and team boundaries
 - Open `/digests` without signing in: **401**, "Sign in with your personal link".
 - Open **Ada's** link from the seed output: you land on **Digests**, which lists only Core Platform's days. Mobile also has a day today (Dana filed an update), and it is not listed; the header shows who you are signed in as.
@@ -49,7 +51,7 @@ The digest builds itself at each team's cutoff (11:00 UTC for the demo teams). T
 
 ```bash
 python -m scripts.tick                                   # after 11:00 UTC: the real clock is past the cutoff
-python -m scripts.tick --at <today>T11:06:00Z           # before 11:00 UTC: today's date, just after the cutoff
+python -m scripts.tick --at <today>T11:06:00Z           # before 11:00 UTC; <today> is today's UTC date
 ```
 
 It reports `built 3 digest(s)`: Core Platform's yesterday and today, and Mobile's today. Then open **Digests** and today's digest. If you use `--at` with a time earlier than your submissions, the digest's "built" time will read earlier than the updates it contains; that is the demo clock, not the app.
