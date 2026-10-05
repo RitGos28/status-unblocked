@@ -101,7 +101,7 @@ Stored submissions are kept for each team's retention period (30 days in the dem
 python -m scripts.tick --at <a UTC date 40 days from now>T12:00:00Z   # "... purged N"
 ```
 
-The full stored submissions are removed. The digest still reads, because it keeps the lines it quoted: the digest is the team's record. Evidence pages say the source expired, **My data** says when the text was removed, and `verify_integrity` still passes. Run this last: it removes the demo's stored text.
+The full stored submissions are removed, and so is every line no digest quoted (Ada's replaced update from step 2, for example: **My data** now shows it as "a progress line, removed by retention"). The digest still reads, because the lines it quoted stay: the digest is the team's record. Evidence pages say the source expired, and `verify_integrity` still passes. **Digests** no longer offers Rebuild for those days ("Updates removed by retention"): there is nothing left to rebuild from, so the digest is final. Run this last: it removes the demo's stored text.
 
 ## 6. Ops
 - `/scope`: a JSON count of out-of-scope Teams messages the bot refused, by reason. It is an ops endpoint like `/healthz`, open without sign-in, because it holds counts only: nothing about the refused messages is stored.

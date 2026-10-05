@@ -112,7 +112,12 @@ def _my_updates(session: DbSession, member: Member) -> list[dict[str, Any]]:
             else None,
             # Not "items": in a template, u.items would be the dict method.
             "lines": [
-                {"id": item.id, "kind": item.kind, "text": item.text}
+                {
+                    "id": item.id,
+                    "kind": item.kind,
+                    "text": item.text,
+                    "removed_by_retention": item.text is None,
+                }
                 for item in sorted(update.items, key=lambda i: i.order)
             ],
         }

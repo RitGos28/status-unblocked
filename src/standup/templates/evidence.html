@@ -8,10 +8,13 @@
   <div class="card">
     <p style="margin:0">The original text was purged on
       {{ update.purged_at.strftime('%Y-%m-%d') if update.purged_at else 'an earlier date' }}.
-      The quote below is what the digest cited at the time.</p>
+      {% if quote is none %}No digest quoted this line, so it was removed too.
+      {% else %}The quote below is what the digest cited at the time.{% endif %}</p>
   </div>
+  {% if quote is not none %}
   <h2>Cited quote</h2>
   <pre class="raw"><mark>{{ quote }}</mark></pre>
+  {% endif %}
 {% else %}
   <p class="sub">
     {{ member_name }} &middot; {{ update.captured_at.strftime('%Y-%m-%d %H:%M UTC') }}

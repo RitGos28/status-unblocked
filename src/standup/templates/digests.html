@@ -22,9 +22,10 @@
     <td>
       <div class="row-actions">
         {% if r.digest %}<a href="/digest/{{ r.digest.id }}">Read digest</a>{% endif %}
+        {% if r.final %}<span class="muted">Updates removed by retention</span>{% else %}
         <form method="post" action="/digests/build/{{ r.cycle.id }}" style="margin:0">
           <button class="ghost" type="submit">{% if r.digest %}Rebuild{% else %}Build digest{% endif %}</button>
-        </form>
+        </form>{% endif %}
       </div>
     </td>
   </tr>

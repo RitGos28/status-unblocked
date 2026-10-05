@@ -29,7 +29,7 @@
     {% if u.removed_by_retention_at %}&middot; full text removed by retention on {{ u.removed_by_retention_at[:10] }}{% endif %}
   </p>
   {% if u.raw_text %}<pre class="raw">{{ u.raw_text }}</pre>{% else %}
-  <ul>{% for i in u.lines %}<li>{{ i.text }}</li>{% endfor %}</ul>{% endif %}
+  <ul>{% for i in u.lines %}<li>{% if i.removed_by_retention %}<span class="muted">(a {{ i.kind }} line, removed by retention)</span>{% else %}{{ i.text }}{% endif %}</li>{% endfor %}</ul>{% endif %}
 </div>
 {% endfor %}
 

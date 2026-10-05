@@ -25,6 +25,7 @@ from standup.deps import (
 from standup.domain.enums import ClaimKind
 from standup.domain.errors import NotFoundError
 from standup.domain.timezones import as_utc
+from standup.privacy.retention import day_was_purged
 from standup.summarize.render import SECTION_TITLES, group_sections
 from standup.summarize.service import build_digest
 from standup.tracker.outbox import drain
@@ -73,6 +74,8 @@ def list_digests(
                 "update_count": update_count,
                 "team_name": team.name if team else "Team",
                 "status": _status(cycle, now),
+                # Retention removed the day's updates: its digest is final.
+                "final": day_was_purged(session, cycle.id),
             }
         )
 
