@@ -15,7 +15,7 @@
 {% else %}
   <p class="sub">
     {{ member_name }} &middot; {{ update.captured_at.strftime('%Y-%m-%d %H:%M UTC') }}
-    &middot; via {{ update.source_kind }}
+    &middot; via {{ {"webform": "the web form", "teams": "Teams", "cli": "the command line"}.get(update.source_kind, update.source_kind) }}
   </p>
   <h2>As submitted</h2>
   <pre class="raw">{{ before }}<mark>{{ quote }}</mark>{{ after }}</pre>
