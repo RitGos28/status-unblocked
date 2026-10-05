@@ -213,7 +213,7 @@ Wanting to import a SQLAlchemy model into `summarize/` is the signal you are abo
 
 1. **The validator runs after the summarizer, never inside one.** `service.py` calls `summarize()` then `validate()`. A summarizer must never call the validator itself, or the check becomes bypassable by the next implementation.
 
-2. **`update.raw_text` and `raw_payload_json` are immutable.** Written once at ingestion. Retention (`privacy/retention.purge_expired`, run by the scheduler per `team.retention_days`) nulls them; nothing else touches them. The quoted lines (`UpdateItem.text`, digest citations) stay, so digests remain readable and verifiable. Every citation's verifiability rests on this.
+2. **`update.raw_text` and `raw_payload_json` are immutable.** Written once at ingestion. Retention (`privacy/retention.purge_expired`, run by the scheduler per `team.retention_days`) nulls them; nothing else touches them. It also nulls every `UpdateItem.text` no digest cites; the cited lines stay, so digests remain readable and verifiable. A purged day cannot be rebuilt (`build_digest` raises `ConflictError`, 409). Every citation's verifiability rests on this.
 
 3. **Character offsets are real offsets.** `raw_text[span_start:span_end] == item.text` must hold. If you normalize or strip text, adjust the offsets. There is a Hypothesis property over arbitrary text guarding this.
 

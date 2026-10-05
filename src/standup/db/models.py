@@ -181,7 +181,8 @@ class UpdateItem(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     update_id: Mapped[str] = mapped_column(ForeignKey("update.id"))
     kind: Mapped[str] = mapped_column(String(16))
-    text: Mapped[str] = mapped_column(Text)
+    # None once retention removed it: only lines a digest quoted are kept.
+    text: Mapped[str | None] = mapped_column(Text, nullable=True)
     span_start: Mapped[int] = mapped_column(Integer)
     span_end: Mapped[int] = mapped_column(Integer)
     # Lowercased, stopword-stripped key used to match a blocker across days.

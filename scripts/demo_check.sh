@@ -296,6 +296,18 @@ grep -q "Waiting on staging credentials" <<<"$(curl -s -b "$WORK/ada.jar" "$BASE
 grep -q "expired" <<<"$(curl -s -b "$WORK/ada.jar" "$BASE$EVIDENCE")" || fail "the evidence page says the source expired"
 $PY -m scripts.verify_integrity >/dev/null || fail "the audit chain and pinned hashes still verify after retention"
 grep -q "removed by retention" <<<"$(curl -s -b "$WORK/ada.jar" "$BASE/me/data")" || fail "My data says the text was removed"
-pass "retention 40 days on: stored text removed, the digest still reads, evidence says expired, integrity holds"
+grep -q "line, removed by retention" <<<"$(curl -s -b "$WORK/ada.jar" "$BASE/me/data")" \
+    || fail "lines no digest quoted (Ada's replaced update) are removed too"
+LISTING="$(curl -s -b "$WORK/ada.jar" "$BASE/digests")"
+! grep -q ">Rebuild<" <<<"$LISTING" && grep -q "Updates removed by retention" <<<"$LISTING" \
+    || fail "a purged day offers no Rebuild"
+PURGED_CYCLE="$($PY - "$WORK/demo.db" "$DIGEST_ID" <<'EOF2'
+import sqlite3, sys
+print(sqlite3.connect(sys.argv[1]).execute("select cycle_id from digest where id=?", (sys.argv[2],)).fetchone()[0])
+EOF2
+)"
+[ "$(status -X POST -b "$WORK/ada.jar" "$BASE/digests/build/$PURGED_CYCLE")" = 409 ] \
+    || fail "rebuilding a purged day is refused (409), and its digest stays"
+pass "retention 40 days on: stored text and unquoted lines removed, the digest still reads and cannot be rebuilt, integrity holds"
 
 echo "All $STEP demo steps passed."

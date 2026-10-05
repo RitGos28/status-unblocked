@@ -16,10 +16,11 @@ from sqlalchemy.orm import Session
 from standup.config import get_settings
 from standup.db.models import Digest, DigestClaim, StandupCycle, Team, Update, UpdateItem
 from standup.domain.enums import AuditAction, ClaimKind, CycleState, ItemKind
-from standup.domain.errors import NotFoundError, ValidationFailure
+from standup.domain.errors import ConflictError, NotFoundError, ValidationFailure
 from standup.domain.urls import evidence_url
 from standup.logging_conf import get_logger
 from standup.privacy.audit import record_audit
+from standup.privacy.retention import day_was_purged
 from standup.summarize.base import (
     SourceDoc,
     Summarizer,
@@ -63,6 +64,8 @@ def build_request(session: Session, cycle_id: str, base_url: str) -> SummaryRequ
 
     sources: list[SourceDoc] = []
     for item, update in rows:
+        if item.text is None:  # removed by retention; live updates never are
+            continue
         sources.append(
             SourceDoc(
                 id=item.id,
@@ -144,6 +147,11 @@ def build_digest(
     Returns the persisted ``Digest`` row.
     """
     settings = get_settings()
+    if day_was_purged(session, cycle_id):
+        raise ConflictError(
+            "This day's updates were removed under the team's retention policy, so there is "
+            "nothing to rebuild from. Its digest stays as it was."
+        )
     request = build_request(session, cycle_id, base_url)
 
     result = summarizer.summarize(request)
