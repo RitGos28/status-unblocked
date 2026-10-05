@@ -97,11 +97,15 @@ Backed by code: the Teams app manifest (`teams/manifest/manifest.json`) requests
 | V1 | Every claim has at least one citation | live |
 | V2 | Every cited `source_id` exists (kills fabricated IDs) | live |
 | V3 | `quote == source.text[start:end]` after NFKC + whitespace collapse (kills paraphrase-as-quote) | live |
-| V4 | Every number/date in the claim appears in a cited source, or is derivable from cited `captured_at` | live |
-| V5 | Every entity ref (`#123`, URL, `@handle`) appears in a cited source | live |
+| V4 | Every number in the claim appears, as a whole token, in a cited quote | live |
+| V5 | Every entity ref (`#123`, URL, `@handle`, `ABC-12`) appears in a cited quote | live |
 | V6 | Claim's `member_id` matches every cited source (no cross-attribution) | live |
 | V7 | No cited source is outside consented/visible scope (privacy failures are faithfulness failures) | not built — needs the consent model |
 | V8 | Length-inflation guard for abstractive claims | live |
+| V9 | An extractive claim's text is its quote (a real citation cannot carry a different sentence) | live |
+| V10 | The claim's section follows the one classification policy (`rules.classify`) for its source; a carry-over also cites the earlier report | live |
+
+`python -m scripts.faithfulness_demo` runs these rules on a real day's updates: the rules summarizer's lines all pass, and seven plausible bad claims (an invented source, a misquote, "the blocker is solved", a blocker hidden under Progress, progress filed as a blocker, an added number, the wrong person) are each withheld.
 
 A failing claim is **dropped**, not silently corrected, and the digest reports how many were withheld. Under `STANDUP_VALIDATOR_STRICT=true` (as CI runs) the build raises instead.
 
