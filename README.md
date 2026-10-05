@@ -15,7 +15,9 @@
 - **Exports and imports spreadsheets:** each digest downloads as CSV; made-up or historical updates load from CSV.
 - **Respects boundaries:** the bot reads only what is sent to it directly and requests no Microsoft Graph permissions; there is no manager role; every opening of someone's stored update (its evidence page) is audited, and that person can see who opened it on **My data**; after the team's retention period the stored submission and every line no digest quoted are removed (the quoted lines stay, as the digest's record).
 
-Not built yet: consent for external processing (and validator rule V7), redaction, member-initiated deletion, contest/correct on digest lines, an LLM summarizer, syncing GitHub issue state back into the digest, a reconcile job, and deployment. CLAUDE.md lists them.
+Not built yet: consent for external processing (and validator rule V7), redaction, member-initiated deletion, contest/correct on digest lines, an LLM summarizer, syncing GitHub issue state back into the digest (a reconcile job), the written legitimate-interest assessment (`docs/LIA.md`), and deployment. CLAUDE.md's "not yet written" list is the same.
+
+One consequence to know: with GitHub write-back on, each blocker's verbatim text and its author's name go to the configured repository, with no per-member opt-in yet. Point a team at a private repository that the team can already see.
 
 ---
 
@@ -84,7 +86,7 @@ Because workers must be able to see how a tool classified their activity and con
 - No manager-only dashboards — **there is no manager role at all**
 - No sentiment or "morale" inference on individuals
 - No cross-team aggregation of individual data
-- No silent collection — every capture answers an explicit prompt
+- No silent collection — every capture is a member's own submission (the one exception is a CSV import of made-up or historical data, audited as an import, not as the member)
 - No retention past the stated window, except the lines a digest quoted, which are the team's record
 - No third-party model sees anyone's text without that person's separate opt-in
 

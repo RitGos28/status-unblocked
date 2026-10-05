@@ -10,6 +10,8 @@ scripts/demo_check.sh          # about 10 seconds; prints one line per step
 
 ## Setup (once per demo)
 
+From the repository root, with the virtual environment active (`source .venv/bin/activate`; see README's Getting started).
+
 ```bash
 python -m scripts.fake_github --port 8091 &   # a local stand-in for the GitHub API
 export STANDUP_TRACKER=github STANDUP_GITHUB_TOKEN=demo STANDUP_GITHUB_API_URL=http://127.0.0.1:8091
@@ -24,17 +26,17 @@ python -m scripts.set_github_repo --team core --repo demo/core
 uvicorn standup.main:app --port 8000
 ```
 
-`./run.sh` does the same with today's updates only.
+`./run.sh` is the minimal web-only version: today's updates only, no fake GitHub or Teams, no repo set. It serves on `PORT` (default 8000); set `STANDUP_BASE_URL` to match if you change it, because the login links it prints use that address.
 
 The seed prints `Now run: uvicorn standup.main:app --port <port>`: use that port, because the login links point at `STANDUP_BASE_URL`. All dates in the demo are **UTC dates**: "today" and "yesterday" mean the UTC calendar day, which can differ from your local date (for example, early morning in India is still the previous day in UTC).
 
 ## 1. Sign-in and team boundaries
 - Open `/digests` without signing in: **401**, "Sign in with your personal link".
 - Open **Ada's** link from the seed output: you land on **Digests**, which lists only Core Platform's days. Mobile also has a day today (Dana filed an update), and it is not listed; the header shows who you are signed in as.
-- Later (step 6), open **Dana's** link (team Mobile) and paste a Core Platform digest or evidence URL: **404**. Another team's pages are not just forbidden; they do not exist for her.
+- After step 3 (once a digest exists), open **Dana's** link (team Mobile) and paste a Core Platform digest or evidence URL: **404**. Another team's pages are not just forbidden; they do not exist for her.
 
 ## 1b. The Teams bot (no tenant needed)
-Activities are replayed to the bot as Teams would send them (`scripts/teams_replay.py`); the bot's replies land at the fake connector. Open `http://127.0.0.1:8092/` to watch them.
+Activities are replayed to the bot as Teams would send them (`scripts/teams_replay.py`); the bot's replies land at the fake connector. Open `http://127.0.0.1:8092/` to watch them. `teams_replay` assumes the app on port 8000 and the connector on 8092; on other ports pass `--app http://127.0.0.1:<port> --connector http://127.0.0.1:<port>`.
 - As Ada, open **Teams** in the header: it shows `link <code>`. Send it: `python -m scripts.teams_replay personal_command --text "link <code>"` → "Linked. You're Ada Okafor on Core Platform".
 - A code works once. Send the same code from another Teams account, `... --text "link <code>" --as aad-someone-else` → "That code is invalid or has expired", and Ada stays linked to her own account.
 - `python -m scripts.teams_replay personal_command` (the text `standup`) → the bot replies with the update card.
@@ -63,10 +65,11 @@ The digest builds itself at each team's cutoff (11:00 UTC for the demo teams). T
 
 ```bash
 python -m scripts.tick                                   # after 11:00 UTC: the real clock is past the cutoff
+                                                         # (before 11:00 it still builds every earlier day, not today)
 python -m scripts.tick --at <today>T11:06:00Z           # before 11:00 UTC; <today> is today's UTC date
 ```
 
-It reports `built 3 digest(s)`: Core Platform's yesterday and today, and Mobile's today; `built 5` if you imported Mobile's two earlier days in 2b (fewer if you already built one by hand with **Build digest**). Then open **Digests** and today's digest. If you use `--at` with a time earlier than your submissions, the digest's "built" time will read earlier than the updates it contains; that is the demo clock, not the app.
+It reports `built 3 digest(s)`: Core Platform's yesterday and today, and Mobile's today; `built 5` if you imported Mobile's two earlier days in 2b (fewer if you already built one by hand with **Build digest**). Then open **Digests** and today's digest. If you use `--at` with a time earlier than your submissions, the digest's "built" time will read earlier than the updates it contains; that is the demo clock, not the app. The same goes for retention in step 5c, which stamps its future date ("purged on …"). A Rebuild you press after a future `--at` pass is still the digest the list shows: the latest build wins, whatever its clock said.
 
 Run it again, or twice at once: nothing is built twice and no one is told twice, because only one pass may run at a time (a database lease) and each cycle is announced once. Run it with `STANDUP_BASE_URL` unset, or set to something that is not an absolute http(s) URL (`localhost:8000`), and it refuses in one line, because its links go into GitHub issues and Teams messages.
 
@@ -77,7 +80,7 @@ Run it again, or twice at once: nothing is built twice and no one is told twice,
 - **Negation:** Bruno wrote "No blockers today." It is not reported as a blocker. Answers like "None", "N/A", "-", "Blockers: none" or "Nope, all clear" are not blockers either; "No longer stuck on X" is progress.
 - **Not every problem is a blocker:** "Fixed the bug where users cannot log in." stays under Progress: "can't" or "cannot" counts only when the writer is the one who cannot ("I can't deploy until…", "Cannot access the build server").
 - **Exceptions:** "No blockers except waiting on App Store review." *is* a blocker: "except", "apart from", "other than" and "besides" start a new clause.
-- **Clauses:** a sentence such as "Merged the API changes, but waiting on review for the DB migration." is promoted: each clause is judged on its own, so "no blockers on X, but stuck on Y" still reports Y.
+- **Clauses:** a sentence such as "Merged the API changes, but waiting on review for the DB migration." (submit it as Bruno under Progress; it is not in the seed) is promoted: each clause is judged on its own, so "no blockers on X, but stuck on Y" still reports Y.
 - Every line has a **source** link. The **Markdown** link at the bottom gives the same digest as text, including the "Moved to Blockers" notes.
 - **Spreadsheet (CSV)** at the bottom downloads the digest: one row per line with its section, who, the verbatim text, the evidence link, the earlier report (for carried-over blockers) and the GitHub issue. Text that would run as a formula in Excel or Sheets (starting with `=`, `+`, `-` or `@`) is prefixed with `'`.
 
@@ -93,6 +96,11 @@ The scheduler pass in step 3 also delivered the blockers to the (fake) GitHub, t
 - Click a **source** link: the stored update, with the cited words highlighted and their character offsets.
 - `python -m scripts.verify_integrity` → "audit chain intact; every stored update matches its pinned hash". This holds under load too: the demo check opens the same evidence 20 times at once first, and every view is recorded on one unbroken chain.
 - Edit any stored update in a *copy* of the database and run it against the copy: it names the tampered update and exits 1. (`scripts/demo_check.sh` does exactly this.)
+  ```bash
+  cp demo.db tampered.db
+  sqlite3 tampered.db "UPDATE \"update\" SET raw_text = replace(raw_text, 'staging', 'prod')"
+  STANDUP_DATABASE_URL=sqlite:///./tampered.db python -m scripts.verify_integrity   # names each edited update; exit 1
+  ```
 - `python -m scripts.faithfulness_demo` → the validator at work on today's Core Platform updates. The rules summarizer's lines all pass; then seven claims an unfaithful summarizer could write, built from the same real updates, are each **withheld**, with the rule that caught it: an invented source (V2), a misquote (V3), "fully unblocked" citing the blocker (V9), the blocker hidden under Progress and progress filed as a blocker (V10), an added number (V4), the wrong person credited (V6). It reads only; nothing is built or stored.
 
 ## 5b. My data
@@ -109,6 +117,8 @@ python -m scripts.tick --at <a UTC date 40 days from now>T12:00:00Z   # "... pur
 The full stored submissions are removed, and so is every line no digest quoted (Ada's replaced update from step 2, for example: **My data** now shows it as "a progress line, removed by retention"). The digest still reads, because the lines it quoted stay: the digest is the team's record. Evidence pages say the source expired, and `verify_integrity` still passes. **Digests** no longer offers Rebuild for those days ("Updates removed by retention"): there is nothing left to rebuild from, so the digest is final. Run this last: it removes the demo's stored text.
 
 ## 6. Ops
+- `/version`: the build's version. **Sign out** in the header ends the session; `python -m scripts.issue_links` prints fresh login links at any time (links expire after `STANDUP_LOGIN_LINK_DAYS`; an expired one says so and asks for a fresh one).
+- `STANDUP_SCHEDULER=true` (with `STANDUP_BASE_URL`) runs the same scheduler pass inside the app every minute (`STANDUP_SCHEDULER_INTERVAL_SECONDS`) instead of `scripts/tick`.
 - `/scope`: a JSON count of out-of-scope Teams messages the bot refused, by reason. It is an ops endpoint like `/healthz`, open without sign-in, because it holds counts only: nothing about the refused messages is stored.
 - `/healthz`, `/readyz`.
 - Any error opened in a browser is an HTML page; API clients get `application/problem+json`.

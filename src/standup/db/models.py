@@ -70,7 +70,8 @@ class Member(Base):
     team_id: Mapped[str] = mapped_column(ForeignKey("team.id"))
     display_name: Mapped[str] = mapped_column(String(200))
     tz: Mapped[str] = mapped_column(String(64), default="UTC")
-    # Maps an external identity (Teams aadObjectId, web form handle) to this row.
+    # Informational only: the seed records a web-form handle here. Nothing looks
+    # members up by it; Teams identity is teams_aad_id below.
     source_keys: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     # The member's Teams identity (aadObjectId), set when they link their
     # account with a code from the web app. Unique: one Teams account can
