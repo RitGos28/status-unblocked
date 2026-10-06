@@ -30,7 +30,7 @@ Before each push:
 
 1. Update `README.md` if behaviour, setup, or what is built changed, and `docs/DEMO.md` plus `scripts/demo_check.sh` if a feature changed
 2. Update this file if a convention, invariant, or command changed
-3. Update `.env.example` if a setting was added
+3. Update `.env.example` if a setting was added, with a working demo value
 4. Run `pytest` and `ruff check .` — do not push a red tree
 5. Commit with no attribution trailer, then `git push`
 
@@ -52,7 +52,7 @@ cd backend
 python3.13 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 
-pytest                                    # full suite (266 tests)
+pytest                                    # full suite (370 tests)
 pytest tests/unit                         # fast pass
 pytest tests/e2e -v                       # end-to-end smoke
 pytest tests/unit/test_validator.py       # one file
@@ -92,17 +92,16 @@ npm run build         # bundle production React app
 
 ### Running the app locally
 
-`STANDUP_SECRET_KEY` (32+ chars) must be set, or startup fails naming it. `alembic upgrade head` does not need it. The seed is required too, since every page except `/` and `/healthz` needs a signed-in member:
+With no `backend/.env`, `config.apply_env_example_fallback()` fills every unset variable from `backend/.env.example`'s demo values (only while `STANDUP_ENV` is `local`/`test`; `STANDUP_ENV_EXAMPLE_FALLBACK=false` or a `.env` turns it off; `tests/conftest.py` turns it off for the suite). So a fresh checkout needs no configuration, and `./run.sh` (repo root; `all` adds the React dev server) does the rest: migrate, seed two days, point Core Platform at the fake GitHub, start both fakes, serve. Ports: `PORT`, `GITHUB_PORT`, `TEAMS_PORT`, `WEB_PORT`; links follow `PORT`. The seed is required, since every page except `/` and `/healthz` needs a signed-in member. By hand:
 
 ```bash
-export STANDUP_SECRET_KEY=$(python -c "import secrets; print(secrets.token_urlsafe(48))")
 alembic upgrade head
 python -m scripts.seed_demo --days 2   # Core Platform (3) + Mobile (1), 2 days of updates; prints each team's code
 uvicorn standup.main:app --reload
 python -m scripts.team_codes     # every team's sign-in code; --team SLUG --rotate issues a new one
 ```
 
-Open `/login` and sign in with a team's code and a member's name, then `/submit` and `/digests`. `docker compose up --build` runs the same thing against Postgres (it reads `STANDUP_SECRET_KEY` from your shell). In tests, `tests/helpers.login_as(client, member_id)` signs in through the real `/login` route with that member's team code and name.
+Open `/login` and sign in with a team's code and a member's name, then `/submit` and `/digests`. `docker compose up --build` runs the demo with nothing set: Postgres, the API with the in-app scheduler, the React app behind nginx (which proxies `/api`), and the fake GitHub; ports `APP_PORT`, `WEB_PORT`, `GITHUB_PORT`, public address `PUBLIC_HOST`. It defaults to the demo key and `STANDUP_ENV=local`; README's "Hosting on a server" sets `STANDUP_ENV=production` and a real key. In tests, `tests/helpers.login_as(client, member_id)` signs in through the real `/login` route with that member's team code and name.
 
 ### import-linter
 
@@ -180,10 +179,10 @@ Files that exist today:
 ```
 src/standup/
   main.py          app factory, lifespan, RFC-9457 error handler
-  config.py        pydantic-settings, STANDUP_ prefix
+  config.py        pydantic-settings, STANDUP_ prefix; .env.example fallback for the demo
   deps.py          DI: get_db, get_clock, get_summarizer; Jinja templates
   logging_conf.py  structlog + secret scrubbing
-  api/             health (+ /scope, /version), auth (/login form + /api/auth/login), me (/me/team, /me/teams, /me/data, /me/export), web_forms, evidence, digests (+ .md, .csv), teams_router
+  api/             health (+ /scope, /version), auth (/login form + /api/auth/login), me (/me/team, /me/teams, /me/data, /me/export), web_forms, evidence, digests (+ .md, .csv), teams_router, api_router (/api/*: JSON for the React app, reusing the page handlers for downloads and export)
   auth/            team_code (pure: generate/normalise/format), signin (code + name -> member), teams_link (bot pairing codes)
   domain/          enums, errors, models (Clock, SystemClock, FakeClock), timezones (+ as_utc), text (content_sha256), urls   (pure, zero I/O)
   ingestion/       base, web_adapter, teams_adapter (+ scope gate, card), csv_import, permalink, normalizer, service (the one ingest() path)
@@ -198,7 +197,7 @@ src/standup/
 
 Planned but **not yet written** — do not import these, and do not assume they exist:
 
-`api/privacy.py`, `api/admin.py`, `summarize/llm.py`, `summarize/prompts.py`, `privacy/{consent,visibility,redaction}.py`, member-initiated deletion (`/me/delete`), contest/correct on digest lines, syncing GitHub issue state back (the tracker reconcile job), proactive "time to file" prompts, `docs/LIA.md`, and deployment. README's "Not built yet" is the same list. (Export exists as `/me/export` in `api/me.py`; retention as `privacy/retention.py`.)
+`api/privacy.py`, `api/admin.py`, `summarize/llm.py`, `summarize/prompts.py`, `privacy/{consent,visibility,redaction}.py`, member-initiated deletion (`/me/delete`), contest/correct on digest lines, syncing GitHub issue state back (the tracker reconcile job), proactive "time to file" prompts, `docs/LIA.md`, and a production deployment (HTTPS, a managed host; Compose runs it on one server over HTTP). README's "Not built yet" is the same list. (Export exists as `/me/export` in `api/me.py`; retention as `privacy/retention.py`.)
 
 **Auth is a shared team code plus the member's name, and team scoping is enforced.** `Team.join_code` is shown to every member at `/me/team`; `auth/signin.sign_in()` resolves code + name to one active member and answers the same way for a wrong code and a wrong name. A code proves membership of a team, not identity: do not build anything that assumes a session is unforgeable by a teammate. `deps.CurrentMember` resolves the signed-in member from the session cookie (401 otherwise). Every route that touches a team's data checks `deps.ensure_same_team()`, which answers 404 for another team's resources. A new route that reads digests, evidence or updates must do the same.
 
@@ -272,7 +271,7 @@ Ruff excludes `src/standup/migrations/versions/` — Alembic writes those.
 ## Secrets and config
 
 - `SecretStr` for every credential. `config.py` requires `STANDUP_SECRET_KEY` (32+ chars); `STANDUP_GITHUB_TOKEN` becomes required with `STANDUP_TRACKER=github`, the three Teams `CONNECTIONS__…` keys with `STANDUP_TEAMS_ENABLED=true` (unless anonymous Playground mode, which is refused outside `local`/`test`), and `STANDUP_BASE_URL` with `STANDUP_SCHEDULER=true`. Startup names every missing key at once. Alembic reads only `DatabaseSettings`, so migrations need no secrets.
-- `.env` is gitignored; **`.env.example` must stay complete** — every key present, no values.
+- `.env` is gitignored; **`.env.example` must stay complete** — every key present, with a working *demo* value where the demo needs one and blank where only a real account would do. It is the accountless demo's configuration (see the fallback above), so never put a real credential in it. Its `STANDUP_SECRET_KEY` is public: `config.DEMO_SECRET_KEY`, refused unless `STANDUP_ENV` is `local`/`test`, and the app logs `config.demo_secret_key` when it runs with it.
 - `logging_conf.py` scrubs sensitive key names and secret-shaped values (GitHub tokens, AWS keys, JWTs) from every log line. `tests/unit/test_logging.py` asserts a known secret never reaches the stream. Team codes travel in the sign-in form body, never in a path, so the access log does not need redacting; `demo_check.sh` asserts no code appears in the server log.
 
 ---

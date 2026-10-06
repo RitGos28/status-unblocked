@@ -39,6 +39,13 @@ async function request(url, options = {}) {
   return response.text();
 }
 
+// Plain links for the browser to download; same team checks as the pages.
+export const downloads = {
+  digestMarkdown: (digestId) => `${API_BASE}/api/digest/${digestId}.md`,
+  digestCsv: (digestId) => `${API_BASE}/api/digest/${digestId}.csv`,
+  myExport: () => `${API_BASE}/api/me/export`,
+};
+
 export const api = {
   // Auth & Current Member
   getCurrentUser: () => request("/api/me"),
@@ -69,6 +76,9 @@ export const api = {
 
   // Team
   getTeam: () => request("/api/me/team"),
+
+  // My data (the JSON export is a plain link: exportUrl)
+  getMyData: () => request("/api/me/data"),
 
   // Teams
   getTeamsLink: () => request("/api/me/teams"),

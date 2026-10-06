@@ -1,5 +1,5 @@
 import React from "react";
-import { ShieldCheck, LogOut, Send, BookOpen, Zap, Users } from "lucide-react";
+import { ShieldCheck, LogOut, Send, BookOpen, Zap, Users, Database } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 
 export default function Header({ currentPath, navigate }) {
@@ -51,6 +51,13 @@ export default function Header({ currentPath, navigate }) {
             onClick={() => navigate("/me/teams")}
           >
             <Zap size={14} /> Teams
+          </button>
+          <button
+            type="button"
+            className={`nav-link ${currentPath === "/me/data" ? "active" : ""}`}
+            onClick={() => navigate("/me/data")}
+          >
+            <Database size={14} /> My data
           </button>
         </nav>
       )}

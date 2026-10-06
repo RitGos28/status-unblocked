@@ -8,6 +8,7 @@ import EvidencePage from "./pages/EvidencePage";
 import TeamsLinkPage from "./pages/TeamsLinkPage";
 import LoginPage from "./pages/LoginPage";
 import TeamPage from "./pages/TeamPage";
+import MyDataPage from "./pages/MyDataPage";
 
 function getRoute() {
   // Support both hash routing and HTML5 path routing
@@ -56,6 +57,11 @@ export default function App() {
     // Route: /me/team
     if (pathname === "/me/team") {
       return <TeamPage navigate={navigate} />;
+    }
+
+    // Route: /me/data
+    if (pathname === "/me/data") {
+      return <MyDataPage navigate={navigate} />;
     }
 
     // Route: /digest/:id

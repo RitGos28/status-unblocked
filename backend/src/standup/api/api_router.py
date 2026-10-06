@@ -7,11 +7,12 @@ authentication, updates submission, digest browsing, and verifiable evidence loo
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, Request
+from fastapi import APIRouter, BackgroundTasks, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
-from standup.api.digests import drain_tracker_outbox
+from standup.api.digests import drain_tracker_outbox, view_digest_csv, view_digest_markdown
+from standup.api.me import _events_about, _my_updates, my_export
 from standup.auth.signin import SIGN_IN_FAILED, sign_in, team_summary
 from standup.auth.teams_link import TEAMS_LINK_MAX_AGE_SECONDS, issue_teams_link_code
 from standup.db.models import Digest, Member, StandupCycle, Team, TrackerLink, Update, UpdateItem
@@ -30,8 +31,9 @@ from standup.ingestion.permalink import describe_missing_permalink
 from standup.ingestion.service import ingest
 from standup.ingestion.web_adapter import WebFormAdapter
 from standup.privacy.audit import record_audit
+from standup.privacy.retention import day_was_purged
 from standup.summarize.render import SECTION_HINTS, SECTION_ORDER, SECTION_TITLES, explain_rule
-from standup.summarize.service import build_digest
+from standup.summarize.service import build_digest, latest_digest
 
 router = APIRouter(prefix="/api", tags=["frontend-api"])
 
@@ -112,12 +114,7 @@ def api_list_digests(session: DbSession, member: CurrentMember) -> dict[str, Any
 
     rows = []
     for cycle in cycles:
-        digest = session.execute(
-            select(Digest)
-            .where(Digest.cycle_id == cycle.id)
-            .order_by(Digest.generated_at.desc())
-            .limit(1)
-        ).scalar_one_or_none()
+        digest = latest_digest(session, cycle.id)
         update_count = len(
             session.execute(
                 select(Update)
@@ -142,6 +139,8 @@ def api_list_digests(session: DbSession, member: CurrentMember) -> dict[str, Any
                 if digest
                 else None,
                 "update_count": update_count,
+                # Retention removed the day's stored text: nothing to rebuild from.
+                "final": day_was_purged(session, cycle.id),
                 "team_name": team.name if team else "Team",
             }
         )
@@ -184,6 +183,21 @@ def api_build_digest(
         "digest_id": digest.id,
         "cycle_id": cycle.id,
     }
+
+
+# The downloads, under /api so the React app's proxy reaches them. Registered
+# before /digest/{digest_id}, which would otherwise swallow the suffix.
+@router.api_route("/digest/{digest_id}.md", methods=["GET", "HEAD"])
+def api_digest_markdown(digest_id: str, session: DbSession, member: CurrentMember) -> Response:
+    """The digest as Markdown, the same text as /digest/{id}.md."""
+    body = view_digest_markdown(digest_id, session, member)
+    return Response(content=body, media_type="text/plain; charset=utf-8")
+
+
+@router.api_route("/digest/{digest_id}.csv", methods=["GET", "HEAD"])
+def api_digest_csv(digest_id: str, session: DbSession, member: CurrentMember) -> Response:
+    """The digest as a spreadsheet, the same file as /digest/{id}.csv."""
+    return view_digest_csv(digest_id, session, member)
 
 
 @router.get("/digest/{digest_id}")
@@ -367,6 +381,22 @@ def api_view_evidence(
 def api_my_team(member: CurrentMember) -> dict[str, Any]:
     """The member's team: its sign-in code to share, and who is on it."""
     return {"team": team_summary(member.team), "viewer": _format_member(member)}
+
+
+@router.get("/me/data")
+def api_my_data(session: DbSession, member: CurrentMember) -> dict[str, Any]:
+    """Everything stored about the member, and every recorded access to it."""
+    return {
+        "updates": _my_updates(session, member),
+        "events": _events_about(session, member),
+        "viewer": _format_member(member),
+    }
+
+
+@router.get("/me/export")
+def api_my_export(session: DbSession, member: CurrentMember) -> Response:
+    """The same JSON file as /me/export; the export is audited the same way."""
+    return my_export(session, member)
 
 
 @router.get("/me/teams")

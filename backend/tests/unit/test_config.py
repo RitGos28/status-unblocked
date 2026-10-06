@@ -86,3 +86,74 @@ def test_a_base_url_must_be_an_absolute_http_url(url):
 )
 def test_absolute_http_base_urls_are_accepted_and_trimmed(url):
     assert Settings(_env_file=None, secret_key=KEY, base_url=url).base_url == url.strip()
+
+
+# --- .env.example as the demo fallback ---------------------------------------
+
+from pathlib import Path  # noqa: E402
+
+from standup.config import (  # noqa: E402
+    DEMO_SECRET_KEY,
+    ENV_EXAMPLE_PATH,
+    apply_env_example_fallback,
+    parse_env_file,
+)
+
+
+def test_env_example_is_a_working_local_demo_config(monkeypatch):
+    """Applied as the fallback, .env.example alone starts the app."""
+    values = parse_env_file(ENV_EXAMPLE_PATH.read_text(encoding="utf-8"))
+    assert values["STANDUP_ENV"] == "local"
+    assert values["STANDUP_SECRET_KEY"] == DEMO_SECRET_KEY
+    for key, value in values.items():
+        monkeypatch.setenv(key, value)
+    settings = Settings(_env_file=None)
+    assert settings.tracker == "github"
+    assert settings.github_api_url.startswith("http://127.0.0.1")
+    assert settings.teams_enabled is True
+
+
+def test_fallback_fills_only_unset_keys(tmp_path: Path):
+    example = tmp_path / ".env.example"
+    example.write_text("STANDUP_ENV=local\nSTANDUP_TRACKER=github\nSTANDUP_BLANK=\n# x=y\n")
+    environ = {"STANDUP_TRACKER": "noop"}
+    applied = apply_env_example_fallback(environ, example, dotenv_dirs=(tmp_path,))
+    assert applied == ["STANDUP_ENV"]
+    assert environ == {"STANDUP_TRACKER": "noop", "STANDUP_ENV": "local"}
+
+
+def test_fallback_steps_aside_for_a_real_dotenv(tmp_path: Path):
+    example = tmp_path / ".env.example"
+    example.write_text("STANDUP_TRACKER=github\n")
+    (tmp_path / ".env").write_text("STANDUP_TRACKER=noop\n")
+    environ: dict[str, str] = {}
+    assert apply_env_example_fallback(environ, example, dotenv_dirs=(tmp_path,)) == []
+    assert environ == {}
+
+
+@pytest.mark.parametrize(
+    "environ",
+    [{"STANDUP_ENV": "production"}, {"STANDUP_ENV_EXAMPLE_FALLBACK": "false"}],
+)
+def test_fallback_is_off_outside_local_or_when_switched_off(tmp_path: Path, environ):
+    example = tmp_path / ".env.example"
+    example.write_text(f"STANDUP_SECRET_KEY={DEMO_SECRET_KEY}\n")
+    before = dict(environ)
+    assert apply_env_example_fallback(environ, example, dotenv_dirs=(tmp_path,)) == []
+    assert environ == before
+
+
+def test_fallback_ignores_an_example_that_is_not_local(tmp_path: Path):
+    example = tmp_path / ".env.example"
+    example.write_text("STANDUP_ENV=production\nSTANDUP_TRACKER=github\n")
+    environ: dict[str, str] = {}
+    assert apply_env_example_fallback(environ, example, dotenv_dirs=(tmp_path,)) == []
+
+
+def test_demo_secret_key_works_locally():
+    assert Settings(_env_file=None, secret_key=DEMO_SECRET_KEY, env="local").env == "local"
+
+
+def test_demo_secret_key_is_refused_outside_local():
+    with pytest.raises(ValidationError, match="demo key published in .env.example"):
+        Settings(_env_file=None, secret_key=DEMO_SECRET_KEY, env="production")
