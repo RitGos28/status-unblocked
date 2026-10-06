@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from standup.api.teams_router import StandupAgent
-from standup.auth.tokens import issue_teams_link_code
+from standup.auth.teams_link import issue_teams_link_code
 from standup.db.models import IngestRejection, Member, Update
 from standup.domain.enums import SourceKind
 from standup.privacy.audit import verify_evidence

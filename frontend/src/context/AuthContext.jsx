@@ -29,17 +29,19 @@ export function AuthProvider({ children }) {
     checkAuth();
   }, []);
 
-  const loginWithToken = async (token) => {
+  // Sign in with the team's shared code and the member's name.
+  const login = async (teamCode, name) => {
     setLoading(true);
     setError(null);
     try {
-      const res = await api.loginWithToken(token);
+      const res = await api.login(teamCode, name);
       if (res.success && res.member) {
         setUser(res.member);
         return res.member;
       }
+      throw new Error("That team code and name do not match anyone.");
     } catch (err) {
-      setError(err.message || "Invalid or expired login link.");
+      setError(err.message || "That team code and name do not match anyone.");
       throw err;
     } finally {
       setLoading(false);
@@ -57,7 +59,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, error, checkAuth, loginWithToken, logout }}>
+    <AuthContext.Provider value={{ user, loading, error, checkAuth, login, logout }}>
       {children}
     </AuthContext.Provider>
   );

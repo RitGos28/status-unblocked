@@ -97,12 +97,12 @@ npm run build         # bundle production React app
 ```bash
 export STANDUP_SECRET_KEY=$(python -c "import secrets; print(secrets.token_urlsafe(48))")
 alembic upgrade head
-python -m scripts.seed_demo --days 2   # Core Platform (3) + Mobile (1), 2 days of updates; prints login links
+python -m scripts.seed_demo --days 2   # Core Platform (3) + Mobile (1), 2 days of updates; prints each team's code
 uvicorn standup.main:app --reload
-python -m scripts.issue_links    # fresh links any time
+python -m scripts.team_codes     # every team's sign-in code; --team SLUG --rotate issues a new one
 ```
 
-Open a member's link to sign in as them, then `/submit` and `/digests`. `docker compose up --build` runs the same thing against Postgres (it reads `STANDUP_SECRET_KEY` from your shell). In tests, `tests/helpers.login_as(client, member_id)` signs in through the real `/login` route.
+Open `/login` and sign in with a team's code and a member's name, then `/submit` and `/digests`. `docker compose up --build` runs the same thing against Postgres (it reads `STANDUP_SECRET_KEY` from your shell). In tests, `tests/helpers.login_as(client, member_id)` signs in through the real `/login` route with that member's team code and name.
 
 ### import-linter
 
@@ -183,8 +183,8 @@ src/standup/
   config.py        pydantic-settings, STANDUP_ prefix
   deps.py          DI: get_db, get_clock, get_summarizer; Jinja templates
   logging_conf.py  structlog + secret scrubbing
-  api/             health (+ /scope, /version), auth, me (/me/teams, /me/data, /me/export), web_forms, evidence, digests (+ .md, .csv), teams_router
-  auth/            tokens (signed, expiring per-member login links)
+  api/             health (+ /scope, /version), auth (/login form + /api/auth/login), me (/me/team, /me/teams, /me/data, /me/export), web_forms, evidence, digests (+ .md, .csv), teams_router
+  auth/            team_code (pure: generate/normalise/format), signin (code + name -> member), teams_link (bot pairing codes)
   domain/          enums, errors, models (Clock, SystemClock, FakeClock), timezones (+ as_utc), text (content_sha256), urls   (pure, zero I/O)
   ingestion/       base, web_adapter, teams_adapter (+ scope gate, card), csv_import, permalink, normalizer, service (the one ingest() path)
   summarize/       base, rules, validator, render, service
@@ -192,7 +192,7 @@ src/standup/
   tracker/         base (TrackerAdapter protocol), github, noop, idempotency, outbox
   scheduling/      tick (pure: what is due), jobs (runs it under the `scheduler` lease, in worker threads: build, notify once per cycle via `notified_at`, drain)
   db/              models, session, upsert (insert ignoring conflict), lease (single-runner jobs)
-  templates/       base, index, submit, digests, digest, evidence, error, me_data, me_teams
+  templates/       base, index, login, team, submit, digests, digest, evidence, error, me_data, me_teams
   migrations/      alembic
 ```
 
@@ -200,7 +200,7 @@ Planned but **not yet written** — do not import these, and do not assume they 
 
 `api/privacy.py`, `api/admin.py`, `summarize/llm.py`, `summarize/prompts.py`, `privacy/{consent,visibility,redaction}.py`, member-initiated deletion (`/me/delete`), contest/correct on digest lines, syncing GitHub issue state back (the tracker reconcile job), proactive "time to file" prompts, `docs/LIA.md`, and deployment. README's "Not built yet" is the same list. (Export exists as `/me/export` in `api/me.py`; retention as `privacy/retention.py`.)
 
-**Auth is per-member magic links, and team scoping is enforced.** `deps.CurrentMember` resolves the signed-in member from the session cookie (401 otherwise). Every route that touches a team's data checks `deps.ensure_same_team()`, which answers 404 for another team's resources. A new route that reads digests, evidence or updates must do the same.
+**Auth is a shared team code plus the member's name, and team scoping is enforced.** `Team.join_code` is shown to every member at `/me/team`; `auth/signin.sign_in()` resolves code + name to one active member and answers the same way for a wrong code and a wrong name. A code proves membership of a team, not identity: do not build anything that assumes a session is unforgeable by a teammate. `deps.CurrentMember` resolves the signed-in member from the session cookie (401 otherwise). Every route that touches a team's data checks `deps.ensure_same_team()`, which answers 404 for another team's resources. A new route that reads digests, evidence or updates must do the same.
 
 ---
 
@@ -273,7 +273,7 @@ Ruff excludes `src/standup/migrations/versions/` — Alembic writes those.
 
 - `SecretStr` for every credential. `config.py` requires `STANDUP_SECRET_KEY` (32+ chars); `STANDUP_GITHUB_TOKEN` becomes required with `STANDUP_TRACKER=github`, the three Teams `CONNECTIONS__…` keys with `STANDUP_TEAMS_ENABLED=true` (unless anonymous Playground mode, which is refused outside `local`/`test`), and `STANDUP_BASE_URL` with `STANDUP_SCHEDULER=true`. Startup names every missing key at once. Alembic reads only `DatabaseSettings`, so migrations need no secrets.
 - `.env` is gitignored; **`.env.example` must stay complete** — every key present, no values.
-- `logging_conf.py` scrubs sensitive key names and secret-shaped values (GitHub tokens, AWS keys, JWTs) from every log line. `tests/unit/test_logging.py` asserts a known secret never reaches the stream. It also redacts `/login/<token>` from uvicorn's access log (`RedactLoginTokens`), since a login link is a credential.
+- `logging_conf.py` scrubs sensitive key names and secret-shaped values (GitHub tokens, AWS keys, JWTs) from every log line. `tests/unit/test_logging.py` asserts a known secret never reaches the stream. Team codes travel in the sign-in form body, never in a path, so the access log does not need redacting; `demo_check.sh` asserts no code appears in the server log.
 
 ---
 

@@ -8,6 +8,7 @@ disclosed. Nobody can file an update as someone else.
 import pytest
 from sqlalchemy import select
 
+from standup.auth.team_code import format_team_code
 from standup.db.models import AuditLog, Member, Team, Update, UpdateItem
 from standup.domain.enums import AuditAction
 from tests.helpers import build_latest as build_digest_for
@@ -29,13 +30,74 @@ def test_pages_require_sign_in(client, team_with_members):
     for path in ("/submit", "/digests"):
         response = client.get(path, headers={"accept": "text/html"})
         assert response.status_code == 401
-        assert "personal link" in response.text
+        assert "team code" in response.text
 
 
-def test_forged_link_does_not_sign_in(client, team_with_members):
-    response = client.get("/login/not-a-real-token", follow_redirects=False)
+@pytest.mark.parametrize(
+    "team_code, name",
+    [
+        ("CORE-NOPE1", "Ada Okafor"),  # a code no team has
+        ("{code}", "Nobody Here"),  # the right code, a name not on the team
+        ("{code}", ""),
+        ("", "Ada Okafor"),
+    ],
+)
+def test_a_wrong_code_or_name_does_not_sign_in(client, team_with_members, team_code, name):
+    team, _members = team_with_members
+    data = {"team_code": team_code.format(code=format_team_code(team.join_code)), "name": name}
+    response = client.post("/login", data=data, follow_redirects=False)
     assert response.status_code == 401
+    assert "do not match" in response.text
     assert client.get("/digests").status_code == 401
+
+
+def test_code_and_name_forgive_case_and_spacing(client, team_with_members):
+    team, (ada, *_rest) = team_with_members
+    code = team.join_code.lower()
+    data = {"team_code": f"  {code[:4]} - {code[4:]} ", "name": "  ada   OKAFOR "}
+    response = client.post("/login", data=data, follow_redirects=False)
+    assert response.status_code == 303
+    assert "Ada Okafor" in client.get("/digests").text
+
+
+def test_a_team_code_signs_in_only_that_teams_members(client, team_with_members, other_team):
+    core, _members = team_with_members
+    _mobile, dana = other_team
+    data = {"team_code": format_team_code(core.join_code), "name": dana.display_name}
+    assert client.post("/login", data=data, follow_redirects=False).status_code == 401
+
+
+def test_an_inactive_member_cannot_sign_in(client, session, team_with_members):
+    team, (ada, *_rest) = team_with_members
+    ada.active = False
+    session.commit()
+    data = {"team_code": format_team_code(team.join_code), "name": ada.display_name}
+    assert client.post("/login", data=data, follow_redirects=False).status_code == 401
+
+
+def test_every_member_sees_the_team_code_on_the_team_page(client, team_with_members):
+    team, (ada, bruno, _chen) = team_with_members
+    for member in (ada, bruno):
+        login_as(client, member.id)
+        page = client.get("/me/team").text
+        assert format_team_code(team.join_code) in page
+        assert "Chen Wei" in page
+    api = client.get("/api/me/team").json()
+    assert api["team"]["join_code"] == format_team_code(team.join_code)
+    assert api["team"]["members"] == ["Ada Okafor", "Bruno Silva", "Chen Wei"]
+
+
+def test_the_json_api_signs_in_with_the_same_code_and_name(client, team_with_members):
+    team, (ada, *_rest) = team_with_members
+    bad = client.post("/api/auth/login", json={"team_code": "CORE-NOPE1", "name": "Ada Okafor"})
+    assert bad.status_code == 401
+    good = client.post(
+        "/api/auth/login",
+        json={"team_code": format_team_code(team.join_code), "name": "ada okafor"},
+    )
+    assert good.status_code == 200
+    assert good.json()["member"]["display_name"] == "Ada Okafor"
+    assert client.get("/api/me").json()["authenticated"] is True
 
 
 def test_sign_out_ends_the_session(client, team_with_members):

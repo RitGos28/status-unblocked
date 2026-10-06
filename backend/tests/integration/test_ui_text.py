@@ -30,7 +30,7 @@ def other_member(session) -> Member:
 def test_the_sign_in_page_does_not_tell_people_to_run_commands(client, team_with_members):
     page = client.get("/digests", headers=HTML).text
     assert "python" not in page
-    assert "expired" in page
+    assert "team code" in page
 
 
 def test_the_submit_form_placeholders_are_not_the_demo_answers(client, team_with_members):

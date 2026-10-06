@@ -10,7 +10,7 @@
   <p style="margin-top:0"><a href="/submit">Submit today's update</a> or <a href="/digests">read your team's digests</a>.</p>
   <p class="muted" style="margin-bottom:0">Signed in as {{ viewer.display_name }}, {{ viewer.team.name }}.</p>
   {% else %}
-  <p style="margin:0">Open the personal link your team gave you to sign in. There are no passwords; each link is for one person and expires.</p>
+  <p style="margin:0"><a href="/login">Sign in</a> with your team's code and your name. There are no passwords; anyone on your team can give you the code.</p>
   {% endif %}
 </div>
 {% endblock %}

@@ -7,7 +7,8 @@ from fastapi import APIRouter, Request, Response
 from fastapi.responses import HTMLResponse
 from sqlalchemy import select
 
-from standup.auth.tokens import TEAMS_LINK_MAX_AGE_SECONDS, issue_teams_link_code
+from standup.auth.signin import team_summary
+from standup.auth.teams_link import TEAMS_LINK_MAX_AGE_SECONDS, issue_teams_link_code
 from standup.db.models import AuditLog, Member, StandupCycle, Update
 from standup.deps import AppSettings, CurrentMember, DbSession, templates
 from standup.domain.enums import AuditAction
@@ -26,6 +27,20 @@ _ACTIONS = {
     AuditAction.DATA_DELETED.value: "removed your stored submission",
     AuditAction.TRACKER_WRITE.value: "wrote your blocker to the tracker",
 }
+
+
+@router.get("/me/team", response_class=HTMLResponse)
+def my_team(request: Request, member: CurrentMember) -> HTMLResponse:
+    """The member's team: the code to share with a teammate, and who is on it.
+
+    Every member sees the same page. Sharing the code is not a privilege, so
+    there is no role behind it (invariant 7).
+    """
+    return templates.TemplateResponse(
+        request=request,
+        name="team.html",
+        context={"viewer": member, "team": team_summary(member.team)},
+    )
 
 
 @router.get("/me/teams", response_class=HTMLResponse)

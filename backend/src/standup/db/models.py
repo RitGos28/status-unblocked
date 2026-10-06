@@ -32,7 +32,13 @@ from sqlalchemy import (
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.sql.elements import ColumnElement
 
+from standup.auth.team_code import generate_team_code
 from standup.domain.enums import CycleState, ItemKind, SourceKind
+
+
+def _new_join_code(context: Any) -> str:
+    """A sign-in code for a team being created, from its slug."""
+    return generate_team_code(context.get_current_parameters().get("slug") or "")
 
 
 def _uuid() -> str:
@@ -59,6 +65,10 @@ class Team(Base):
     workdays: Mapped[str] = mapped_column(String(20), default="1,2,3,4,5")
     github_repo: Mapped[str | None] = mapped_column(String(200), nullable=True)
     retention_days: Mapped[int] = mapped_column(Integer, default=30)
+    # What the team's members type to sign in, with their name. Shared by the
+    # team and shown to every member; see auth/team_code.py. Stored compact
+    # (CORE7K3MQ), shown with a hyphen (CORE-7K3MQ).
+    join_code: Mapped[str] = mapped_column(String(16), unique=True, default=_new_join_code)
 
     members: Mapped[list["Member"]] = relationship(back_populates="team")
 

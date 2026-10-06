@@ -97,9 +97,8 @@ def get_current_member(
 ) -> Member:
     if member is None:
         raise UnauthorizedError(
-            "Open the personal link your team gave you to sign in. Each link is "
-            "for one person and expires; if yours has expired, ask your team for "
-            "a new one."
+            "Sign in with your team's code and your name. Anyone on your team can "
+            "read the code off their Team page."
         )
     return member
 

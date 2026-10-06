@@ -32,7 +32,7 @@ from microsoft_agents.hosting.fastapi import CloudAdapter, jwt_authorization_dec
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from standup.auth.tokens import read_teams_link_code, teams_link_state
+from standup.auth.teams_link import read_teams_link_code, teams_link_state
 from standup.config import TEAMS_APP_ID_ENV, teams_anonymous_allowed
 from standup.db.models import IngestRejection, Member
 from standup.deps import AppClock, AppSettings, DbSession

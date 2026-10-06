@@ -120,7 +120,7 @@ def create_app() -> FastAPI:
         return _error_response(request, exc.status_code, title, detail, f"HTTP{exc.status_code}")
 
     settings = get_settings()
-    # Signed cookie holding only the member id. Lax, so a login link opened
+    # Signed cookie holding only the member id. Lax, so a digest link opened
     # from chat or email still lands signed in.
     app.add_middleware(
         SessionMiddleware,
@@ -128,7 +128,7 @@ def create_app() -> FastAPI:
         session_cookie="standup_session",
         same_site="lax",
         https_only=settings.cookie_secure,
-        max_age=settings.login_link_days * 86400,
+        max_age=settings.session_days * 86400,
     )
 
     app.add_middleware(

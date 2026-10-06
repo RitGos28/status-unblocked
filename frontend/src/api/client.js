@@ -42,7 +42,11 @@ async function request(url, options = {}) {
 export const api = {
   // Auth & Current Member
   getCurrentUser: () => request("/api/me"),
-  loginWithToken: (token) => request(`/api/auth/login/${token}`),
+  login: (teamCode, name) =>
+    request("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ team_code: teamCode, name }),
+    }),
   logout: () => request("/api/auth/logout", { method: "POST" }),
 
   // Submissions
@@ -62,6 +66,9 @@ export const api = {
 
   // Evidence
   getEvidence: (itemId) => request(`/api/evidence/${itemId}`),
+
+  // Team
+  getTeam: () => request("/api/me/team"),
 
   // Teams
   getTeamsLink: () => request("/api/me/teams"),
