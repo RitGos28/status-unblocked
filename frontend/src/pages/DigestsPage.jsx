@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 import { api } from "../api/client";
-import { CheckCircle2, RefreshCw, BookOpen, AlertCircle } from "lucide-react";
+import { CheckCircle2, RefreshCw, BookOpen, AlertCircle, BarChart3, Clock } from "lucide-react";
 
 export default function DigestsPage({ navigate, searchParams }) {
   const { user } = useAuth();
@@ -21,7 +21,6 @@ export default function DigestsPage({ navigate, searchParams }) {
         setRows(res.rows);
       }
     } catch (err) {
-      console.error("Failed to load digests:", err);
       setError(err.message || "Failed to load digests.");
     } finally {
       setLoading(false);
@@ -29,25 +28,19 @@ export default function DigestsPage({ navigate, searchParams }) {
   };
 
   useEffect(() => {
-    if (user) {
-      loadDigests();
-    }
+    if (user) loadDigests();
   }, [user]);
 
   if (!user) {
     return (
-      <div className="card">
-        <h3>Sign In Required</h3>
-        <p className="muted" style={{ marginTop: 8 }}>
+      <div className="card" style={{ textAlign: "center", padding: "40px 30px" }}>
+        <BookOpen size={32} color="var(--text-muted)" style={{ marginBottom: 14 }} />
+        <h3 style={{ marginBottom: 8 }}>Sign In Required</h3>
+        <p className="muted" style={{ marginBottom: 20 }}>
           Please sign in to read digests. Open your team magic link.
         </p>
-        <button
-          type="button"
-          className="btn btn-primary"
-          style={{ marginTop: 16 }}
-          onClick={() => navigate("/")}
-        >
-          Go to Home
+        <button type="button" className="btn btn-primary" onClick={() => navigate("/")}>
+          Back to Home
         </button>
       </div>
     );
@@ -62,63 +55,88 @@ export default function DigestsPage({ navigate, searchParams }) {
         navigate(`/digest/${res.digest_id}`);
       }
     } catch (err) {
-      console.error("Failed to build digest:", err);
       setError(err.message || "Failed to build digest.");
       setBuildingId(null);
     }
   };
 
+  const openCount  = rows.filter((r) => r.cycle.state === "open").length;
+  const totalCount = rows.length;
+
   return (
-    <div>
-      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+    <div className="stagger">
+      <div className="page-header">
         <div>
           <h1>Digests</h1>
-          <p className="subtitle">One per team per day.</p>
+          <p className="subtitle" style={{ marginBottom: 0 }}>
+            One verified digest per team per day.
+          </p>
         </div>
         <button
           type="button"
           className="btn btn-outline"
           onClick={loadDigests}
           disabled={loading}
-          style={{ fontSize: 13, padding: "6px 12px" }}
+          style={{ fontSize: 13, padding: "7px 14px" }}
         >
-          <RefreshCw size={13} className={loading ? "loading-spinner" : ""} /> Refresh
+          <RefreshCw size={13} style={loading ? { animation: "spin 0.65s linear infinite" } : {}} />
+          Refresh
         </button>
       </div>
 
+      {/* Stats */}
+      {!loading && totalCount > 0 && (
+        <div className="stat-row">
+          <div className="stat-chip">
+            <BarChart3 size={13} />
+            <strong>{totalCount}</strong> cycles total
+          </div>
+          <div className="stat-chip">
+            <Clock size={13} />
+            <strong>{openCount}</strong> open
+          </div>
+        </div>
+      )}
+
       {submitted && (
         <div className="notice-box notice-success">
-          <CheckCircle2 size={18} />
-          <span>Update recorded. It will be incorporated into today's digest.</span>
+          <CheckCircle2 size={17} />
+          <span>Update recorded — it will be incorporated into today's digest.</span>
         </div>
       )}
 
       {error && (
         <div className="notice-box notice-warning">
-          <AlertCircle size={18} />
+          <AlertCircle size={17} />
           <span>{error}</span>
         </div>
       )}
 
       {loading && rows.length === 0 ? (
-        <div className="card" style={{ textAlign: "center", padding: 36 }}>
-          <span className="loading-spinner" style={{ width: 24, height: 24 }} />
-          <p className="muted" style={{ marginTop: 12 }}>Loading digests...</p>
+        <div className="card" style={{ textAlign: "center", padding: "40px 24px" }}>
+          <span className="loading-spinner" style={{ width: 26, height: 26 }} />
+          <p className="muted" style={{ marginTop: 14 }}>Loading digests…</p>
         </div>
       ) : rows.length === 0 ? (
-        <div className="card">
-          <p style={{ margin: 0 }}>
+        <div className="card" style={{ textAlign: "center", padding: "40px 24px" }}>
+          <BookOpen size={30} color="var(--text-muted)" style={{ marginBottom: 12 }} />
+          <p style={{ margin: 0, color: "var(--text-secondary)" }}>
             Nothing yet.{" "}
-            <a
-              href="#/submit"
-              onClick={(e) => {
-                e.preventDefault();
-                navigate("/submit");
+            <button
+              type="button"
+              onClick={() => navigate("/submit")}
+              style={{
+                background: "none",
+                border: "none",
+                color: "var(--accent-bright)",
+                fontWeight: 600,
+                cursor: "pointer",
+                padding: 0,
+                fontSize: "inherit",
               }}
-              style={{ color: "var(--accent-primary)", fontWeight: 600 }}
             >
               Submit an update
-            </a>{" "}
+            </button>{" "}
             to open a cycle.
           </p>
         </div>
@@ -130,7 +148,7 @@ export default function DigestsPage({ navigate, searchParams }) {
                 <th>Date</th>
                 <th>Team</th>
                 <th>Updates</th>
-                <th>State</th>
+                <th>Status</th>
                 <th style={{ textAlign: "right" }}>Actions</th>
               </tr>
             </thead>
@@ -139,17 +157,15 @@ export default function DigestsPage({ navigate, searchParams }) {
                 const isBuilding = buildingId === r.cycle.id;
                 return (
                   <tr key={r.cycle.id}>
-                    <td style={{ fontWeight: 600 }}>{r.cycle.local_date}</td>
-                    <td>{r.team_name}</td>
+                    <td style={{ fontWeight: 600, color: "var(--text-primary)" }}>
+                      {r.cycle.local_date}
+                    </td>
+                    <td style={{ color: "var(--text-secondary)" }}>{r.team_name}</td>
                     <td>
                       <span className="code-inline">{r.update_count}</span>
                     </td>
                     <td>
-                      <span
-                        className={`badge-state ${
-                          r.cycle.state === "open" ? "open" : "closed"
-                        }`}
-                      >
+                      <span className={`badge-state ${r.cycle.state === "open" ? "open" : "closed"}`}>
                         {r.cycle.state}
                       </span>
                     </td>
@@ -158,23 +174,24 @@ export default function DigestsPage({ navigate, searchParams }) {
                         {r.digest && (
                           <button
                             type="button"
-                            className="btn btn-outline"
-                            style={{ padding: "5px 11px", fontSize: 13 }}
+                            className="btn btn-accent-outline"
+                            style={{ padding: "5px 12px", fontSize: 13 }}
                             onClick={() => navigate(`/digest/${r.digest.id}`)}
                           >
-                            <BookOpen size={13} /> Read digest
+                            <BookOpen size={12} /> Read
                           </button>
                         )}
                         <button
                           type="button"
                           className="btn btn-ghost"
-                          style={{ padding: "5px 11px", fontSize: 13 }}
+                          style={{ padding: "5px 12px", fontSize: 13 }}
                           disabled={isBuilding}
                           onClick={() => handleBuild(r.cycle.id)}
                         >
                           {isBuilding ? (
                             <>
-                              <span className="loading-spinner" /> Building...
+                              <span className="loading-spinner" style={{ width: 12, height: 12 }} />
+                              Building…
                             </>
                           ) : r.digest ? (
                             "Rebuild"

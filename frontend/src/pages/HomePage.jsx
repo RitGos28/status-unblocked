@@ -1,44 +1,69 @@
 import React from "react";
 import { useAuth } from "../context/AuthContext";
-import { ArrowRight, CheckCircle2, KeyRound, Sparkles } from "lucide-react";
+import { ArrowRight, CheckCircle2, KeyRound, Zap, Quote, ShieldCheck } from "lucide-react";
 
 export default function HomePage({ navigate, searchParams }) {
   const { user } = useAuth();
   const signedOut = searchParams.get("signed_out") === "1";
 
   return (
-    <div>
-      <h1>Status Unblocked</h1>
-      <p className="subtitle">
-        Async standup updates, summarised faithfully. Every line links back to the exact words its author wrote.
-      </p>
+    <div className="stagger">
+      <div>
+        <h1>Async standups,<br />zero-hallucination.</h1>
+        <p className="subtitle">
+          Every digest line links back to the exact words its author wrote. No paraphrasing. No ambiguity.
+        </p>
+      </div>
 
       {signedOut && !user && (
-        <div className="notice-box notice-info" style={{ marginBottom: 20 }}>
-          <CheckCircle2 size={18} />
+        <div className="notice-box notice-info" style={{ marginBottom: 0 }}>
+          <CheckCircle2 size={17} />
           <span>You have been signed out successfully.</span>
         </div>
       )}
 
-      <div className="card card-elevated" style={{ padding: "26px 28px" }}>
+      <div className="card-hero">
         {user ? (
           <div>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-              <Sparkles size={20} color="var(--accent-primary)" />
-              <h3 style={{ fontSize: 17, fontWeight: 700 }}>
-                Welcome back, {user.display_name}!
-              </h3>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+              <div
+                style={{
+                  width: 38,
+                  height: 38,
+                  borderRadius: "50%",
+                  background: "linear-gradient(135deg, var(--accent) 0%, #a78bfa 100%)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: 15,
+                  fontWeight: 800,
+                  color: "white",
+                  flexShrink: 0,
+                }}
+              >
+                {user.display_name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
+              </div>
+              <div>
+                <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 1 }}>
+                  Welcome back, {user.display_name}!
+                </h3>
+                <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                  {user.team_name} · signed in
+                </span>
+              </div>
             </div>
-            <p style={{ color: "var(--text-secondary)", marginBottom: 22, lineHeight: 1.6 }}>
-              You are signed in to the <strong>{user.team_name}</strong> team. You can submit your daily standup or catch up on the team's latest verified digests.
+
+            <p style={{ color: "var(--text-secondary)", marginBottom: 22, lineHeight: 1.6, fontSize: 14 }}>
+              Submit your standup update or catch up on your team's latest verified digests — all claims are extractive and auditable.
             </p>
-            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
               <button
                 type="button"
                 className="btn btn-primary"
                 onClick={() => navigate("/submit")}
               >
-                Submit today's update <ArrowRight size={15} />
+                Submit today's update <ArrowRight size={14} />
               </button>
               <button
                 type="button"
@@ -51,44 +76,50 @@ export default function HomePage({ navigate, searchParams }) {
           </div>
         ) : (
           <div>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-              <KeyRound size={20} color="var(--accent-primary)" />
-              <h3 style={{ fontSize: 17, fontWeight: 700 }}>Personal Magic Link Sign-in</h3>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+              <KeyRound size={22} color="var(--accent-bright)" />
+              <h3 style={{ fontSize: 17, fontWeight: 700 }}>Magic Link Sign-in</h3>
             </div>
-            <p style={{ color: "var(--text-secondary)", lineHeight: 1.6, marginBottom: 16 }}>
-              Open the personal link your team gave you to sign in. There are no passwords; each link is cryptographically signed for one person and expires automatically.
+            <p style={{ color: "var(--text-secondary)", lineHeight: 1.6, marginBottom: 14, fontSize: 14 }}>
+              Open the personal link your team gave you to sign in instantly. No passwords — each link is cryptographically signed for one person and expires automatically.
             </p>
-            <p className="muted">
-              Demo tip: If running locally, generate login links by running{" "}
+            <p className="muted" style={{ fontSize: 12.5 }}>
+              Running locally?{" "}
+              Generate links with{" "}
               <code className="code-inline">python -m scripts.issue_links</code> in the backend.
             </p>
           </div>
         )}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 16, marginTop: 24 }}>
-        <div className="card">
-          <h4 style={{ fontSize: 14, fontWeight: 700, marginBottom: 6, color: "var(--accent-primary)" }}>
-            Extractive Faithfulness
-          </h4>
-          <p className="muted" style={{ fontSize: 13, lineHeight: 1.5 }}>
-            Synthesized lines are verbatim source spans. Summarizer rules enforce zero-hallucination accuracy on blockers.
+      <div className="feature-grid">
+        <div className="feature-card">
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+            <Quote size={15} color="var(--accent-bright)" />
+            <div className="feature-label">Extractive Faithfulness</div>
+          </div>
+          <p className="feature-desc">
+            Synthesized lines are verbatim source spans. The summarizer enforces zero-hallucination accuracy on blockers — every claim must trace back to the raw submission.
           </p>
         </div>
-        <div className="card">
-          <h4 style={{ fontSize: 14, fontWeight: 700, marginBottom: 6, color: "var(--accent-primary)" }}>
-            Verifiable Citations
-          </h4>
-          <p className="muted" style={{ fontSize: 13, lineHeight: 1.5 }}>
-            Every claim links directly to its source item evidence with exact character offset highlighting and audit tracking.
+
+        <div className="feature-card">
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+            <ShieldCheck size={15} color="var(--accent-bright)" />
+            <div className="feature-label">Verifiable Citations</div>
+          </div>
+          <p className="feature-desc">
+            Every claim links to its source item evidence with exact character-offset highlighting and tamper-evident audit chain entries.
           </p>
         </div>
-        <div className="card">
-          <h4 style={{ fontSize: 14, fontWeight: 700, marginBottom: 6, color: "var(--accent-primary)" }}>
-            Ecosystem Integration
-          </h4>
-          <p className="muted" style={{ fontSize: 13, lineHeight: 1.5 }}>
-            Full bidirectional support for Microsoft Teams bot ingestion, outbox-drained GitHub issue tracking, and audit chains.
+
+        <div className="feature-card">
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+            <Zap size={15} color="var(--accent-bright)" />
+            <div className="feature-label">Ecosystem Integration</div>
+          </div>
+          <p className="feature-desc">
+            Full bidirectional support for Microsoft Teams bot ingestion, outbox-drained GitHub issue tracking, and privacy-respecting retention policies.
           </p>
         </div>
       </div>

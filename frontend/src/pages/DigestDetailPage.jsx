@@ -1,6 +1,15 @@
 import React, { useState, useEffect } from "react";
 import { api } from "../api/client";
-import { ExternalLink, Quote, FileText, ArrowLeft, AlertTriangle } from "lucide-react";
+import {
+  ExternalLink,
+  Quote,
+  FileText,
+  ArrowLeft,
+  AlertTriangle,
+  ShieldCheck,
+  ChevronDown,
+  ChevronUp,
+} from "lucide-react";
 
 export default function DigestDetailPage({ digestId, navigate }) {
   const [data, setData] = useState(null);
@@ -15,48 +24,35 @@ export default function DigestDetailPage({ digestId, navigate }) {
         setLoading(true);
         setError(null);
         const res = await api.getDigest(digestId);
-        if (isMounted) {
-          setData(res);
-        }
+        if (isMounted) setData(res);
       } catch (err) {
-        if (isMounted) {
-          setError(err.message || "Failed to load digest.");
-        }
+        if (isMounted) setError(err.message || "Failed to load digest.");
       } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
+        if (isMounted) setLoading(false);
       }
     };
-
     loadDigest();
-    return () => {
-      isMounted = false;
-    };
+    return () => { isMounted = false; };
   }, [digestId]);
 
   if (loading) {
     return (
-      <div className="card" style={{ textAlign: "center", padding: 40 }}>
-        <span className="loading-spinner" style={{ width: 28, height: 28 }} />
-        <p className="muted" style={{ marginTop: 14 }}>Loading digest...</p>
+      <div className="card" style={{ textAlign: "center", padding: "50px 24px" }}>
+        <span className="loading-spinner" style={{ width: 30, height: 30 }} />
+        <p className="muted" style={{ marginTop: 16 }}>Loading digest…</p>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div>
+      <div className="stagger">
         <h1>Unable to load digest</h1>
         <div className="notice-box notice-warning">
-          <AlertTriangle size={18} />
+          <AlertTriangle size={17} />
           <span>{error}</span>
         </div>
-        <button
-          type="button"
-          className="btn btn-outline"
-          onClick={() => navigate("/digests")}
-        >
+        <button type="button" className="btn btn-outline" onClick={() => navigate("/digests")}>
           <ArrowLeft size={14} /> Back to digests
         </button>
       </div>
@@ -70,36 +66,56 @@ export default function DigestDetailPage({ digestId, navigate }) {
     timeZone: "UTC",
   });
 
+  const totalClaims = sections.reduce((sum, s) => sum + s.claims.length, 0);
+
   return (
-    <div>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+    <div className="stagger">
+      {/* Back */}
+      <div>
         <button
           type="button"
           className="btn btn-ghost"
-          style={{ padding: "4px 8px", fontSize: 13, color: "var(--text-muted)" }}
+          style={{ padding: "5px 10px", fontSize: 13, color: "var(--text-muted)", marginBottom: 16 }}
           onClick={() => navigate("/digests")}
         >
-          <ArrowLeft size={14} /> Digests
+          <ArrowLeft size={13} /> Digests
         </button>
+
+        <h1>{team_name}</h1>
+        <p className="subtitle">
+          Standup {cycle.local_date} &middot; built {generatedTime} UTC
+        </p>
+
+        {/* Meta chips */}
+        <div className="stat-row" style={{ marginBottom: 24 }}>
+          <div className="stat-chip">
+            <Quote size={12} />
+            <strong>{totalClaims}</strong> claims
+          </div>
+          <div className="stat-chip">
+            <code style={{ fontFamily: "var(--font-mono)", fontSize: 11 }}>
+              {digest.summarizer_name} {digest.summarizer_version}
+            </code>
+          </div>
+          <div className="stat-chip">
+            <ShieldCheck size={12} />
+            Audit-chained
+          </div>
+        </div>
       </div>
 
-      <h1>{team_name}</h1>
-      <p className="subtitle">
-        Standup {cycle.local_date} &middot; built {generatedTime} UTC by{" "}
-        <code className="code-inline">
-          {digest.summarizer_name} {digest.summarizer_version}
-        </code>
-      </p>
-
+      {/* Sections */}
       {sections.length === 0 ? (
-        <div className="card">
-          <p style={{ margin: 0 }}>No updates were submitted for this cycle.</p>
+        <div className="card" style={{ textAlign: "center", padding: "36px 24px" }}>
+          <p style={{ margin: 0, color: "var(--text-secondary)" }}>
+            No updates were submitted for this cycle.
+          </p>
         </div>
       ) : (
         sections.map((section) => (
-          <div key={section.kind} style={{ marginBottom: 24 }}>
+          <div key={section.kind}>
             <h2>{section.title}</h2>
-            <div className="card card-elevated" style={{ padding: "10px 20px" }}>
+            <div className="card card-elevated" style={{ padding: "6px 22px" }}>
               {section.claims.map((claim) => (
                 <div key={claim.id} className="claim-row">
                   <span className="claim-who">{claim.member_name}</span>
@@ -143,41 +159,62 @@ export default function DigestDetailPage({ digestId, navigate }) {
         ))
       )}
 
+      {/* Warnings */}
       {digest.withheld_count > 0 && (
         <div className="notice-box notice-warning">
-          <AlertTriangle size={18} />
+          <AlertTriangle size={17} />
           <span>
-            {digest.withheld_count} item(s) withheld: failed source verification, or removed by their author.
+            {digest.withheld_count} item(s) withheld — failed source verification, or removed by their author.
           </span>
         </div>
       )}
 
       {digest.truncated_count > 0 && (
         <div className="notice-box notice-warning">
-          <AlertTriangle size={18} />
+          <AlertTriangle size={17} />
           <span>
-            {digest.truncated_count} more item(s) not shown: a section reached its line limit.
+            {digest.truncated_count} more item(s) not shown — a section reached its line limit.
           </span>
         </div>
       )}
 
-      <div style={{ marginTop: 28, paddingTop: 18, borderTop: "1px solid var(--border-subtle)", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
-        <p className="muted" style={{ margin: 0 }}>
-          Every line above is a verbatim quote, checked against its stored source before this page was written.
-        </p>
+      {/* Footer */}
+      <div
+        style={{
+          marginTop: 28,
+          paddingTop: 18,
+          borderTop: "1px solid var(--border-subtle)",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          flexWrap: "wrap",
+          gap: 12,
+        }}
+      >
+        <div className="notice-box notice-info" style={{ margin: 0, flex: 1, minWidth: 220 }}>
+          <ShieldCheck size={16} />
+          <span style={{ fontSize: 13 }}>
+            Every line above is a verbatim quote, verified against its stored source.
+          </span>
+        </div>
         <button
           type="button"
           className="btn btn-outline"
-          style={{ fontSize: 13, padding: "6px 12px" }}
+          style={{ fontSize: 13, padding: "7px 14px", flexShrink: 0 }}
           onClick={() => setShowMarkdown(!showMarkdown)}
         >
-          <FileText size={13} /> {showMarkdown ? "Hide Markdown" : "View Markdown"}
+          <FileText size={13} />
+          {showMarkdown ? (
+            <><ChevronUp size={12} /> Hide Markdown</>
+          ) : (
+            <><ChevronDown size={12} /> View Markdown</>
+          )}
         </button>
       </div>
 
       {showMarkdown && (
-        <div style={{ marginTop: 16 }}>
-          <pre className="raw-display" style={{ maxHeight: 300, overflowY: "auto" }}>
+        <div style={{ marginTop: 14, animation: "fadeUp 0.3s ease forwards" }}>
+          <pre className="raw-display" style={{ maxHeight: 320, overflowY: "auto" }}>
             {digest.body_md}
           </pre>
         </div>
