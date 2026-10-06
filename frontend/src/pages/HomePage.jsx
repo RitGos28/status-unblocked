@@ -78,16 +78,14 @@ export default function HomePage({ navigate, searchParams }) {
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
               <KeyRound size={22} color="var(--accent-bright)" />
-              <h3 style={{ fontSize: 17, fontWeight: 700 }}>Magic Link Sign-in</h3>
+              <h3 style={{ fontSize: 17, fontWeight: 700 }}>Sign in with your team code</h3>
             </div>
-            <p style={{ color: "var(--text-secondary)", lineHeight: 1.6, marginBottom: 14, fontSize: 14 }}>
-              Open the personal link your team gave you to sign in instantly. No passwords — each link is cryptographically signed for one person and expires automatically.
+            <p style={{ color: "var(--text-secondary)", lineHeight: 1.6, marginBottom: 18, fontSize: 14 }}>
+              Each team has one short code, shared by everyone on it. Enter the code and your name. No passwords, no accounts to create.
             </p>
-            <p className="muted" style={{ fontSize: 12.5 }}>
-              Running locally?{" "}
-              Generate links with{" "}
-              <code className="code-inline">python -m scripts.issue_links</code> in the backend.
-            </p>
+            <button type="button" className="btn btn-primary" onClick={() => navigate("/login")}>
+              Sign in <ArrowRight size={14} />
+            </button>
           </div>
         )}
       </div>

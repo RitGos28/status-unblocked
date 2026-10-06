@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}{{ team.name }}{% endblock %}
+{% block content %}
+<h1>{{ team.name }}</h1>
+<p class="sub">Your team, and the code that lets a teammate sign in.</p>
+
+<h2>Team code</h2>
+<div class="card">
+  <pre class="raw">{{ team.join_code }}</pre>
+  <p class="muted" style="margin-bottom:0">
+    Share it with anyone on {{ team.name }}: they sign in with this code and their name.
+    Everyone on the team can see it here. If it leaks, a new code can be issued from the backend;
+    nobody already signed in is affected.
+  </p>
+</div>
+
+<h2>Members</h2>
+<div class="card">
+  {% for name in team.members %}
+  <div class="claim"><span>{{ name }}</span></div>
+  {% endfor %}
+</div>
+{% endblock %}

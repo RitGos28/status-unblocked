@@ -59,11 +59,11 @@ class Settings(DatabaseSettings):
     log_level: str = "INFO"
     log_json: bool = False
 
-    # Signs login links and the session cookie. Required: there is no safe
-    # default. Rotating it signs everyone out and invalidates every link.
+    # Signs the session cookie and Teams link codes. Required: there is no
+    # safe default. Rotating it signs everyone out.
     secret_key: SecretStr = Field(min_length=32)
-    # How long a personal login link stays valid.
-    login_link_days: int = Field(default=30, ge=1)
+    # How long a sign-in lasts before the person signs in again.
+    session_days: int = Field(default=30, ge=1)
     # Send the session cookie over HTTPS only. Turn on behind TLS.
     cookie_secure: bool = False
 

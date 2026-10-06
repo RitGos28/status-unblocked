@@ -47,10 +47,10 @@ export default function SubmitPage({ navigate }) {
         <FileText size={32} color="var(--text-muted)" style={{ marginBottom: 14 }} />
         <h3 style={{ marginBottom: 8 }}>Sign In Required</h3>
         <p className="muted" style={{ marginBottom: 20 }}>
-          You must be signed in with a team member magic link to submit an update.
+          Sign in with your team's code and your name to submit an update.
         </p>
-        <button type="button" className="btn btn-primary" onClick={() => navigate("/")}>
-          Back to Home
+        <button type="button" className="btn btn-primary" onClick={() => navigate("/login")}>
+          Sign in
         </button>
       </div>
     );

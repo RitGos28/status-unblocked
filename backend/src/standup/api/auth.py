@@ -1,32 +1,47 @@
-"""Sign in with a personal link; sign out."""
+"""Sign in with a team code and your name; sign out.
 
-from fastapi import APIRouter, Request
-from fastapi.responses import RedirectResponse
+There are no passwords and no roles. A team code is shared by the whole team
+(every member sees it on their Team page) and the name says who you are; see
+``auth/team_code.py`` for the trade that makes.
+"""
 
-from standup.auth.tokens import read_login_token
-from standup.db.models import Member
-from standup.deps import AppSettings, DbSession
-from standup.domain.errors import UnauthorizedError
+from fastapi import APIRouter, Form, Request, Response
+from fastapi.responses import HTMLResponse, RedirectResponse
+
+from standup.auth.signin import SIGN_IN_FAILED, sign_in
+from standup.deps import DbSession, OptionalMember, templates
 from standup.logging_conf import get_logger
 
 router = APIRouter(tags=["auth"])
 log = get_logger(__name__)
 
 
-@router.get("/login/{token}")
-def login(
-    token: str, request: Request, session: DbSession, settings: AppSettings
-) -> RedirectResponse:
-    member_id = read_login_token(
-        settings.secret_key.get_secret_value(),
-        token,
-        max_age_seconds=settings.login_link_days * 86400,
+@router.get("/login", response_class=HTMLResponse)
+def login_form(request: Request, viewer: OptionalMember) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request=request,
+        name="login.html",
+        context={"viewer": viewer, "error": None, "team_code": "", "name": ""},
     )
-    member = session.get(Member, member_id) if member_id else None
-    if member is None or not member.active:
+
+
+@router.post("/login")
+def login(
+    request: Request,
+    session: DbSession,
+    team_code: str = Form(""),
+    name: str = Form(""),
+) -> Response:
+    member = sign_in(session, team_code, name)
+    if member is None:
+        # Neither the code nor the name is logged: the code is shared, the
+        # name may be a typo of a real one.
         log.info("auth.login_rejected")
-        raise UnauthorizedError(
-            "That link is invalid or has expired. Ask a teammate for a fresh one."
+        return templates.TemplateResponse(
+            request=request,
+            name="login.html",
+            context={"viewer": None, "error": SIGN_IN_FAILED, "team_code": team_code, "name": name},
+            status_code=401,
         )
 
     request.session.clear()

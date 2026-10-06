@@ -21,19 +21,21 @@ export STANDUP_DATABASE_URL=sqlite:///./demo.db
 export STANDUP_SECRET_KEY=$(python -c "import secrets; print(secrets.token_urlsafe(48))")
 export STANDUP_BASE_URL=http://127.0.0.1:8000
 alembic upgrade head
-python -m scripts.seed_demo --days 2      # two days of made-up updates; prints a login link per person
+python -m scripts.seed_demo --days 2      # two days of made-up updates; prints each team's sign-in code
 python -m scripts.set_github_repo --team core --repo demo/core
 uvicorn standup.main:app --port 8000
 ```
 
-`./run.sh` is the minimal web-only version: today's updates only, no fake GitHub or Teams, no repo set. It serves on `PORT` (default 8000); set `STANDUP_BASE_URL` to match if you change it, because the login links it prints use that address.
+`./run.sh` is the minimal web-only version: today's updates only, no fake GitHub or Teams, no repo set. It serves on `PORT` (default 8000); set `STANDUP_BASE_URL` to match if you change it, because the digest links in Teams notices and GitHub issues use that address.
 
-The seed prints `Now run: uvicorn standup.main:app --port <port>`: use that port, because the login links point at `STANDUP_BASE_URL`. All dates in the demo are **UTC dates**: "today" and "yesterday" mean the UTC calendar day, which can differ from your local date (for example, early morning in India is still the previous day in UTC).
+The seed prints `Now run: uvicorn standup.main:app --port <port>`: use that port, because the links the app hands out point at `STANDUP_BASE_URL`. All dates in the demo are **UTC dates**: "today" and "yesterday" mean the UTC calendar day, which can differ from your local date (for example, early morning in India is still the previous day in UTC).
 
 ## 1. Sign-in and team boundaries
-- Open `/digests` without signing in: **401**, "Sign in with your personal link".
-- Open **Ada's** link from the seed output: you land on **Digests**, which lists only Core Platform's days. Mobile also has a day today (Dana filed an update), and it is not listed; the header shows who you are signed in as.
-- After step 3 (once a digest exists), open **Dana's** link (team Mobile) and paste a Core Platform digest or evidence URL: **404**. Another team's pages are not just forbidden; they do not exist for her.
+- Open `/digests` without signing in: **401**, "Sign in with your team code".
+- Open `/login`. Sign-in is two fields: the team's code and your name, no password. The seed printed a code per team (for example `CORE-7K3MQ` for Core Platform). Type Core Platform's code with the name **Ada Okafor**, however you capitalise or space them: you land on **Digests**, which lists only Core Platform's days. Mobile also has a day today (Dana filed an update), and it is not listed; the header shows who you are signed in as.
+- Try Core Platform's code with a name that is not on the team, or a code no team has: the same "do not match anyone" message, so a code cannot be used to find out whether a team exists.
+- **Team** in the header shows the code to every member, with who is on the team. There is no owner of the code and no manager: anyone on the team shares it, and `python -m scripts.team_codes --team core --rotate` issues a new one (people already signed in stay signed in).
+- After step 3 (once a digest exists), sign in as **Dana Park** with Mobile's code and paste a Core Platform digest or evidence URL: **404**. Another team's pages are not just forbidden; they do not exist for her. Core Platform's code with Dana's name does not sign her in at all.
 
 ## 1b. The Teams bot (no tenant needed)
 Activities are replayed to the bot as Teams would send them (`scripts/teams_replay.py`); the bot's replies land at the fake connector. Open `http://127.0.0.1:8092/` to watch them. `teams_replay` assumes the app on port 8000 and the connector on 8092; on other ports pass `--app http://127.0.0.1:<port> --connector http://127.0.0.1:<port>`.
@@ -58,7 +60,7 @@ python -m scripts.import_updates_csv /tmp/mobile.csv   # "imported 2, skipped 0 
 python -m scripts.import_updates_csv /tmp/mobile.csv   # again: "imported 0, skipped 2 unchanged, ...": nothing changes
 ```
 
-Every row goes through the same path as the web form, filed on its own date, and is audited as an import (not as Dana). A file with any bad row, or a date in the future, imports nothing and names each problem by line. A file saved from Excel as "CSV UTF-8" works; any other encoding is refused in one line. A row never replaces a later update the member already has that day (it says "already has a later update"), and if a day already had a digest the import tells you to rebuild it. Sign in as Dana to see Mobile's days; the evidence page says the update came "via a spreadsheet import".
+Every row goes through the same path as the web form, filed on its own date, and is audited as an import (not as Dana). A file with any bad row, or a date in the future, imports nothing and names each problem by line. A file saved from Excel as "CSV UTF-8" works; any other encoding is refused in one line. A row never replaces a later update the member already has that day (it says "already has a later update"), and if a day already had a digest the import tells you to rebuild it. Sign in as Dana (Mobile's code, her name) to see Mobile's days; the evidence page says the update came "via a spreadsheet import".
 
 ## 3. The daily digest, built by the scheduler
 The digest builds itself at each team's cutoff (11:00 UTC for the demo teams). To show it at any hour, run one scheduler pass on a demo clock:
@@ -118,7 +120,7 @@ python -m scripts.tick --at <a UTC date 40 days from now>T12:00:00Z   # "... pur
 The full stored submissions are removed, and so is every line no digest quoted (Ada's replaced update from step 2, for example: **My data** now shows it as "a progress line, removed by retention"). The digest still reads, because the lines it quoted stay: the digest is the team's record. Evidence pages say the source expired, and `verify_integrity` still passes. **Digests** no longer offers Rebuild for those days ("Updates removed by retention"): there is nothing left to rebuild from, so the digest is final. Run this last: it removes the demo's stored text.
 
 ## 6. Ops
-- `/version`: the build's version. **Sign out** in the header ends the session; `python -m scripts.issue_links` prints fresh login links at any time (links expire after `STANDUP_LOGIN_LINK_DAYS`; an expired one says so and asks for a fresh one).
+- `/version`: the build's version. **Sign out** in the header ends the session; `python -m scripts.team_codes` prints every team's code at any time (a sign-in lasts `STANDUP_SESSION_DAYS`, then the person signs in again).
 - `STANDUP_SCHEDULER=true` (with `STANDUP_BASE_URL`) runs the same scheduler pass inside the app every minute (`STANDUP_SCHEDULER_INTERVAL_SECONDS`) instead of `scripts/tick`.
 - `/scope`: a JSON count of out-of-scope Teams messages the bot refused, by reason. It is an ops endpoint like `/healthz`, open without sign-in, because it holds counts only: nothing about the refused messages is stored.
 - `/healthz`, `/readyz`.

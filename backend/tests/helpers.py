@@ -1,14 +1,20 @@
 """Shared test helpers (plain functions, not fixtures)."""
 
-from standup.auth.tokens import issue_login_token
+from standup.auth.team_code import format_team_code
+from standup.db.models import Member
+from standup.db.session import get_session_factory
 
 TEST_SECRET_KEY = "test-secret-key-that-is-at-least-32-characters-long"
 
 
 def login_as(client, member_id: str) -> None:
-    """Sign the test client in as one member, through the real login route."""
-    token = issue_login_token(TEST_SECRET_KEY, member_id)
-    response = client.get(f"/login/{token}", follow_redirects=False)
+    """Sign the test client in as one member, through the real login route:
+    their team's code and their name, as a person would type them."""
+    with get_session_factory()() as session:
+        member = session.get(Member, member_id)
+        assert member is not None, member_id
+        data = {"team_code": format_team_code(member.team.join_code), "name": member.display_name}
+    response = client.post("/login", data=data, follow_redirects=False)
     assert response.status_code == 303, response.text
 
 

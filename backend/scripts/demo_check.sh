@@ -74,10 +74,12 @@ echo "Demo check against $BASE"
 # --- setup: migrate, seed two days, start the server ------------------------
 "$BIN/alembic" upgrade head >/dev/null 2>&1 || fail "alembic upgrade head"
 $PY -m scripts.seed_demo --days 2 >"$WORK/seed.txt" || fail "seed_demo --days 2"
-link_for() { grep -F " / $1: " "$WORK/seed.txt" | awk '{print $NF}'; }
-ADA="$(link_for "Ada Okafor")"; DANA="$(link_for "Dana Park")"
-[ -n "$ADA" ] && [ -n "$DANA" ] || fail "seed printed login links"
-pass "seeded Core Platform (2 days of updates) and Mobile (today); login links printed"
+code_for() { grep -F "($1): " "$WORK/seed.txt" | awk '{print $NF}'; }
+CORE_CODE="$(code_for core)"; MOBILE_CODE="$(code_for mobile)"
+[ -n "$CORE_CODE" ] && [ -n "$MOBILE_CODE" ] || fail "seed printed a code per team"
+# Sign in as a person would: the team's code and their name, into a cookie jar.
+sign_in() { status -c "$1" -X POST "$BASE/login" --data-urlencode "team_code=$2" --data-urlencode "name=$3"; }
+pass "seeded Core Platform (2 days of updates) and Mobile (today); team codes printed"
 
 $PY -m scripts.set_github_repo --team core --repo demo/core >/dev/null || fail "point Core Platform at a repo"
 $PY -m scripts.fake_github --port "$GH_PORT" >"$WORK/github.log" 2>&1 &
@@ -97,11 +99,14 @@ pass "server is up"
 # --- sign-in and scoping -----------------------------------------------------
 [ "$(status "$BASE/digests")" = 401 ] || fail "signed-out /digests answers 401"
 pass "signed out: /digests is 401"
-[ "$(status -c "$WORK/ada.jar" "$ADA")" = 303 ] || fail "Ada's login link"
+[ "$(sign_in "$WORK/nobody.jar" "$CORE_CODE" "Nobody Here")" = 401 ] || fail "a name not on the team is refused"
+[ "$(sign_in "$WORK/nobody.jar" "CORE-NOPE1" "Ada Okafor")" = 401 ] || fail "a code no team has is refused"
+[ "$(sign_in "$WORK/ada.jar" "$(tr 'A-Z' 'a-z' <<<"$CORE_CODE")" "  ada   okafor ")" = 303 ] || fail "Ada signs in with the team code and her name, however typed"
 DIGESTS="$(curl -s -b "$WORK/ada.jar" "$BASE/digests")"
 grep -q "Core Platform" <<<"$DIGESTS" || fail "Ada sees Core Platform"
 ! grep -q "Mobile" <<<"$DIGESTS" || fail "Ada does not see Mobile"
-pass "Ada signs in with her link and sees only her team"
+grep -q "$CORE_CODE" <<<"$(curl -s -b "$WORK/ada.jar" "$BASE/me/team")" || fail "Ada's Team page shows the code to share"
+pass "sign-in: a wrong code or name is refused; Ada signs in with the team code and her name, sees only her team, and can read the code on her Team page"
 
 # --- Teams: link Ada's account, then talk to the bot -----------------------
 CODE="$(curl -s -b "$WORK/ada.jar" "$BASE/me/teams" | grep -o '<pre class="raw">link [A-Za-z0-9._-]*' | head -1 | cut -d' ' -f3)"
@@ -132,13 +137,13 @@ seq 6 | xargs -P 6 -I{} curl -s -o /dev/null -b "$WORK/ada.jar" -X POST "$BASE/s
     --data-urlencode "blockers=Waiting on staging credentials from infra.")" = 303 ] \
     || fail "Ada can still submit after six simultaneous submits"
 pass "Ada submits twice, then six times at once; she is never locked out and the last one counts"
-[ "$(status -c "$WORK/chen.jar" "$(link_for "Chen Wei")")" = 303 ] || fail "Chen's login link"
+[ "$(sign_in "$WORK/chen.jar" "$CORE_CODE" "Chen Wei")" = 303 ] || fail "Chen signs in"
 [ "$(status -b "$WORK/chen.jar" -X POST "$BASE/submit" \
     --data-urlencode $'progress=Drafted the schema update.\nBlockers:\nnot really' \
     --data-urlencode "blockers=Stuck on the deploy pipeline.")" = 303 ] \
     || fail "a section heading typed into another box is accepted, not a 500"
 pass "Chen types 'Blockers:' inside Progress; the submission is stored correctly"
-[ "$(status -c "$WORK/bruno.jar" "$(link_for "Bruno Silva")")" = 303 ] || fail "Bruno's login link"
+[ "$(sign_in "$WORK/bruno.jar" "$CORE_CODE" "Bruno Silva")" = 303 ] || fail "Bruno signs in"
 [ "$(status -b "$WORK/bruno.jar" -X POST "$BASE/submit" \
     --data-urlencode $'progress=Merged the API changes, but waiting on review for the DB migration.\nFixed the bug where users cannot log in.' \
     --data-urlencode "blockers=Nope, all clear")" = 303 ] || fail "Bruno submits"
@@ -307,7 +312,8 @@ grep -q "withheld 7 of 7" <<<"$FAITH" && grep -q "V9 .*says the blocker is solve
 pass "the validator passes every real line and withholds 7 of 7 unfaithful claims, naming each rule"
 
 # --- another team cannot see it ----------------------------------------------
-[ "$(status -c "$WORK/dana.jar" "$DANA")" = 303 ] || fail "Dana's login link"
+[ "$(sign_in "$WORK/dana.jar" "$CORE_CODE" "Dana Park")" = 401 ] || fail "Core Platform's code does not sign Dana in"
+[ "$(sign_in "$WORK/dana.jar" "$MOBILE_CODE" "Dana Park")" = 303 ] || fail "Dana signs in with Mobile's code"
 [ "$(status -b "$WORK/dana.jar" "$BASE/digest/$DIGEST_ID")" = 404 ] || fail "Dana gets 404 on Core's digest"
 [ "$(status -b "$WORK/dana.jar" "$BASE$EVIDENCE")" = 404 ] || fail "Dana gets 404 on Core's evidence"
 NOTFOUND="$(curl -s -H 'accept: text/html' -b "$WORK/dana.jar" "$BASE/digest/$DIGEST_ID")"
@@ -333,8 +339,8 @@ ERR_TYPE="$(curl -s -o /dev/null -w '%{content_type}' -H 'accept: text/html' -b 
 UNKNOWN_TYPE="$(curl -s -o /dev/null -w '%{content_type}' -H 'accept: text/html' -b "$WORK/ada.jar" "$BASE/no-such-page")"
 [[ "$UNKNOWN_TYPE" == text/html* ]] || fail "an unknown address is an HTML page too (got $UNKNOWN_TYPE)"
 pass "/scope counts the refused channel message (content-free); browser errors are HTML pages"
-! grep -Eq '/login/[A-Za-z0-9]' "$WORK/server.log" || fail "no login token appears in the server's access log"
-pass "the server's access log shows /login/[redacted], never a login token"
+! grep -q "$CORE_CODE" "$WORK/server.log" || fail "no team code appears in the server's log"
+pass "the server's log never shows a team code (codes travel in the form body, not the address)"
 
 # --- retention (last: it removes the demo's stored text) ----------------------
 LATER="$($PY -c 'from datetime import UTC, datetime, timedelta; print((datetime.now(UTC) + timedelta(days=40)).strftime("%Y-%m-%dT%H:%M:%SZ"))')"

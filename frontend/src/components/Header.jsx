@@ -1,5 +1,5 @@
 import React from "react";
-import { ShieldCheck, LogOut, Send, BookOpen, Zap } from "lucide-react";
+import { ShieldCheck, LogOut, Send, BookOpen, Zap, Users } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 
 export default function Header({ currentPath, navigate }) {
@@ -40,6 +40,13 @@ export default function Header({ currentPath, navigate }) {
           </button>
           <button
             type="button"
+            className={`nav-link ${currentPath === "/me/team" ? "active" : ""}`}
+            onClick={() => navigate("/me/team")}
+          >
+            <Users size={14} /> Team
+          </button>
+          <button
+            type="button"
             className={`nav-link ${currentPath === "/me/teams" ? "active" : ""}`}
             onClick={() => navigate("/me/teams")}
           >
@@ -70,18 +77,14 @@ export default function Header({ currentPath, navigate }) {
             </button>
           </>
         ) : (
-          <span
-            style={{
-              fontSize: 12,
-              background: "var(--bg-glass)",
-              border: "1px solid var(--border-subtle)",
-              borderRadius: "var(--r-full)",
-              padding: "4px 12px",
-              color: "var(--text-muted)",
-            }}
+          <button
+            type="button"
+            className="btn btn-outline"
+            onClick={() => navigate("/login")}
+            style={{ padding: "6px 14px", fontSize: 13 }}
           >
-            Read-only
-          </span>
+            Sign in
+          </button>
         )}
       </div>
     </header>

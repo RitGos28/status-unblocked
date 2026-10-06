@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta, timezone
 
 from standup.domain.text import content_sha256
 from standup.domain.timezones import as_utc
-from standup.domain.urls import digest_url, evidence_url, login_url
+from standup.domain.urls import digest_url, evidence_url
 from standup.ingestion.base import FORM_FIELDS, text_fields_from
 
 
@@ -25,7 +25,6 @@ def test_urls_join_cleanly_with_or_without_a_trailing_slash():
     for base in ("https://x.example", "https://x.example/"):
         assert digest_url(base, "d1") == "https://x.example/digest/d1"
         assert evidence_url(base, "i1") == "https://x.example/evidence/i1"
-        assert login_url(base, "t1") == "https://x.example/login/t1"
 
 
 def test_one_field_map_feeds_every_adapter():

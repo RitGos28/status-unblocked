@@ -17,7 +17,7 @@ from datetime import UTC, datetime, time, timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from scripts.issue_links import print_links
+from scripts.team_codes import print_codes
 from standup.db.models import Member, Team, Update
 from standup.db.session import create_all, session_scope
 from standup.ingestion.service import get_or_create_open_cycle, ingest
@@ -150,9 +150,10 @@ def _file_day(
 
 
 def serve_command() -> str:
-    """The uvicorn command that serves the app where the printed links point.
+    """The uvicorn command that serves the app at STANDUP_BASE_URL.
 
-    The links use STANDUP_BASE_URL, so the server must listen on its port.
+    Digest links in Teams notices and GitHub issues use that address, so the
+    server must listen on its port.
     """
     from urllib.parse import urlsplit
 
@@ -182,8 +183,8 @@ def seed(*, with_updates: bool = False, days: int = 0, now: datetime | None = No
                 when = datetime.combine(day, EARLIER_DAY_TIME, tzinfo=UTC)
                 _file_day(session, team, when, EARLIER_UPDATES)
 
-    print("\nPersonal login links (each signs in as that person):")
-    print_links()
+    print("\nTeam codes (share each with its team; sign in with the code and your name):")
+    print_codes()
     print(f"\nNow run: {serve_command()}")
 
 

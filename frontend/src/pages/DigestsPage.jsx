@@ -37,10 +37,10 @@ export default function DigestsPage({ navigate, searchParams }) {
         <BookOpen size={32} color="var(--text-muted)" style={{ marginBottom: 14 }} />
         <h3 style={{ marginBottom: 8 }}>Sign In Required</h3>
         <p className="muted" style={{ marginBottom: 20 }}>
-          Please sign in to read digests. Open your team magic link.
+          Sign in with your team's code and your name to read digests.
         </p>
-        <button type="button" className="btn btn-primary" onClick={() => navigate("/")}>
-          Back to Home
+        <button type="button" className="btn btn-primary" onClick={() => navigate("/login")}>
+          Sign in
         </button>
       </div>
     );

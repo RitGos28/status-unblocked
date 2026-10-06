@@ -12,7 +12,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from standup.api.digests import drain_tracker_outbox
-from standup.auth.tokens import TEAMS_LINK_MAX_AGE_SECONDS, issue_teams_link_code, read_login_token
+from standup.auth.signin import SIGN_IN_FAILED, sign_in, team_summary
+from standup.auth.teams_link import TEAMS_LINK_MAX_AGE_SECONDS, issue_teams_link_code
 from standup.db.models import Digest, Member, StandupCycle, Team, TrackerLink, Update, UpdateItem
 from standup.deps import (
     AppClock,
@@ -33,6 +34,11 @@ from standup.summarize.render import SECTION_HINTS, SECTION_ORDER, SECTION_TITLE
 from standup.summarize.service import build_digest
 
 router = APIRouter(prefix="/api", tags=["frontend-api"])
+
+
+class LoginPayload(BaseModel):
+    team_code: str = Field(default="")
+    name: str = Field(default="")
 
 
 class SubmitPayload(BaseModel):
@@ -69,21 +75,12 @@ def get_current_user(viewer: OptionalMember) -> dict[str, Any]:
     }
 
 
-@router.get("/auth/login/{token}")
-def api_login(
-    token: str, request: Request, session: DbSession, settings: AppSettings
-) -> dict[str, Any]:
-    """Sign in using a personal magic token and set session."""
-    member_id = read_login_token(
-        settings.secret_key.get_secret_value(),
-        token,
-        max_age_seconds=settings.login_link_days * 86400,
-    )
-    member = session.get(Member, member_id) if member_id else None
-    if member is None or not member.active:
-        raise UnauthorizedError(
-            "That link is invalid or has expired. Ask a teammate for a fresh one."
-        )
+@router.post("/auth/login")
+def api_login(payload: LoginPayload, request: Request, session: DbSession) -> dict[str, Any]:
+    """Sign in with a team code and a name; sets the session cookie."""
+    member = sign_in(session, payload.team_code, payload.name)
+    if member is None:
+        raise UnauthorizedError(SIGN_IN_FAILED)
 
     request.session.clear()
     request.session["member_id"] = member.id
@@ -364,6 +361,12 @@ def api_view_evidence(
         if update.permalink_reason
         else None,
     }
+
+
+@router.get("/me/team")
+def api_my_team(member: CurrentMember) -> dict[str, Any]:
+    """The member's team: its sign-in code to share, and who is on it."""
+    return {"team": team_summary(member.team), "viewer": _format_member(member)}
 
 
 @router.get("/me/teams")

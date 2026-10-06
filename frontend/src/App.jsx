@@ -7,6 +7,7 @@ import DigestDetailPage from "./pages/DigestDetailPage";
 import EvidencePage from "./pages/EvidencePage";
 import TeamsLinkPage from "./pages/TeamsLinkPage";
 import LoginPage from "./pages/LoginPage";
+import TeamPage from "./pages/TeamPage";
 
 function getRoute() {
   // Support both hash routing and HTML5 path routing
@@ -47,10 +48,14 @@ export default function App() {
   const searchParams = new URLSearchParams(queryString || "");
 
   const renderContent = () => {
-    // Route: /login/:token
-    if (pathname.startsWith("/login/")) {
-      const token = pathname.replace("/login/", "");
-      return <LoginPage token={token} navigate={navigate} />;
+    // Route: /login (an old /login/<token> link lands here too)
+    if (pathname === "/login" || pathname.startsWith("/login/")) {
+      return <LoginPage navigate={navigate} />;
+    }
+
+    // Route: /me/team
+    if (pathname === "/me/team") {
+      return <TeamPage navigate={navigate} />;
     }
 
     // Route: /digest/:id

@@ -22,6 +22,3 @@ def digest_url(base_url: str, digest_id: str) -> str:
 def evidence_url(base_url: str, item_id: str) -> str:
     return app_url(base_url, f"/evidence/{item_id}")
 
-
-def login_url(base_url: str, token: str) -> str:
-    return app_url(base_url, f"/login/{token}")

@@ -8,7 +8,7 @@
 
 ## What it does
 
-- **Collects** short async updates from each member: a web form, React frontend, or a Teams card in a 1:1 chat. Members sign in with a personal link; each sees only their own team.
+- **Collects** short async updates from each member: a web form, React frontend, or a Teams card in a 1:1 chat. Members sign in with their team's shared code and their name; each sees only their own team.
 - **Builds one digest per team per day**, at the team's local cutoff, by itself (a scheduler), or on demand.
 - **Summarises faithfully.** Every digest line is a verbatim quote, verified against the stored source before it ships, and links to an evidence page that highlights the exact words. Blockers come first; a blocker filed in the wrong box is moved up and says why; "No blockers today" or "None" is never read as a blocker; a blocker reported again is shown as **Still blocked**, citing both days.
 - **Writes blockers back to GitHub Issues** as structured records: labels plus a `json` block, one issue per blocker, one comment per later day it is reported. Delivery never blocks a digest.
@@ -17,7 +17,7 @@
 
 Not built yet: consent for external processing (and validator rule V7), redaction, member-initiated deletion, contest/correct on digest lines, an LLM summarizer, syncing GitHub issue state back into the digest (a reconcile job), the written legitimate-interest assessment (`docs/LIA.md`), and deployment. CLAUDE.md's "not yet written" list is the same.
 
-One consequence to know: with GitHub write-back on, each blocker's verbatim text and its author's name go to the configured repository, with no per-member opt-in yet. Point a team at a private repository that the team can already see.
+Two consequences to know. Sign-in tells teams apart, not people: a team code is shared, so anyone holding it can sign in under any name on that team. That is the price of having no accounts, passwords or email, and it suits a small team that knows each other; the audit trail and "who opened my updates" are only as trustworthy as that assumption. `python -m scripts.team_codes --team core --rotate` replaces a code that has leaked. And with GitHub write-back on, each blocker's verbatim text and its author's name go to the configured repository, with no per-member opt-in yet. Point a team at a private repository that the team can already see.
 
 ---
 
@@ -85,7 +85,7 @@ Under GDPR, **consent is not a valid lawful basis in an employment context** —
 - No retention past the stated window, except the lines a digest quoted, which are the team's record
 - No third-party model sees anyone's text without that person's separate opt-in
 
-Backed by code: the Teams app manifest (`backend/teams/manifest/manifest.json`) requests **zero Microsoft Graph or resource-specific permissions**, which an admin can confirm by reading it and a test asserts. The bot ingests only standup-card submissions in a 1:1 chat. Typed commands there (`standup`, `link`) are answered, and a channel message that @mentions it gets a pointer to the 1:1 chat. Any other message is refused before ingestion and counted as a content-free `scope_violation` row (reason and conversation type only: no text, no sender), with the totals at `GET /scope`. Who a Teams user is comes from a short-lived link code they get from `/me/teams` while signed in, never from a Graph lookup. Also enforced: every page except `/` and `/healthz` requires sign-in through a personal, signed, expiring link (no passwords, no roles); a member sees only their own team's digests and evidence, and another team's resources answer 404 so their existence is not disclosed; who submitted an update comes from the session, never the form, so nobody can file as someone else; and every evidence view is audited under the viewing member's id.
+Backed by code: the Teams app manifest (`backend/teams/manifest/manifest.json`) requests **zero Microsoft Graph or resource-specific permissions**, which an admin can confirm by reading it and a test asserts. The bot ingests only standup-card submissions in a 1:1 chat. Typed commands there (`standup`, `link`) are answered, and a channel message that @mentions it gets a pointer to the 1:1 chat. Any other message is refused before ingestion and counted as a content-free `scope_violation` row (reason and conversation type only: no text, no sender), with the totals at `GET /scope`. Who a Teams user is comes from a short-lived link code they get from `/me/teams` while signed in, never from a Graph lookup. Also enforced: every page except `/`, `/login` and `/healthz` requires sign-in with the team's shared code and the member's name (no passwords, no accounts, no roles: the code is on every member's Team page); a member sees only their own team's digests and evidence, and another team's resources answer 404 so their existence is not disclosed; who submitted an update comes from the session, never the form, so nobody can file as someone else; and every evidence view is audited under the viewing member's id.
 
 ### The faithfulness validator
 
@@ -159,7 +159,7 @@ export STANDUP_SECRET_KEY=...
 docker compose up --build
 ```
 
-Open a member's login link to sign in as them. Then follow [`docs/DEMO.md`](docs/DEMO.md).
+Open `/login` and sign in with a team code from the seed output and one of that team's names. Then follow [`docs/DEMO.md`](docs/DEMO.md).
 
 ---
 
