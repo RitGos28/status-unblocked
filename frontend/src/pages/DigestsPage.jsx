@@ -69,7 +69,7 @@ export default function DigestsPage({ navigate, searchParams }) {
         <div>
           <h1>Digests</h1>
           <p className="subtitle" style={{ marginBottom: 0 }}>
-            One verified digest per team per day.
+            Your team's daily summary, built from everyone's updates. One per team per day.
           </p>
         </div>
         <button

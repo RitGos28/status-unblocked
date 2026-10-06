@@ -29,7 +29,7 @@ from standup.ingestion.permalink import describe_missing_permalink
 from standup.ingestion.service import ingest
 from standup.ingestion.web_adapter import WebFormAdapter
 from standup.privacy.audit import record_audit
-from standup.summarize.render import SECTION_ORDER, SECTION_TITLES, explain_rule
+from standup.summarize.render import SECTION_HINTS, SECTION_ORDER, SECTION_TITLES, explain_rule
 from standup.summarize.service import build_digest
 
 router = APIRouter(prefix="/api", tags=["frontend-api"])
@@ -241,6 +241,7 @@ def api_view_digest(
                 {
                     "kind": kind.value,
                     "title": SECTION_TITLES[kind],
+                    "hint": SECTION_HINTS[kind],
                     "claims": claims_data,
                 }
             )

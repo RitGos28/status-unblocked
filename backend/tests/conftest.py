@@ -37,6 +37,13 @@ def app_env(tmp_path, monkeypatch, clock):
     monkeypatch.setenv("STANDUP_BASE_URL", "http://testserver")
     monkeypatch.setenv("STANDUP_ENV", "test")
     monkeypatch.setenv("STANDUP_SECRET_KEY", TEST_SECRET_KEY)
+    # Pin what a developer's backend/.env could otherwise change under the
+    # suite: a fake-GitHub URL there would escape the respx mocks. Tests that
+    # want GitHub or Teams set these themselves.
+    monkeypatch.setenv("STANDUP_TRACKER", "noop")
+    monkeypatch.setenv("STANDUP_GITHUB_API_URL", "https://api.github.com")
+    monkeypatch.setenv("STANDUP_TEAMS_ENABLED", "false")
+    monkeypatch.setenv("STANDUP_SCHEDULER", "false")
 
     get_settings.cache_clear()
     get_database_settings.cache_clear()
