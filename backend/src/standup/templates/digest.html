@@ -3,7 +3,8 @@
 {% block content %}
 <h1>{{ team_name }}</h1>
 <p class="sub">
-  Standup {{ cycle.local_date }} &middot; built {{ digest.generated_at.strftime('%Y-%m-%d at %H:%M UTC') }}
+  The team's daily summary for {{ cycle.local_date }}, built from everyone's updates
+  &middot; built {{ digest.generated_at.strftime('%Y-%m-%d at %H:%M UTC') }}
 </p>
 
 {% if not sections %}
@@ -12,6 +13,7 @@
 
 {% for section in sections %}
   <h2>{{ section.title }}</h2>
+  <p class="section-hint">{{ section.hint }}</p>
   <div class="card">
     {% for claim in section.claims %}
     <div class="claim">

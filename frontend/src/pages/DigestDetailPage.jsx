@@ -83,7 +83,8 @@ export default function DigestDetailPage({ digestId, navigate }) {
 
         <h1>{team_name}</h1>
         <p className="subtitle">
-          Standup {cycle.local_date} &middot; built {generatedTime} UTC
+          The team's daily summary for {cycle.local_date}, built from everyone's updates
+          &middot; built {generatedTime} UTC
         </p>
 
         {/* Meta chips */}
@@ -115,6 +116,7 @@ export default function DigestDetailPage({ digestId, navigate }) {
         sections.map((section) => (
           <div key={section.kind}>
             <h2>{section.title}</h2>
+            {section.hint && <p className="section-hint">{section.hint}</p>}
             <div className="card card-elevated" style={{ padding: "6px 22px" }}>
               {section.claims.map((claim) => (
                 <div key={claim.id} className="claim-row">

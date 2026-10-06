@@ -62,6 +62,7 @@ def test_api_submit_and_digests(client, session, team_with_members):
     digest_detail = view_res.json()
     assert digest_detail["digest"]["id"] == digest_id
     assert len(digest_detail["sections"]) > 0
+    assert all(section["hint"] for section in digest_detail["sections"])
 
     # Evidence view
     item = session.execute(select(UpdateItem)).scalars().first()

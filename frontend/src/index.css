@@ -332,6 +332,12 @@ label {
   font-size: 12px;
 }
 
+.section-hint {
+  color: var(--text-secondary);
+  font-size: 13px;
+  margin: -6px 0 12px;
+}
+
 textarea,
 input[type="text"] {
   width: 100%;

@@ -4,7 +4,13 @@ from datetime import UTC, datetime
 
 from standup.domain.enums import ClaimKind
 from standup.summarize.base import Citation, Claim
-from standup.summarize.render import explain_rule, render_markdown
+from standup.summarize.render import (
+    SECTION_HINTS,
+    SECTION_TITLES,
+    explain_rule,
+    group_sections,
+    render_markdown,
+)
 
 NOW = datetime(2026, 9, 15, 9, 30, tzinfo=UTC)
 
@@ -86,3 +92,17 @@ def test_markdown_explains_a_promoted_blocker_like_the_page_does():
 
 def test_markdown_carries_the_verbatim_footer_like_the_page_does():
     assert "verbatim quote" in _markdown(claim())
+
+
+def test_every_section_has_a_plain_language_hint():
+    """Each heading a reader can meet has one line explaining it, for people
+    who do not know standup vocabulary; the hint never leaks into Markdown."""
+    assert set(SECTION_HINTS) == set(SECTION_TITLES) == set(ClaimKind)
+    assert all(hint.strip() for hint in SECTION_HINTS.values())
+    (section,) = group_sections([claim()])
+    assert section.title == "Progress"
+    assert section.hint == SECTION_HINTS[ClaimKind.PROGRESS]
+    md = render_markdown(
+        team_name="Core", cycle_date="2026-09-15", claims=(claim(),), evidence_urls={}
+    )
+    assert section.hint not in md

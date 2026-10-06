@@ -74,6 +74,7 @@ It reports `built 3 digest(s)`: Core Platform's yesterday and today, and Mobile'
 Run it again, or twice at once: nothing is built twice and no one is told twice, because only one pass may run at a time (a database lease) and each cycle is announced once. Run it with `STANDUP_BASE_URL` unset, or set to something that is not an absolute http(s) URL (`localhost:8000`), and it refuses in one line, because its links go into GitHub issues and Teams messages.
 
 ## 4. What the digest shows
+- **Each heading explains itself.** Under **Still blocked**, **Blockers**, **Progress** and **Today** there is one plain-language line saying what belongs there, on the page and in the React app, for readers new to standup vocabulary. The Markdown and CSV downloads are unchanged.
 - **Still blocked comes first.** Ada reported "Waiting on staging credentials from infra." yesterday and again today, so it is under **Still blocked**, with "Also reported on <yesterday>, and still open." It is today's words, verbatim, and it has two **source** links: today's and yesterday's.
 - **Then Blockers**: new ones today.
 - **Chen's misfiled blocker:** he typed "Stuck on the deploy pipeline." under Progress; it is under Blockers with 'Moved to Blockers: the author filed it elsewhere, but it says "stuck".' The text itself is unchanged.

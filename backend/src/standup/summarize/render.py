@@ -20,6 +20,16 @@ SECTION_TITLES: dict[ClaimKind, str] = {
     ClaimKind.PLAN: "Today",
 }
 
+# One plain-language line under each heading, for readers who do not know
+# standup vocabulary. Shown on the HTML page and in the React app; the
+# Markdown digest stays as it is.
+SECTION_HINTS: dict[ClaimKind, str] = {
+    ClaimKind.CARRYOVER: "Problems someone reported on an earlier day and is still stuck on.",
+    ClaimKind.BLOCKER: "Things people said they are stuck on. This is where teammates can help.",
+    ClaimKind.PROGRESS: "What each person got done since their last update.",
+    ClaimKind.PLAN: "What each person plans to work on next.",
+}
+
 SECTION_ORDER: tuple[ClaimKind, ...] = (
     ClaimKind.CARRYOVER,
     ClaimKind.BLOCKER,
@@ -43,6 +53,7 @@ class RenderedSection(Generic[_T]):
     kind: ClaimKind
     title: str
     claims: tuple[_T, ...]
+    hint: str = ""
 
 
 def explain_rule(matched_rule: str) -> str:
@@ -79,7 +90,9 @@ def group_sections(claims: Sequence[_T]) -> list[RenderedSection[_T]]:
     for kind in SECTION_ORDER:
         matching = tuple(c for c in claims if ClaimKind(c.kind) is kind)
         if matching:
-            sections.append(RenderedSection(kind, SECTION_TITLES[kind], matching))
+            sections.append(
+                RenderedSection(kind, SECTION_TITLES[kind], matching, SECTION_HINTS[kind])
+            )
     return sections
 
 
