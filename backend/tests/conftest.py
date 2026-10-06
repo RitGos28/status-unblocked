@@ -7,6 +7,9 @@ gets its own SQLite file so runs are isolated and parallelisable.
 import os
 from datetime import UTC, datetime
 
+# The suite sets what it needs; .env.example's demo values must not fill gaps.
+os.environ["STANDUP_ENV_EXAMPLE_FALLBACK"] = "false"
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session

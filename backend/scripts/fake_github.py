@@ -128,8 +128,13 @@ def main() -> None:
 
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--port", type=int, default=8091)
+    parser.add_argument("--host", default="127.0.0.1", help="0.0.0.0 inside a container")
+    parser.add_argument(
+        "--public-url", default="", help="where a browser reaches it (default http://127.0.0.1:PORT)"
+    )
     args = parser.parse_args()
-    uvicorn.run(create_fake_github(f"http://127.0.0.1:{args.port}"), port=args.port)
+    public_url = args.public_url or f"http://127.0.0.1:{args.port}"
+    uvicorn.run(create_fake_github(public_url), host=args.host, port=args.port)
 
 
 if __name__ == "__main__":

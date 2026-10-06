@@ -11,7 +11,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.sessions import SessionMiddleware
 
 from standup.api import api_router, auth, digests, evidence, health, me, web_forms
-from standup.config import get_settings
+from standup.config import DEMO_SECRET_KEY, get_settings
 from standup.db.models import Member
 from standup.db.session import create_all, session_scope
 from standup.deps import templates
@@ -33,6 +33,8 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         create_all()
 
     log.info("app.started", env=settings.env, summarizer=settings.summarizer)
+    if settings.secret_key.get_secret_value() == DEMO_SECRET_KEY:
+        log.warning("config.demo_secret_key", source=".env.example")
     scheduler = None
     if settings.scheduler:
         scheduler = asyncio.create_task(_scheduler_loop(_app, settings.scheduler_interval_seconds))

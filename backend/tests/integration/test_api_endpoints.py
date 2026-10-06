@@ -2,7 +2,7 @@
 
 from sqlalchemy import select
 
-from standup.db.models import UpdateItem
+from standup.db.models import Member, Team, UpdateItem
 from tests.helpers import login_as
 
 
@@ -82,3 +82,86 @@ def test_api_teams_link(client, team_with_members):
     data = response.json()
     assert "code" in data
     assert "minutes" in data
+
+
+def _built_digest(client, member_id: str) -> str:
+    login_as(client, member_id)
+    cycle_id = client.post(
+        "/api/submit",
+        json={"progress": "Shipped the export.", "blockers": "Waiting on review from infra."},
+    ).json()["cycle_id"]
+    return client.post(f"/api/digests/build/{cycle_id}").json()["digest_id"]
+
+
+def test_api_digest_downloads_match_the_server_pages(client, team_with_members):
+    digest_id = _built_digest(client, team_with_members[1][0].id)
+
+    md = client.get(f"/api/digest/{digest_id}.md")
+    assert md.status_code == 200
+    assert md.text == client.get(f"/digest/{digest_id}.md").text
+    assert "Waiting on review from infra." in md.text
+
+    csv = client.get(f"/api/digest/{digest_id}.csv")
+    assert csv.status_code == 200
+    assert csv.content == client.get(f"/digest/{digest_id}.csv").content
+    assert "attachment" in csv.headers["content-disposition"]
+
+
+def test_api_digest_downloads_are_team_scoped(client, session, team_with_members):
+    digest_id = _built_digest(client, team_with_members[1][0].id)
+    other = Team(slug="mobile", name="Mobile")
+    session.add(other)
+    session.flush()
+    dana = Member(team_id=other.id, display_name="Dana Park", tz="UTC")
+    session.add(dana)
+    session.commit()
+
+    login_as(client, dana.id)
+    for suffix in (".md", ".csv", ""):
+        assert client.get(f"/api/digest/{digest_id}{suffix}").status_code == 404
+
+
+def test_api_my_data_shows_who_opened_my_update(client, session, team_with_members):
+    ada, bruno = team_with_members[1][0], team_with_members[1][1]
+    login_as(client, ada.id)
+    client.post("/api/submit", json={"progress": "Wrote the migration."})
+    item = session.execute(select(UpdateItem)).scalars().first()
+
+    login_as(client, bruno.id)
+    assert client.get(f"/api/evidence/{item.id}").status_code == 200
+
+    login_as(client, ada.id)
+    data = client.get("/api/me/data").json()
+    assert data["updates"][0]["raw_text"]
+    views = [e for e in data["events"] if e["action"] == "evidence.viewed"]
+    assert [e["by"] for e in views] == ["Bruno Silva"]
+
+
+def test_api_my_export_is_a_json_file_and_is_audited(client, team_with_members):
+    ada = team_with_members[1][0]
+    login_as(client, ada.id)
+    response = client.get("/api/me/export")
+    assert response.status_code == 200
+    assert response.json()["member"]["display_name"] == "Ada Okafor"
+    assert "attachment" in response.headers["content-disposition"]
+    events = client.get("/api/me/data").json()["events"]
+    assert any(e["action"] == "data.exported" for e in events)
+
+
+def test_api_my_data_needs_sign_in(client):
+    assert client.get("/api/me/data").status_code == 401
+    assert client.get("/api/me/export").status_code == 401
+
+
+def test_api_digests_lists_the_last_build_and_whether_the_day_is_final(
+    client, session, team_with_members
+):
+    first = _built_digest(client, team_with_members[1][0].id)
+    client.post("/api/submit", json={"progress": "And one more thing."})
+    rows = client.get("/api/digests").json()["rows"]
+    second = client.post(f"/api/digests/build/{rows[0]['cycle']['id']}").json()["digest_id"]
+    assert second != first
+
+    row = client.get("/api/digests").json()["rows"][0]
+    assert row["digest"]["id"] == second
+    assert row["final"] is False

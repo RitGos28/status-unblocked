@@ -332,6 +332,21 @@ curl -s -b "$WORK/ada.jar" "$BASE/me/export" | $PY -c 'import json,sys; d=json.l
     || fail "Ada's export is JSON with her updates"
 pass "My data: Ada sees that Bruno opened her update, and exports everything as JSON"
 
+# --- the React app's API: the same data, through /api ------------------------
+API_MINE="$(curl -s -b "$WORK/ada.jar" "$BASE/api/me/data")"
+$PY -c 'import json,sys; d=json.load(sys.stdin); assert [e["by"] for e in d["events"] if e["action"]=="evidence.viewed"].count("Bruno Silva")' <<<"$API_MINE" \
+    || fail "/api/me/data shows Bruno opened Ada's update"
+[ "$(curl -s -b "$WORK/ada.jar" "$BASE/api/digest/$REBUILT.md")" = "$(curl -s -b "$WORK/ada.jar" "$BASE/digest/$REBUILT.md")" ] \
+    || fail "/api/digest/<id>.md is the same Markdown as the page's"
+[ "$(curl -s -b "$WORK/ada.jar" "$BASE/api/digest/$REBUILT.csv")" = "$(curl -s -b "$WORK/ada.jar" "$BASE/digest/$REBUILT.csv")" ] \
+    || fail "/api/digest/<id>.csv is the same spreadsheet as the page's"
+curl -s -b "$WORK/ada.jar" "$BASE/api/me/export" | $PY -c 'import json,sys; assert json.load(sys.stdin)["member"]["display_name"] == "Ada Okafor"' \
+    || fail "/api/me/export is Ada's JSON"
+[ "$(status -b "$WORK/dana.jar" "$BASE/api/digest/$REBUILT.csv")" = 404 ] || fail "Dana gets 404 on Core's CSV through /api"
+API_LATEST="$(curl -s -b "$WORK/ada.jar" "$BASE/api/digests" | $PY -c 'import json,sys; print(json.load(sys.stdin)["rows"][0]["digest"]["id"])')"
+[ "$API_LATEST" = "$REBUILT" ] || fail "/api/digests links the last build ($API_LATEST, not $REBUILT)"
+pass "React app's API: My data, export, Markdown and CSV downloads match the pages; another team gets 404; the list links the last build"
+
 # --- ops and error pages -----------------------------------------------------
 curl -s "$BASE/scope" | grep -q '"scope_violations":1' || fail "/scope counts the one refused channel message"
 ERR_TYPE="$(curl -s -o /dev/null -w '%{content_type}' -H 'accept: text/html' -b "$WORK/ada.jar" "$BASE/digest/nope")"
@@ -341,6 +356,21 @@ UNKNOWN_TYPE="$(curl -s -o /dev/null -w '%{content_type}' -H 'accept: text/html'
 pass "/scope counts the refused channel message (content-free); browser errors are HTML pages"
 ! grep -q "$CORE_CODE" "$WORK/server.log" || fail "no team code appears in the server's log"
 pass "the server's log never shows a team code (codes travel in the form body, not the address)"
+
+# --- .env.example: the demo's fallback configuration -------------------------
+# A developer's own backend/.env switches the fallback off, so check it only without one.
+if [ -f .env ]; then
+    pass ".env.example fallback: skipped, because backend/.env exists"
+else
+    FALLBACK="$(env -i PATH="$PATH" PYTHONPATH=src $PY -c 'from standup.config import get_settings as g; s=g(); print(s.env, s.tracker, s.github_api_url, s.teams_enabled)')" \
+        || fail "with nothing set, .env.example's demo values start the app"
+    [ "$FALLBACK" = "local github http://127.0.0.1:8091 True" ] || fail "fallback values (got: $FALLBACK)"
+    REFUSED="$(env -i PATH="$PATH" PYTHONPATH=src STANDUP_ENV=production \
+        STANDUP_SECRET_KEY=demo-only-signing-key-published-in-env-example-never-deploy \
+        $PY -c 'from standup.config import get_settings; get_settings()' 2>&1)" && fail "production accepted the demo key"
+    grep -q "demo key published in .env.example" <<<"$REFUSED" || fail "the refusal names the demo key"
+    pass ".env.example: with nothing set, its demo values run the app; outside local, its public key is refused"
+fi
 
 # --- retention (last: it removes the demo's stored text) ----------------------
 LATER="$($PY -c 'from datetime import UTC, datetime, timedelta; print((datetime.now(UTC) + timedelta(days=40)).strftime("%Y-%m-%dT%H:%M:%SZ"))')"
