@@ -101,7 +101,7 @@ uvicorn standup.main:app --reload
 python -m scripts.team_codes     # every team's sign-in code; --team SLUG --rotate issues a new one
 ```
 
-Open `/login` and sign in with a team's code and a member's name, then `/submit` and `/digests`. `docker compose up --build` runs the demo with nothing set: Postgres, the API with the in-app scheduler, the React app behind nginx (which proxies `/api`), and the fake GitHub; ports `APP_PORT`, `WEB_PORT`, `GITHUB_PORT`, public address `PUBLIC_HOST`. It defaults to the demo key and `STANDUP_ENV=local`; README's "Hosting on a server" sets `STANDUP_ENV=production` and a real key. In tests, `tests/helpers.login_as(client, member_id)` signs in through the real `/login` route with that member's team code and name.
+Open `/login` and sign in with a team's code and a member's name, then `/submit` and `/digests`. `docker compose up --build` runs the demo with nothing set: Postgres, the API with the in-app scheduler, the React app behind nginx, and the fake GitHub. nginx (`frontend/nginx.conf`) serves only `/` and `/assets/` itself (the React app routes with `#/...`) and proxies every other path to the API, so `WEB_PORT` alone serves the whole app. Ports `APP_PORT`, `WEB_PORT`, `GITHUB_PORT`, bound to `BIND_ADDR`; links use `STANDUP_BASE_URL` and `GITHUB_PUBLIC_URL`, defaulting to `PUBLIC_HOST` plus the port. It defaults to the demo key and `STANDUP_ENV=local`; README's "Hosting on a server" sets `STANDUP_ENV=production` and a real key. In tests, `tests/helpers.login_as(client, member_id)` signs in through the real `/login` route with that member's team code and name.
 
 ### import-linter
 

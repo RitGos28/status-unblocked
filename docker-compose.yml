@@ -2,21 +2,27 @@
 # configure. Postgres, the API (seeded with two days of made-up updates), the
 # React app, and a fake GitHub that blockers are written to.
 #
-#   React app       http://localhost:3000         WEB_PORT
-#   Server pages    http://localhost:8000/login   APP_PORT
+#   Whole app       http://localhost:3000         WEB_PORT   React at /, server pages
+#                                                            (/login, /digests, ...) and
+#                                                            /api through the same port
+#   Backend only    http://localhost:8000/login   APP_PORT
 #   Fake GitHub     http://localhost:8091         GITHUB_PORT
 #
-# Change a port with its variable, e.g. APP_PORT=9000 WEB_PORT=80 docker compose up -d
-# Links in digests and issues follow APP_PORT and GITHUB_PORT.
+# Change a port with its variable, e.g. WEB_PORT=8300 docker compose up -d
 #
 # Team codes are printed in the api service's log: docker compose logs api
 # The signing key defaults to the public demo key from backend/.env.example,
 # which the app accepts only because STANDUP_ENV is local.
 #
-# On a server, set these first (or put them in a .env file next to this one):
+# On a server, set these in a .env file next to this one:
 #   STANDUP_ENV=production            refuses the public demo key
 #   STANDUP_SECRET_KEY=<48 random>    python3 -c "import secrets; print(secrets.token_urlsafe(48))"
-#   PUBLIC_HOST=http://<server-ip>    links in digests and issues use it
+#   PUBLIC_HOST=http://<server-ip>    links become PUBLIC_HOST:APP_PORT and PUBLIC_HOST:GITHUB_PORT
+# Behind a tunnel or HTTPS proxy, give the public addresses directly instead:
+#   STANDUP_BASE_URL=https://standup.example.com        (points at WEB_PORT)
+#   GITHUB_PUBLIC_URL=https://standup-github.example.com (points at GITHUB_PORT)
+#   STANDUP_COOKIE_SECURE=true
+#   BIND_ADDR=127.0.0.1               publish ports on this machine only
 # README's "Hosting on a server" has the full commands.
 services:
   db:
@@ -39,10 +45,10 @@ services:
   fake-github:
     build:
       context: ./backend
-    command: python -m scripts.fake_github --host 0.0.0.0 --port 8091 --public-url ${PUBLIC_HOST:-http://localhost}:${GITHUB_PORT:-8091}
+    command: python -m scripts.fake_github --host 0.0.0.0 --port 8091 --public-url ${GITHUB_PUBLIC_URL:-${PUBLIC_HOST:-http://localhost}:${GITHUB_PORT:-8091}}
     restart: unless-stopped
     ports:
-      - "${GITHUB_PORT:-8091}:8091"
+      - "${BIND_ADDR:-0.0.0.0}:${GITHUB_PORT:-8091}:8091"
 
   api:
     build:
@@ -55,9 +61,10 @@ services:
     environment:
       STANDUP_ENV: ${STANDUP_ENV:-local}
       STANDUP_DATABASE_URL: postgresql+psycopg://standup:standup@db:5432/standup
-      STANDUP_BASE_URL: ${PUBLIC_HOST:-http://localhost}:${APP_PORT:-8000}
+      STANDUP_BASE_URL: ${STANDUP_BASE_URL:-${PUBLIC_HOST:-http://localhost}:${APP_PORT:-8000}}
       STANDUP_SECRET_KEY: ${STANDUP_SECRET_KEY:-demo-only-signing-key-published-in-env-example-never-deploy}
       STANDUP_LOG_JSON: "true"
+      STANDUP_COOKIE_SECURE: ${STANDUP_COOKIE_SECURE:-false}
       # Builds each team's digest at its cutoff and delivers blockers.
       STANDUP_SCHEDULER: "true"
       STANDUP_TRACKER: github
@@ -65,7 +72,7 @@ services:
       STANDUP_GITHUB_API_URL: http://fake-github:8091
     restart: unless-stopped
     ports:
-      - "${APP_PORT:-8000}:8000"
+      - "${BIND_ADDR:-0.0.0.0}:${APP_PORT:-8000}:8000"
     # Migrate, seed two days of made-up updates (idempotent across restarts),
     # point Core Platform's blockers at the fake GitHub, then serve.
     command: >
@@ -79,7 +86,7 @@ services:
       context: ./frontend
     restart: unless-stopped
     ports:
-      - "${WEB_PORT:-3000}:80"
+      - "${BIND_ADDR:-0.0.0.0}:${WEB_PORT:-3000}:80"
     depends_on:
       - api
 

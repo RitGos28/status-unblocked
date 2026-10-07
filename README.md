@@ -128,7 +128,7 @@ docker compose up --build
 docker compose logs api | grep -A4 "Team codes"   # sign-in codes
 ```
 
-React app on `http://localhost:3000`, server pages on `http://localhost:8000/login`, fake GitHub on `http://localhost:8091`, Postgres behind them, and two days of made-up updates seeded. Change ports with `WEB_PORT`, `APP_PORT` and `GITHUB_PORT`, e.g. `APP_PORT=9000 WEB_PORT=8080 docker compose up --build`.
+React app on `http://localhost:3000` (the server pages are there too, e.g. `http://localhost:3000/login`, and on `http://localhost:8000/login`), fake GitHub on `http://localhost:8091`, Postgres behind them, and two days of made-up updates seeded. Change ports with `WEB_PORT`, `APP_PORT` and `GITHUB_PORT`, e.g. `APP_PORT=9000 WEB_PORT=8080 docker compose up --build`.
 
 ### Local (Python 3.13 and Node 20)
 
@@ -162,6 +162,19 @@ sudo docker compose logs api | grep -A4 "Team codes"
 ```
 
 Open `http://203.0.113.10` (React app), `http://203.0.113.10:8000/login` (server pages) and `http://203.0.113.10:8091` (fake GitHub). Allow those ports in the server's firewall or cloud security group. Compose reads the `.env` next to `docker-compose.yml`; `STANDUP_ENV=production` makes the app refuse the public demo key. Update with `git pull && sudo docker compose up -d --build`; data lives in the `pgdata` volume. This serves plain HTTP: for HTTPS, put a reverse proxy such as Caddy in front and set `STANDUP_COOKIE_SECURE=true` on the `api` service.
+
+
+### Behind a Cloudflare Tunnel (or any HTTPS proxy)
+
+Port `WEB_PORT` serves the whole app: the React app at `/`, and the server pages (`/login`, `/digests`, `/evidence/...`) and `/api` through to the backend. So the tunnel needs one hostname for the app, plus one for the fake GitHub if you want its issues reachable. Use this `.env` instead (replace `example.com` with your domain):
+
+```bash
+printf 'STANDUP_ENV=production\nSTANDUP_SECRET_KEY=%s\nSTANDUP_BASE_URL=https://standup.example.com\nGITHUB_PUBLIC_URL=https://standup-github.example.com\nSTANDUP_COOKIE_SECURE=true\nBIND_ADDR=127.0.0.1\nWEB_PORT=8300\nAPP_PORT=8301\nGITHUB_PORT=8302\n' \
+  "$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')" > .env
+docker compose up -d --build
+```
+
+Then in Cloudflare (Zero Trust > Networks > Tunnels > your tunnel > Public hostnames), add `standup.example.com` with service `http://localhost:8300`, and `standup-github.example.com` with service `http://localhost:8302`. `BIND_ADDR=127.0.0.1` keeps the ports off the public interface, so nothing needs opening in the firewall; drop it if `cloudflared` runs in a Docker container rather than on the host, and point the service at the host's address instead. `STANDUP_BASE_URL` and `GITHUB_PUBLIC_URL` are the addresses links in digests and issues use, and `STANDUP_COOKIE_SECURE=true` sends the sign-in cookie over HTTPS only.
 
 ---
 
