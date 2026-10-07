@@ -92,7 +92,7 @@ export default function TeamsLinkPage({ navigate }) {
           </div>
         </div>
       ) : (
-        <div className="card card-elevated" style={{ padding: "28px 28px" }}>
+        <div className="card card-elevated" style={{ padding: "28px 28px", maxWidth: "100%", overflow: "hidden" }}>
           {linked && (
             <div className="notice-box notice-info" style={{ marginBottom: 20 }}>
               <Link2 size={16} />
@@ -104,7 +104,7 @@ export default function TeamsLinkPage({ navigate }) {
             In a 1:1 chat with the bot, send:
           </p>
 
-          <div className="teams-code-block">
+          <div className="teams-code-block" style={{ maxWidth: "100%", overflow: "hidden" }}>
             <pre className="teams-code-pre">link {code}</pre>
             <button
               type="button"

@@ -23,6 +23,8 @@ import {
   Unlock,
   ShieldAlert,
   ShieldCheck,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 
 export default function ManagerPage({ navigate }) {
@@ -37,6 +39,7 @@ export default function ManagerPage({ navigate }) {
   const [isManager, setIsManager] = useState(null); // null = checking, false = locked, true = unlocked
   const [authUsername, setAuthUsername] = useState("");
   const [authPassword, setAuthPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [authenticating, setAuthenticating] = useState(false);
   const [authError, setAuthError] = useState(null);
 
@@ -379,6 +382,7 @@ export default function ManagerPage({ navigate }) {
                 required
                 autoFocus
                 autoComplete="username"
+                style={{ width: "100%", boxSizing: "border-box" }}
               />
             </div>
 
@@ -386,16 +390,44 @@ export default function ManagerPage({ navigate }) {
               <label htmlFor="mgr-pass">
                 <span>Password</span>
               </label>
-              <input
-                id="mgr-pass"
-                type="password"
-                className="text-input"
-                placeholder="Enter manager password"
-                value={authPassword}
-                onChange={(e) => setAuthPassword(e.target.value)}
-                required
-                autoComplete="current-password"
-              />
+              <div style={{ position: "relative", width: "100%" }}>
+                <input
+                  id="mgr-pass"
+                  type={showPassword ? "text" : "password"}
+                  className="text-input"
+                  placeholder="Enter manager password"
+                  value={authPassword}
+                  onChange={(e) => setAuthPassword(e.target.value)}
+                  required
+                  autoComplete="current-password"
+                  style={{
+                    width: "100%",
+                    paddingRight: 40,
+                    boxSizing: "border-box",
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  style={{
+                    position: "absolute",
+                    right: 10,
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    background: "transparent",
+                    border: "none",
+                    color: "var(--text-dim)",
+                    cursor: "pointer",
+                    padding: 4,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                  title={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
             </div>
 
             <div
