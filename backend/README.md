@@ -10,6 +10,13 @@ Python 3.13 FastAPI backend powering Status Unblocked.
 - **Audit Logging**: Cryptographically hash-chained audit log guaranteeing non-repudiation.
 - **Microsoft 365 Agents SDK**: Optional Teams bot connector (`POST /api/messages`).
 
+## Database
+
+Local development uses SQLite by default. Production deployments can use
+PostgreSQL by installing the `postgres` optional dependency and setting
+`STANDUP_DATABASE_URL` accordingly.
+
+
 ## Running Locally
 
 ```bash
@@ -33,3 +40,5 @@ mypy src
 lint-imports
 backend/scripts/demo_check.sh
 ```
+
+
