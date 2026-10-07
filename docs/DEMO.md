@@ -40,7 +40,7 @@ docker compose up --build
 docker compose logs api | grep -A4 "Team codes"   # the sign-in codes
 ```
 
-The React app is at `http://localhost:3000`, the server pages at `http://localhost:8000/login`, the fake GitHub at `http://localhost:8091`. Postgres, the in-app scheduler and two days of made-up updates are included. Ports move with `WEB_PORT`, `APP_PORT` and `GITHUB_PORT` (`APP_PORT=9000 docker compose up`). The Teams steps (1b) and the scripts need the local setup below.
+The React app is at `http://localhost:3000`, the server pages at `http://localhost:3000/login` (or straight from the backend at `http://localhost:8000/login`), the fake GitHub at `http://localhost:8091`. Postgres, the in-app scheduler and two days of made-up updates are included. Ports move with `WEB_PORT`, `APP_PORT` and `GITHUB_PORT` (`APP_PORT=9000 docker compose up`). The Teams steps (1b) and the scripts need the local setup below.
 
 **One command, locally** (needs the virtual environment from README's Getting started):
 
