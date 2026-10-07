@@ -1,4 +1,4 @@
 {"type": "message", "id": "1005", "serviceUrl": "https://smba.trafficmanager.net/teams/", "channelId": "msteams", "recipient": {"id": "28:bot-id", "name": "Status Unblocked"},
- "from": {"id": "29:user-aarav", "name": "Aarav Sharma", "aadObjectId": "aad-aarav"},
+ "from": {"id": "29:user-ritwik", "name": "Ritwik Gossain", "aadObjectId": "aad-ritwik"},
  "conversation": {"id": "19:abc@thread.tacv2", "conversationType": "channel"},
  "value": {"progress": "Posted from a channel."}}

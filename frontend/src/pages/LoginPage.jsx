@@ -99,7 +99,7 @@ export default function LoginPage({ navigate }) {
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Aarav Sharma"
+              placeholder="Ritwik Gossain"
               autoComplete="name"
               disabled={submitting}
               required

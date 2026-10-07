@@ -36,10 +36,10 @@ def test_pages_require_sign_in(client, team_with_members):
 @pytest.mark.parametrize(
     "team_code, name",
     [
-        ("CORE-NOPE1", "Aarav Sharma"),  # a code no team has
+        ("CORE-NOPE1", "Ritwik Gossain"),  # a code no team has
         ("{code}", "Nobody Here"),  # the right code, a name not on the team
         ("{code}", ""),
-        ("", "Aarav Sharma"),
+        ("", "Ritwik Gossain"),
     ],
 )
 def test_a_wrong_code_or_name_does_not_sign_in(client, team_with_members, team_code, name):
@@ -54,10 +54,10 @@ def test_a_wrong_code_or_name_does_not_sign_in(client, team_with_members, team_c
 def test_code_and_name_forgive_case_and_spacing(client, team_with_members):
     team, (ada, *_rest) = team_with_members
     code = team.join_code.lower()
-    data = {"team_code": f"  {code[:4]} - {code[4:]} ", "name": "  aarav   SHARMA "}
+    data = {"team_code": f"  {code[:4]} - {code[4:]} ", "name": "  ritwik   GOSSAIN "}
     response = client.post("/login", data=data, follow_redirects=False)
     assert response.status_code == 303
-    assert "Aarav Sharma" in client.get("/digests").text
+    assert "Ritwik Gossain" in client.get("/digests").text
 
 
 def test_a_team_code_signs_in_only_that_teams_members(client, team_with_members, other_team):
@@ -81,22 +81,22 @@ def test_every_member_sees_the_team_code_on_the_team_page(client, team_with_memb
         login_as(client, member.id)
         page = client.get("/me/team").text
         assert format_team_code(team.join_code) in page
-        assert "Ananya Patel" in page
+        assert "Shresth Tiwari" in page
     api = client.get("/api/me/team").json()
     assert api["team"]["join_code"] == format_team_code(team.join_code)
-    assert api["team"]["members"] == ["Aarav Sharma", "Ananya Patel", "Rohan Verma"]
+    assert api["team"]["members"] == ["Madhav Kumar", "Ritwik Gossain", "Shresth Tiwari"]
 
 
 def test_the_json_api_signs_in_with_the_same_code_and_name(client, team_with_members):
     team, (ada, *_rest) = team_with_members
-    bad = client.post("/api/auth/login", json={"team_code": "CORE-NOPE1", "name": "Aarav Sharma"})
+    bad = client.post("/api/auth/login", json={"team_code": "CORE-NOPE1", "name": "Ritwik Gossain"})
     assert bad.status_code == 401
     good = client.post(
         "/api/auth/login",
-        json={"team_code": format_team_code(team.join_code), "name": "aarav sharma"},
+        json={"team_code": format_team_code(team.join_code), "name": "ritwik gossain"},
     )
     assert good.status_code == 200
-    assert good.json()["member"]["display_name"] == "Aarav Sharma"
+    assert good.json()["member"]["display_name"] == "Ritwik Gossain"
     assert client.get("/api/me").json()["authenticated"] is True
 
 
@@ -113,7 +113,7 @@ def test_cannot_submit_as_someone_else(client, session, team_with_members):
     # A forged member_id field is ignored: the session decides who submits.
     client.post(
         "/submit",
-        data={"member_id": bruno.id, "progress": "Pretending to be Bruno."},
+        data={"member_id": bruno.id, "progress": "Pretending to be Madhav."},
         follow_redirects=False,
     )
     update = session.execute(select(Update)).scalar_one()
@@ -138,7 +138,7 @@ def test_other_teams_digest_and_evidence_are_not_found(
     assert client.post(f"/digests/build/{cycle_id}").status_code == 404
     assert "Core Platform" not in client.get("/digests").text
 
-    # A refused read is not a read: no audit row names Dana.
+    # A refused read is not a read: no audit row names Vikram.
     views = session.execute(
         select(AuditLog).where(AuditLog.action == AuditAction.EVIDENCE_VIEWED.value)
     ).scalars().all()

@@ -69,7 +69,7 @@ def test_link_then_submit_ingests_through_the_shared_path(session, clock, team_w
     _team, (ada, *_rest) = team_with_members
     link(session, clock, ada)
     session.refresh(ada)
-    assert ada.teams_aad_id == "aad-aarav"
+    assert ada.teams_aad_id == "aad-ritwik"
 
     context = run_turn(session, clock, activity("personal_card_submit"))
     assert "Recorded" in context.sent[0]
@@ -173,7 +173,7 @@ def test_a_linked_member_turn_saves_the_conversation_for_notices(
     _team, (ada, *_rest) = team_with_members
     link(session, clock, ada)
     session.refresh(ada)
-    assert ada.teams_conversation_ref["conversation"]["id"] == "a:1on1-aarav"
+    assert ada.teams_conversation_ref["conversation"]["id"] == "a:1on1-ritwik"
     assert ada.teams_conversation_ref["serviceUrl"].startswith("https://smba")
 
 
@@ -201,9 +201,9 @@ def test_notifier_continues_the_saved_conversation():
 
     adapter = FakeAdapter()
     reference = {
-        "user": {"id": "29:user-aarav"},
+        "user": {"id": "29:user-ritwik"},
         "agent": {"id": "28:bot-id"},
-        "conversation": {"id": "a:1on1-aarav"},
+        "conversation": {"id": "a:1on1-ritwik"},
         "serviceUrl": "https://smba.trafficmanager.net/teams/",
         "channelId": "msteams",
     }
@@ -211,7 +211,7 @@ def test_notifier_continues_the_saved_conversation():
 
     ((app_id, continuation, sent),) = adapter.calls
     assert app_id == "app-id"
-    assert continuation.conversation.id == "a:1on1-aarav"
+    assert continuation.conversation.id == "a:1on1-ritwik"
     assert continuation.service_url == "https://smba.trafficmanager.net/teams/"
     assert sent == ["Digest ready"]
 
@@ -222,7 +222,7 @@ def _from(account: str) -> dict[str, Any]:
 
 def test_a_link_code_works_once(session, clock, team_with_members):
     """Found by the round-2 review (B): the same code, sent from a second
-    Teams account, re-linked Ada to it and she was not told."""
+    Teams account, re-linked Ritwik to it and they were not told."""
     _team, (ada, *_rest) = team_with_members
     code = issue_teams_link_code(TEST_SECRET_KEY, ada.id, ada.teams_aad_id)
     first = run_turn(session, clock, activity("personal_command", text=f"link {code}"))
@@ -232,7 +232,7 @@ def test_a_link_code_works_once(session, clock, team_with_members):
     )
     assert "invalid or has expired" in again.sent[0]
     session.refresh(ada)
-    assert ada.teams_aad_id == "aad-aarav"
+    assert ada.teams_aad_id == "aad-ritwik"
 
 
 def test_a_fresh_code_still_moves_the_link_to_a_new_account(session, clock, team_with_members):
@@ -241,11 +241,11 @@ def test_a_fresh_code_still_moves_the_link_to_a_new_account(session, clock, team
     session.refresh(ada)
     code = issue_teams_link_code(TEST_SECRET_KEY, ada.id, ada.teams_aad_id)
     moved = run_turn(
-        session, clock, activity("personal_command", text=f"link {code}", **_from("aad-aarav-new"))
+        session, clock, activity("personal_command", text=f"link {code}", **_from("aad-ritwik-new"))
     )
     assert "Linked" in moved.sent[0]
     session.refresh(ada)
-    assert ada.teams_aad_id == "aad-aarav-new"
+    assert ada.teams_aad_id == "aad-ritwik-new"
 
 
 def test_resending_a_used_code_from_the_linked_account_is_harmless(
@@ -255,4 +255,4 @@ def test_resending_a_used_code_from_the_linked_account_is_harmless(
     code = issue_teams_link_code(TEST_SECRET_KEY, ada.id, None)
     run_turn(session, clock, activity("personal_command", text=f"link {code}"))
     again = run_turn(session, clock, activity("personal_command", text=f"link {code}"))
-    assert "already linked" in again.sent[0].lower() and "Aarav" in again.sent[0]
+    assert "already linked" in again.sent[0].lower() and "Ritwik" in again.sent[0]
