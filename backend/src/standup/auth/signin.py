@@ -39,9 +39,14 @@ def sign_in(session: Session, team_code: str, name: str) -> Member | None:
 
 def team_summary(team: Team) -> dict[str, Any]:
     """What the Team page shows every member: the code to share, and who is on the team."""
+    active_members = [m for m in team.members if m.active]
     return {
         "name": team.name,
         "slug": team.slug,
         "join_code": format_team_code(team.join_code),
-        "members": sorted(m.display_name for m in team.members if m.active),
+        "members": sorted(m.display_name for m in active_members),
+        "members_detailed": sorted(
+            [{"id": m.id, "display_name": m.display_name, "tz": m.tz} for m in active_members],
+            key=lambda x: x["display_name"],
+        ),
     }

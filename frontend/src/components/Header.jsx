@@ -1,5 +1,5 @@
 import React from "react";
-import { ShieldCheck, LogOut, Send, BookOpen, Zap, Users, Database } from "lucide-react";
+import { ShieldCheck, LogOut, Send, BookOpen, Zap, Users, Database, Briefcase } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 
 export default function Header({ currentPath, navigate }) {
@@ -44,6 +44,13 @@ export default function Header({ currentPath, navigate }) {
             onClick={() => navigate("/me/team")}
           >
             <Users size={14} /> Team
+          </button>
+          <button
+            type="button"
+            className={`nav-link ${currentPath === "/manager" ? "active" : ""}`}
+            onClick={() => navigate("/manager")}
+          >
+            <Briefcase size={14} /> Manager
           </button>
           <button
             type="button"

@@ -20,7 +20,7 @@ def other_team(session) -> tuple[Team, Member]:
     team = Team(slug="mobile", name="Mobile")
     session.add(team)
     session.flush()
-    member = Member(team_id=team.id, display_name="Dana Park", tz="UTC")
+    member = Member(team_id=team.id, display_name="Vikram Malhotra", tz="UTC")
     session.add(member)
     session.commit()
     return team, member
@@ -36,10 +36,10 @@ def test_pages_require_sign_in(client, team_with_members):
 @pytest.mark.parametrize(
     "team_code, name",
     [
-        ("CORE-NOPE1", "Ada Okafor"),  # a code no team has
+        ("CORE-NOPE1", "Aarav Sharma"),  # a code no team has
         ("{code}", "Nobody Here"),  # the right code, a name not on the team
         ("{code}", ""),
-        ("", "Ada Okafor"),
+        ("", "Aarav Sharma"),
     ],
 )
 def test_a_wrong_code_or_name_does_not_sign_in(client, team_with_members, team_code, name):
@@ -54,10 +54,10 @@ def test_a_wrong_code_or_name_does_not_sign_in(client, team_with_members, team_c
 def test_code_and_name_forgive_case_and_spacing(client, team_with_members):
     team, (ada, *_rest) = team_with_members
     code = team.join_code.lower()
-    data = {"team_code": f"  {code[:4]} - {code[4:]} ", "name": "  ada   OKAFOR "}
+    data = {"team_code": f"  {code[:4]} - {code[4:]} ", "name": "  aarav   SHARMA "}
     response = client.post("/login", data=data, follow_redirects=False)
     assert response.status_code == 303
-    assert "Ada Okafor" in client.get("/digests").text
+    assert "Aarav Sharma" in client.get("/digests").text
 
 
 def test_a_team_code_signs_in_only_that_teams_members(client, team_with_members, other_team):
@@ -81,22 +81,22 @@ def test_every_member_sees_the_team_code_on_the_team_page(client, team_with_memb
         login_as(client, member.id)
         page = client.get("/me/team").text
         assert format_team_code(team.join_code) in page
-        assert "Chen Wei" in page
+        assert "Ananya Patel" in page
     api = client.get("/api/me/team").json()
     assert api["team"]["join_code"] == format_team_code(team.join_code)
-    assert api["team"]["members"] == ["Ada Okafor", "Bruno Silva", "Chen Wei"]
+    assert api["team"]["members"] == ["Aarav Sharma", "Ananya Patel", "Rohan Verma"]
 
 
 def test_the_json_api_signs_in_with_the_same_code_and_name(client, team_with_members):
     team, (ada, *_rest) = team_with_members
-    bad = client.post("/api/auth/login", json={"team_code": "CORE-NOPE1", "name": "Ada Okafor"})
+    bad = client.post("/api/auth/login", json={"team_code": "CORE-NOPE1", "name": "Aarav Sharma"})
     assert bad.status_code == 401
     good = client.post(
         "/api/auth/login",
-        json={"team_code": format_team_code(team.join_code), "name": "ada okafor"},
+        json={"team_code": format_team_code(team.join_code), "name": "aarav sharma"},
     )
     assert good.status_code == 200
-    assert good.json()["member"]["display_name"] == "Ada Okafor"
+    assert good.json()["member"]["display_name"] == "Aarav Sharma"
     assert client.get("/api/me").json()["authenticated"] is True
 
 

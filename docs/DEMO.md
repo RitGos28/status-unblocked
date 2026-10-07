@@ -67,14 +67,14 @@ The app logs a `config.demo_secret_key` warning: expected, it is the public demo
 
 ## 1. Sign-in and team boundaries
 - Open `/digests` without signing in: **401**, "Sign in with your team code".
-- Open `/login`. Sign-in is two fields: the team's code and your name, no password. The seed printed a code per team (for example `CORE-7K3MQ` for Core Platform). Type Core Platform's code with the name **Ada Okafor**, however you capitalise or space them: you land on **Digests**, which lists only Core Platform's days. Mobile also has a day today (Dana filed an update), and it is not listed; the header shows who you are signed in as.
+- Open `/login`. Sign-in is two fields: the team's code and your name, no password. The seed printed a code per team (for example `CORE-7K3MQ` for Core Platform). Type Core Platform's code with the name **Aarav Sharma**, however you capitalise or space them: you land on **Digests**, which lists only Core Platform's days. Mobile also has a day today (Dana filed an update), and it is not listed; the header shows who you are signed in as.
 - Try Core Platform's code with a name that is not on the team, or a code no team has: the same "do not match anyone" message, so a code cannot be used to find out whether a team exists.
 - **Team** in the header shows the code to every member, with who is on the team. There is no owner of the code and no manager: anyone on the team shares it, and `python -m scripts.team_codes --team core --rotate` issues a new one (people already signed in stay signed in).
-- After step 3 (once a digest exists), sign in as **Dana Park** with Mobile's code and paste a Core Platform digest or evidence URL: **404**. Another team's pages are not just forbidden; they do not exist for her. Core Platform's code with Dana's name does not sign her in at all.
+- After step 3 (once a digest exists), sign in as **Vikram Malhotra** with Mobile's code and paste a Core Platform digest or evidence URL: **404**. Another team's pages are not just forbidden; they do not exist for her. Core Platform's code with Dana's name does not sign her in at all.
 
 ## 1b. The Teams bot (no tenant needed)
 Activities are replayed to the bot as Teams would send them (`scripts/teams_replay.py`); the bot's replies land at the fake connector. Open `http://127.0.0.1:8092/` to watch them. `teams_replay` assumes the app on port 8000 and the connector on 8092; on other ports pass `--app http://127.0.0.1:<port> --connector http://127.0.0.1:<port>`.
-- As Ada, open **Teams** in the header: it shows `link <code>`. Send it: `python -m scripts.teams_replay personal_command --text "link <code>"` → "Linked. You're Ada Okafor on Core Platform".
+- As Ada, open **Teams** in the header: it shows `link <code>`. Send it: `python -m scripts.teams_replay personal_command --text "link <code>"` → "Linked. You're Aarav Sharma on Core Platform".
 - A code works once. Send the same code from another Teams account, `... --text "link <code>" --as aad-someone-else` → "That code is invalid or has expired", and Ada stays linked to her own account.
 - `python -m scripts.teams_replay personal_command` (the text `standup`) → the bot replies with the update card.
 - `python -m scripts.teams_replay channel_unaddressed` → no reply, nothing read; `/scope` counts one refusal.

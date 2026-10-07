@@ -14,7 +14,7 @@ def test_an_unknown_page_is_an_html_page_in_a_browser(client, team_with_members)
     page = client.get("/no-such-page", headers=HTML)
     assert page.status_code == 404
     assert page.headers["content-type"].startswith("text/html")
-    assert "Ada Okafor" in page.text  # signed-in header kept
+    assert "Aarav Sharma" in page.text  # signed-in header kept
 
 
 def test_an_unknown_page_is_problem_json_for_an_api_client(client, app_env):

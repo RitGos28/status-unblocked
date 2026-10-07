@@ -21,7 +21,7 @@ def other_member(session) -> Member:
     team = Team(slug="mobile", name="Mobile")
     session.add(team)
     session.flush()
-    member = Member(team_id=team.id, display_name="Dana Park", tz="UTC")
+    member = Member(team_id=team.id, display_name="Vikram Malhotra", tz="UTC")
     session.add(member)
     session.commit()
     return member
@@ -65,7 +65,7 @@ def test_not_found_pages_show_no_raw_ids_and_keep_the_signed_in_header(
     page = client.get(f"/digest/{digest_url}", headers=HTML)
     assert page.status_code == 404
     assert not UUID.search(page.text.split("<header>")[0] + page.text.split("</header>")[-1])
-    assert "Dana Park" in page.text  # the signed-in header is still there
+    assert "Vikram Malhotra" in page.text  # the signed-in header is still there
     api = client.get(f"/digest/{digest_url}")
     assert not UUID.search(api.json()["detail"])
 

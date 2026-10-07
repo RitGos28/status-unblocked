@@ -1,7 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 import { api } from "../api/client";
-import { Send, AlertCircle, FileText } from "lucide-react";
+import { Send, AlertCircle, FileText, CheckSquare, Plus } from "lucide-react";
 
 const FIELDS = [
   {
@@ -37,9 +37,26 @@ export default function SubmitPage({ navigate }) {
   const [plan, setPlan] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
+  const [myTasks, setMyTasks] = useState([]);
+
+  useEffect(() => {
+    if (user) {
+      api.getMyTasks().then((res) => setMyTasks(res.tasks || [])).catch(() => {});
+    }
+  }, [user]);
 
   const fieldState = { progress, blockers, plan };
   const fieldSetters = { setProgress, setBlockers, setPlan };
+
+  const insertTaskIntoPlan = (taskTitle) => {
+    const addition = `Working on: ${taskTitle}`;
+    setPlan((prev) => (prev ? `${prev}\n${addition}` : addition));
+  };
+
+  const insertTaskIntoProgress = (taskTitle) => {
+    const addition = `Progressed on: ${taskTitle}`;
+    setProgress((prev) => (prev ? `${prev}\n${addition}` : addition));
+  };
 
   if (!user) {
     return (
@@ -75,6 +92,8 @@ export default function SubmitPage({ navigate }) {
     }
   };
 
+  const activeTasks = myTasks.filter((t) => t.status !== "completed");
+
   return (
     <div className="stagger">
       <div>
@@ -88,6 +107,71 @@ export default function SubmitPage({ navigate }) {
         <div className="notice-box notice-warning">
           <AlertCircle size={17} />
           <span>{error}</span>
+        </div>
+      )}
+
+      {/* Quick helper for active tasks assigned by manager */}
+      {activeTasks.length > 0 && (
+        <div
+          style={{
+            background: "var(--surface-sunken)",
+            border: "1px solid var(--border-subtle)",
+            borderRadius: "var(--radius-md)",
+            padding: "12px 16px",
+            marginBottom: 16,
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              fontSize: 12,
+              fontWeight: 600,
+              color: "var(--text-secondary)",
+              marginBottom: 8,
+            }}
+          >
+            <CheckSquare size={13} color="var(--accent-bright)" />
+            <span>Assigned Tasks from Manager (click to mention):</span>
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {activeTasks.map((t) => (
+              <div
+                key={t.id}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "4px 10px",
+                  borderRadius: "var(--r-full)",
+                  background: "var(--surface)",
+                  border: "1px solid var(--border-subtle)",
+                  fontSize: 12,
+                }}
+              >
+                <span style={{ fontWeight: 500 }}>{t.title}</span>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  style={{ padding: "1px 5px", fontSize: 11, color: "var(--accent-bright)" }}
+                  onClick={() => insertTaskIntoProgress(t.title)}
+                  title="Add to Progress"
+                >
+                  + Progress
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  style={{ padding: "1px 5px", fontSize: 11, color: "var(--accent-bright)" }}
+                  onClick={() => insertTaskIntoPlan(t.title)}
+                  title="Add to Today's Plan"
+                >
+                  + Plan
+                </button>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

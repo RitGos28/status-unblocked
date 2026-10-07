@@ -45,4 +45,4 @@ trap 'kill $GITHUB_PID $TEAMS_PID 2>/dev/null || true' EXIT INT TERM
 $PYTHON -m scripts.seed_demo --days 2
 $PYTHON -m scripts.set_github_repo --team core --repo demo/core
 echo "App: http://127.0.0.1:$PORT   Fake GitHub: http://127.0.0.1:$GITHUB_PORT   Fake Teams connector: http://127.0.0.1:$TEAMS_PORT"
-"$VENV_DIR/bin/uvicorn" standup.main:app --app-dir src --host "${HOST:-127.0.0.1}" --port "$PORT"
+"$VENV_DIR/bin/uvicorn" standup.main:app --app-dir src --host "${HOST:-127.0.0.1}" --port "$PORT" --reload

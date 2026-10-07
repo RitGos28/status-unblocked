@@ -386,3 +386,29 @@ class Lease(Base):
     name: Mapped[str] = mapped_column(String(64), primary_key=True)
     holder: Mapped[str] = mapped_column(String(64), default="")
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class TeamTask(Base):
+    """A task assigned to a team member by a manager or team lead."""
+
+    __tablename__ = "team_task"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    team_id: Mapped[str] = mapped_column(ForeignKey("team.id"))
+    title: Mapped[str] = mapped_column(String(255))
+    description: Mapped[str] = mapped_column(Text, default="")
+    assigned_to_id: Mapped[str | None] = mapped_column(ForeignKey("member.id"), nullable=True)
+    created_by_id: Mapped[str | None] = mapped_column(ForeignKey("member.id"), nullable=True)
+    # Status: pending, in_progress, completed, blocked
+    status: Mapped[str] = mapped_column(String(32), default="pending")
+    # Priority: low, medium, high, urgent
+    priority: Mapped[str] = mapped_column(String(16), default="medium")
+    due_date: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
+
+    team: Mapped[Team] = relationship()
+    assigned_to: Mapped[Member | None] = relationship(foreign_keys=[assigned_to_id])
+    created_by: Mapped[Member | None] = relationship(foreign_keys=[created_by_id])

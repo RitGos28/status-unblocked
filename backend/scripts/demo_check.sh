@@ -100,8 +100,8 @@ pass "server is up"
 [ "$(status "$BASE/digests")" = 401 ] || fail "signed-out /digests answers 401"
 pass "signed out: /digests is 401"
 [ "$(sign_in "$WORK/nobody.jar" "$CORE_CODE" "Nobody Here")" = 401 ] || fail "a name not on the team is refused"
-[ "$(sign_in "$WORK/nobody.jar" "CORE-NOPE1" "Ada Okafor")" = 401 ] || fail "a code no team has is refused"
-[ "$(sign_in "$WORK/ada.jar" "$(tr 'A-Z' 'a-z' <<<"$CORE_CODE")" "  ada   okafor ")" = 303 ] || fail "Ada signs in with the team code and her name, however typed"
+[ "$(sign_in "$WORK/nobody.jar" "CORE-NOPE1" "Aarav Sharma")" = 401 ] || fail "a code no team has is refused"
+[ "$(sign_in "$WORK/ada.jar" "$(tr 'A-Z' 'a-z' <<<"$CORE_CODE")" "  aarav   sharma ")" = 303 ] || fail "Aarav signs in with the team code and his name, however typed"
 DIGESTS="$(curl -s -b "$WORK/ada.jar" "$BASE/digests")"
 grep -q "Core Platform" <<<"$DIGESTS" || fail "Ada sees Core Platform"
 ! grep -q "Mobile" <<<"$DIGESTS" || fail "Ada does not see Mobile"
@@ -112,7 +112,7 @@ pass "sign-in: a wrong code or name is refused; Ada signs in with the team code 
 CODE="$(curl -s -b "$WORK/ada.jar" "$BASE/me/teams" | grep -o '<pre class="raw">link [A-Za-z0-9._-]*' | head -1 | cut -d' ' -f3)"
 [ -n "$CODE" ] || fail "/me/teams shows Ada a link code"
 replay personal_command --text "link $CODE" || fail "the bot accepts 'link <code>'"
-grep -q "Linked. You're Ada Okafor" <<<"$(bot_said)" || fail "the bot confirms the link"
+grep -q "Linked. You're Aarav Sharma" <<<"$(bot_said)" || fail "the bot confirms the link"
 replay personal_command --text "link $CODE" --as aad-someone-else || fail "the bot accepts a reused code"
 grep -q "invalid or has expired" <<<"$(bot_said)" || fail "a used link code is refused from another account"
 replay personal_command --text "standup" || fail "the bot accepts 'standup'"
@@ -137,13 +137,13 @@ seq 6 | xargs -P 6 -I{} curl -s -o /dev/null -b "$WORK/ada.jar" -X POST "$BASE/s
     --data-urlencode "blockers=Waiting on staging credentials from infra.")" = 303 ] \
     || fail "Ada can still submit after six simultaneous submits"
 pass "Ada submits twice, then six times at once; she is never locked out and the last one counts"
-[ "$(sign_in "$WORK/chen.jar" "$CORE_CODE" "Chen Wei")" = 303 ] || fail "Chen signs in"
+[ "$(sign_in "$WORK/chen.jar" "$CORE_CODE" "Ananya Patel")" = 303 ] || fail "Chen signs in"
 [ "$(status -b "$WORK/chen.jar" -X POST "$BASE/submit" \
     --data-urlencode $'progress=Drafted the schema update.\nBlockers:\nnot really' \
     --data-urlencode "blockers=Stuck on the deploy pipeline.")" = 303 ] \
     || fail "a section heading typed into another box is accepted, not a 500"
 pass "Chen types 'Blockers:' inside Progress; the submission is stored correctly"
-[ "$(sign_in "$WORK/bruno.jar" "$CORE_CODE" "Bruno Silva")" = 303 ] || fail "Bruno signs in"
+[ "$(sign_in "$WORK/bruno.jar" "$CORE_CODE" "Rohan Verma")" = 303 ] || fail "Bruno signs in"
 [ "$(status -b "$WORK/bruno.jar" -X POST "$BASE/submit" \
     --data-urlencode $'progress=Merged the API changes, but waiting on review for the DB migration.\nFixed the bug where users cannot log in.' \
     --data-urlencode "blockers=Nope, all clear")" = 303 ] || fail "Bruno submits"
@@ -153,8 +153,8 @@ pass "Bruno answers 'Nope, all clear' for blockers and mentions a wait inside Pr
 D2="$($PY -c 'from datetime import UTC, datetime, timedelta; print((datetime.now(UTC) - timedelta(days=2)).date())')"
 D1="$($PY -c 'from datetime import UTC, datetime, timedelta; print((datetime.now(UTC) - timedelta(days=1)).date())')"
 printf '%s\n' "date,team,member,progress,blockers,plan" \
-    "$D2,mobile,Dana Park,Profiled the cold start.,Waiting on the signing certificate from IT.,Cut the cold start time." \
-    "$D1,mobile,Dana Park,Cut cold start by 40 percent.,Waiting on the signing certificate from IT.,Ship the beta build." \
+    "$D2,mobile,Vikram Malhotra,Profiled the cold start.,Waiting on the signing certificate from IT.,Cut the cold start time." \
+    "$D1,mobile,Vikram Malhotra,Cut cold start by 40 percent.,Waiting on the signing certificate from IT.,Ship the beta build." \
     >"$WORK/mobile.body"
 # Saved as Excel's "CSV UTF-8": a byte-order mark in front of the header.
 { printf '\xef\xbb\xbf'; cat "$WORK/mobile.body"; } >"$WORK/mobile.csv"
@@ -163,7 +163,7 @@ $PY -m scripts.import_updates_csv "$WORK/mobile.csv" 2>/dev/null | grep -q "impo
 printf '%s\n' "date,team,member,progress,blockers,plan" "$D1,mobile,Nobody,x,," >"$WORK/bad.csv"
 if $PY -m scripts.import_updates_csv "$WORK/bad.csv" >"$WORK/bad.out" 2>/dev/null; then fail "a CSV with a bad row is refused"; fi
 grep -q "line 2: no active member 'Nobody' in team 'mobile'" "$WORK/bad.out" || fail "the refusal names the line and the problem"
-printf '%s\n' "date,team,member,progress,blockers,plan" "2031-01-01,mobile,Dana Park,x,," >"$WORK/future.csv"
+printf '%s\n' "date,team,member,progress,blockers,plan" "2031-01-01,mobile,Vikram Malhotra,x,," >"$WORK/future.csv"
 if $PY -m scripts.import_updates_csv "$WORK/future.csv" >"$WORK/future.out" 2>/dev/null; then fail "a future-dated row is refused"; fi
 grep -q "is in the future" "$WORK/future.out" || fail "the refusal says the date is in the future"
 pass "spreadsheet import (Excel's CSV UTF-8): two earlier days for Mobile load; re-import changes nothing; a bad or future row is refused with its line"
@@ -234,8 +234,8 @@ DIGEST_ID="$(curl -s -b "$WORK/ada.jar" "$BASE/digests" | grep -o 'href="/digest
 PAGE="$(curl -s -b "$WORK/ada.jar" "$BASE/digest/$DIGEST_ID")"
 grep -q "Waiting on staging credentials from infra." <<<"$PAGE" || fail "Ada's blocker is in the digest"
 STILL="$(sed -n '/## Still blocked/,/## Blockers/p' <<<"$(curl -s -b "$WORK/ada.jar" "$BASE/digest/$DIGEST_ID.md")")"
-grep -q "Ada Okafor\*\* - Waiting on staging credentials" <<<"$STILL" || fail "Ada's two-day blocker is under Still blocked"
-ADA_LINE="$(grep 'Ada Okafor' <<<"$STILL" | head -1)"
+grep -q "Aarav Sharma\*\* - Waiting on staging credentials" <<<"$STILL" || fail "Ada's two-day blocker is under Still blocked"
+ADA_LINE="$(grep 'Aarav Sharma' <<<"$STILL" | head -1)"
 grep -q '\[source\]' <<<"$ADA_LINE" && grep -q '\[earlier report\]' <<<"$ADA_LINE" \
     || fail "the carried-over blocker cites both days: today's source and the earlier report"
 grep -q "Also reported on" <<<"$PAGE" || fail "the page says when it was first reported"
@@ -264,7 +264,7 @@ pass "Teams: Ada files her update through the card, through the same ingest path
 CSV="$(curl -s -b "$WORK/ada.jar" "$BASE/digest/$DIGEST_ID.csv")"
 [ "$(head -1 <<<"$CSV" | tr -d '\r')" = "section,member,text,evidence_url,earlier_report_url,issue_url" ] \
     || fail "the digest downloads as a CSV with a header row"
-ADA_ROW="$(grep '^Still blocked,Ada Okafor' <<<"$CSV")"
+ADA_ROW="$(grep '^Still blocked,Aarav Sharma' <<<"$CSV")"
 grep -q "$BASE/evidence/.*,$BASE/evidence/.*,$GH/demo/core/issues/" <<<"$ADA_ROW" \
     || fail "Ada's carried-over row has today's source, the earlier report and its issue"
 pass "the digest downloads as a spreadsheet: one row per line, with evidence and issue links"
@@ -312,12 +312,12 @@ grep -q "withheld 7 of 7" <<<"$FAITH" && grep -q "V9 .*says the blocker is solve
 pass "the validator passes every real line and withholds 7 of 7 unfaithful claims, naming each rule"
 
 # --- another team cannot see it ----------------------------------------------
-[ "$(sign_in "$WORK/dana.jar" "$CORE_CODE" "Dana Park")" = 401 ] || fail "Core Platform's code does not sign Dana in"
-[ "$(sign_in "$WORK/dana.jar" "$MOBILE_CODE" "Dana Park")" = 303 ] || fail "Dana signs in with Mobile's code"
+[ "$(sign_in "$WORK/dana.jar" "$CORE_CODE" "Vikram Malhotra")" = 401 ] || fail "Core Platform's code does not sign Dana in"
+[ "$(sign_in "$WORK/dana.jar" "$MOBILE_CODE" "Vikram Malhotra")" = 303 ] || fail "Dana signs in with Mobile's code"
 [ "$(status -b "$WORK/dana.jar" "$BASE/digest/$DIGEST_ID")" = 404 ] || fail "Dana gets 404 on Core's digest"
 [ "$(status -b "$WORK/dana.jar" "$BASE$EVIDENCE")" = 404 ] || fail "Dana gets 404 on Core's evidence"
 NOTFOUND="$(curl -s -H 'accept: text/html' -b "$WORK/dana.jar" "$BASE/digest/$DIGEST_ID")"
-grep -q "Dana Park" <<<"$NOTFOUND" || fail "the 404 page keeps Dana's signed-in header"
+grep -q "Vikram Malhotra" <<<"$NOTFOUND" || fail "the 404 page keeps Dana's signed-in header"
 ! grep -q "$DIGEST_ID" <<<"$NOTFOUND" || fail "the 404 page does not echo the digest id"
 DANA_LIST="$(curl -s -b "$WORK/dana.jar" "$BASE/digests")"
 [ "$(grep -c 'Read digest' <<<"$DANA_LIST")" = 3 ] || fail "Dana sees Mobile's three days, two of them imported"
@@ -326,21 +326,21 @@ pass "Dana (Mobile) gets 404 on Core Platform's digest and evidence, and sees Mo
 # --- my data: who opened my updates, and an export ----------------------------
 curl -s -o /dev/null -b "$WORK/bruno.jar" "$BASE$EVIDENCE" || fail "Bruno opens Ada's evidence"
 MINE="$(curl -s -b "$WORK/ada.jar" "$BASE/me/data")"
-grep -q "Bruno Silva" <<<"$(sed -n '/Who has opened your updates/,/Your updates/p' <<<"$MINE")" \
+grep -q "Rohan Verma" <<<"$(sed -n '/Who has opened your updates/,/Your updates/p' <<<"$MINE")" \
     || fail "Ada's My data page shows Bruno opened her update"
-curl -s -b "$WORK/ada.jar" "$BASE/me/export" | $PY -c 'import json,sys; d=json.load(sys.stdin); assert d["member"]["display_name"] == "Ada Okafor" and d["updates"]' \
+curl -s -b "$WORK/ada.jar" "$BASE/me/export" | $PY -c 'import json,sys; d=json.load(sys.stdin); assert d["member"]["display_name"] == "Aarav Sharma" and d["updates"]' \
     || fail "Ada's export is JSON with her updates"
 pass "My data: Ada sees that Bruno opened her update, and exports everything as JSON"
 
 # --- the React app's API: the same data, through /api ------------------------
 API_MINE="$(curl -s -b "$WORK/ada.jar" "$BASE/api/me/data")"
-$PY -c 'import json,sys; d=json.load(sys.stdin); assert [e["by"] for e in d["events"] if e["action"]=="evidence.viewed"].count("Bruno Silva")' <<<"$API_MINE" \
+$PY -c 'import json,sys; d=json.load(sys.stdin); assert [e["by"] for e in d["events"] if e["action"]=="evidence.viewed"].count("Rohan Verma")' <<<"$API_MINE" \
     || fail "/api/me/data shows Bruno opened Ada's update"
 [ "$(curl -s -b "$WORK/ada.jar" "$BASE/api/digest/$REBUILT.md")" = "$(curl -s -b "$WORK/ada.jar" "$BASE/digest/$REBUILT.md")" ] \
     || fail "/api/digest/<id>.md is the same Markdown as the page's"
 [ "$(curl -s -b "$WORK/ada.jar" "$BASE/api/digest/$REBUILT.csv")" = "$(curl -s -b "$WORK/ada.jar" "$BASE/digest/$REBUILT.csv")" ] \
     || fail "/api/digest/<id>.csv is the same spreadsheet as the page's"
-curl -s -b "$WORK/ada.jar" "$BASE/api/me/export" | $PY -c 'import json,sys; assert json.load(sys.stdin)["member"]["display_name"] == "Ada Okafor"' \
+curl -s -b "$WORK/ada.jar" "$BASE/api/me/export" | $PY -c 'import json,sys; assert json.load(sys.stdin)["member"]["display_name"] == "Aarav Sharma"' \
     || fail "/api/me/export is Ada's JSON"
 [ "$(status -b "$WORK/dana.jar" "$BASE/api/digest/$REBUILT.csv")" = 404 ] || fail "Dana gets 404 on Core's CSV through /api"
 API_LATEST="$(curl -s -b "$WORK/ada.jar" "$BASE/api/digests" | $PY -c 'import json,sys; print(json.load(sys.stdin)["rows"][0]["digest"]["id"])')"

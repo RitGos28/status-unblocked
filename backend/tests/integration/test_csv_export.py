@@ -36,9 +36,9 @@ def test_a_digest_downloads_as_csv_with_one_row_per_line(client, session, team_w
     table = rows(response)
     assert table[0] == HEADER
     body = {(r[0], r[1], r[2]) for r in table[1:]}
-    assert ("Blockers", "Bruno Silva", "Reviewed #214.") not in body
-    assert ("Blockers", "Ada Okafor", "Waiting on infra.") in body
-    assert ("Progress", "Bruno Silva", "Reviewed #214.") in body
+    assert ("Blockers", "Rohan Verma", "Reviewed #214.") not in body
+    assert ("Blockers", "Aarav Sharma", "Waiting on infra.") in body
+    assert ("Progress", "Rohan Verma", "Reviewed #214.") in body
     assert all(r[3].startswith("http://testserver/evidence/") for r in table[1:])
     assert client.head(f"/digest/{digest.id}.csv").status_code == 200
 
@@ -59,7 +59,7 @@ def test_another_team_cannot_download_it(client, session, team_with_members):
     mobile = Team(slug="mobile", name="Mobile")
     session.add(mobile)
     session.flush()
-    dana = Member(team_id=mobile.id, display_name="Dana Park", tz="UTC")
+    dana = Member(team_id=mobile.id, display_name="Vikram Malhotra", tz="UTC")
     session.add(dana)
     session.commit()
     login_as(client, dana.id)

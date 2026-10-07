@@ -51,3 +51,8 @@ class ConflictError(StandupError):
 
     status_code = 409
     title = "Not possible any more"
+
+
+class BadRequestError(StandupError):
+    status_code = 400
+    title = "Bad request"

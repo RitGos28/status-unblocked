@@ -39,5 +39,5 @@ def test_display_form_round_trips():
 
 
 def test_names_compare_without_case_or_spacing():
-    assert normalise_name("  ada   OKAFOR ") == normalise_name("Ada Okafor")
-    assert normalise_name("Ada Okafor") != normalise_name("Ada Okafor-Smith")
+    assert normalise_name("  aarav   SHARMA ") == normalise_name("Aarav Sharma")
+    assert normalise_name("Aarav Sharma") != normalise_name("Aarav Sharma-Smith")
