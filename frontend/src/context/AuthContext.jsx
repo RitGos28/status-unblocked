@@ -48,6 +48,25 @@ export function AuthProvider({ children }) {
     }
   };
 
+  // Join a team with team code and name (creates member if new)
+  const joinTeam = async (teamCode, name, tz) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await api.joinTeam(teamCode, name, tz);
+      if (res.success && res.member) {
+        setUser(res.member);
+        return res.member;
+      }
+      throw new Error("Could not join team with that code.");
+    } catch (err) {
+      setError(err.message || "Could not join team.");
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const logout = async () => {
     try {
       await api.logout();
@@ -59,7 +78,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, error, checkAuth, login, logout }}>
+    <AuthContext.Provider value={{ user, loading, error, checkAuth, login, joinTeam, logout }}>
       {children}
     </AuthContext.Provider>
   );

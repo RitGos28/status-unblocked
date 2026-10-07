@@ -27,15 +27,15 @@ DEMO_TEAM_SLUG = "core"
 OTHER_TEAM_SLUG = "mobile"
 
 DEMO_MEMBERS = [
-    ("Ada Okafor", "Europe/London"),
-    ("Bruno Silva", "America/Sao_Paulo"),
-    ("Chen Wei", "Asia/Singapore"),
+    ("Aarav Sharma", "Europe/London"),
+    ("Rohan Verma", "America/Sao_Paulo"),
+    ("Ananya Patel", "Asia/Singapore"),
 ]
-OTHER_MEMBERS = [("Dana Park", "UTC")]
+OTHER_MEMBERS = [("Vikram Malhotra", "UTC")]
 # Mobile files one update today, so its day exists and visibly does not appear
 # for Core Platform's members (and Core Platform's does not appear for Dana).
 OTHER_UPDATES = {
-    "Dana Park": {
+    "Vikram Malhotra": {
         "progress": "Released the offline mode beta to testers.",
         "blockers": "",
         "plan": "Triage the beta feedback.",
@@ -44,39 +44,39 @@ OTHER_UPDATES = {
 
 
 DEMO_UPDATES = {
-    "Ada Okafor": {
+    "Aarav Sharma": {
         "progress": "Shipped the retry logic and reviewed the deployment plan.",
         "blockers": "Waiting on staging credentials from infra.",
         "plan": "Finish the migration and verify the rollout.",
     },
-    "Bruno Silva": {
+    "Rohan Verma": {
         "progress": "Fixed the flaky integration test.",
         "blockers": "No blockers today.",
         "plan": "Review the database changes.",
     },
-    "Chen Wei": {
+    "Ananya Patel": {
         # The second sentence is a blocker filed under Progress: the digest
         # moves it to Blockers and says why.
         "progress": "Drafted the schema update. Stuck on the deploy pipeline.",
         "blockers": "",
-        "plan": "Pair with Ada on the migration.",
+        "plan": "Pair with Aarav on the migration.",
     },
 }
 
 # Earlier days. Ada's blocker is word-for-word the same as today's, so it is
 # recognised as the same blocker across days.
 EARLIER_UPDATES = {
-    "Ada Okafor": {
+    "Aarav Sharma": {
         "progress": "Wrote the retry logic tests.",
         "blockers": "Waiting on staging credentials from infra.",
         "plan": "Ship the retry logic.",
     },
-    "Bruno Silva": {
+    "Rohan Verma": {
         "progress": "Reproduced the flaky integration test.",
         "blockers": "Not blocked.",
         "plan": "Fix the flaky test.",
     },
-    "Chen Wei": {
+    "Ananya Patel": {
         "progress": "Read the schema migration notes.",
         "blockers": "",
         "plan": "Draft the schema update.",

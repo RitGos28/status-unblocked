@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { api } from "../api/client";
 import { useAuth } from "../context/AuthContext";
-import { Users, Copy, Check, KeyRound } from "lucide-react";
+import { Users, Copy, Check, KeyRound, Briefcase } from "lucide-react";
 
 export default function TeamPage({ navigate }) {
   const { user } = useAuth();
@@ -78,6 +78,16 @@ export default function TeamPage({ navigate }) {
           <p className="subtitle" style={{ marginBottom: 0 }}>
             Your team, and the code that lets a teammate sign in.
           </p>
+        </div>
+        <div>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => navigate("/manager")}
+            style={{ fontSize: 13 }}
+          >
+            <Briefcase size={14} /> Open Manager Dashboard
+          </button>
         </div>
       </div>
 

@@ -40,7 +40,7 @@ def source(
     return SourceDoc(
         id=id_,
         member_id=member_id,
-        member_name="Ada Okafor",
+        member_name="Aarav Sharma",
         kind=kind,
         text=text,
         captured_at=NOW,
@@ -84,7 +84,7 @@ class HallucinatingSummarizer:
             Claim(
                 kind=ClaimKind.BLOCKER,
                 member_id="m1",
-                member_name="Ada Okafor",
+                member_name="Aarav Sharma",
                 text="The team is blocked on 3 separate infrastructure issues, see #999.",
                 citations=(
                     Citation(source_id="does-not-exist", quote="fabricated", start=0, end=11),
@@ -94,7 +94,7 @@ class HallucinatingSummarizer:
             Claim(
                 kind=ClaimKind.PROGRESS,
                 member_id="m1",
-                member_name="Ada Okafor",
+                member_name="Aarav Sharma",
                 text="Everything is on track and morale is high.",
                 citations=(),
                 extractive=False,
@@ -218,7 +218,7 @@ def test_v6_cross_attribution_is_dropped():
     claim = Claim(
         ClaimKind.BLOCKER,
         "m2",  # someone else entirely
-        "Bruno Silva",
+        "Rohan Verma",
         src.text,
         citations=(Citation(src.id, src.text, 0, len(src.text)),),
     )
@@ -253,7 +253,7 @@ def test_extractive_claims_are_exempt_from_the_length_guard():
 def test_good_claims_survive_alongside_bad_ones():
     """A bad claim is dropped; it must not take the honest ones with it."""
     good_src = source(id_="s1", member_id="m1")
-    bad = Claim(ClaimKind.BLOCKER, "m1", "Ada Okafor", "invented", citations=())
+    bad = Claim(ClaimKind.BLOCKER, "m1", "Aarav Sharma", "invented", citations=())
 
     kept, report = FaithfulnessValidator().validate(
         result_with(valid_claim(good_src), bad), request_with(good_src)

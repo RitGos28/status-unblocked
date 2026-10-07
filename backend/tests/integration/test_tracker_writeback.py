@@ -218,7 +218,7 @@ def test_the_issue_carries_a_json_record_and_a_team_label(client, session, githu
     assert record == {
         "fingerprint": link.fingerprint,
         "team": "core",
-        "reported_by": "Ada Okafor",
+        "reported_by": "Aarav Sharma",
         "quote": BLOCKER,
         "first_reported": "2026-09-15",
         "days_reported": 1,

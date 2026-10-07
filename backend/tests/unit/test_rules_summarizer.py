@@ -23,7 +23,7 @@ def source(id_: str, text: str, kind: ItemKind, member_id: str = "m1") -> Source
     return SourceDoc(
         id=id_,
         member_id=member_id,
-        member_name="Ada Okafor",
+        member_name="Aarav Sharma",
         kind=kind,
         text=text,
         captured_at=NOW,
@@ -221,7 +221,7 @@ def keyed(id_, text, kind=ItemKind.BLOCKER, member_id="m1", days_ago=0):
     return SourceDoc(
         id=id_,
         member_id=member_id,
-        member_name="Ada Okafor",
+        member_name="Aarav Sharma",
         kind=kind,
         text=text,
         captured_at=NOW - timedelta(days=days_ago),

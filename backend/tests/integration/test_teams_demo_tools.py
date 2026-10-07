@@ -16,9 +16,9 @@ from scripts.teams_replay import prepare
 from standup.api.teams_router import TeamsNotifier
 
 REFERENCE = {
-    "user": {"id": "29:user-ada"},
+    "user": {"id": "29:user-aarav"},
     "agent": {"id": "28:bot-id"},
-    "conversation": {"id": "a:1on1-ada"},
+    "conversation": {"id": "a:1on1-aarav"},
     "serviceUrl": "http://127.0.0.1:8092/",
     "channelId": "msteams",
 }

@@ -42,7 +42,7 @@ def test_full_cycle_submit_digest_and_verify_evidence(client, session, team_with
         client,
         chen.id,
         progress="Drafted the schema.",
-        plan="Pair with Ada on the migration.",
+        plan="Pair with Aarav on the migration.",
     ).status_code == 303
 
     updates = session.execute(select(Update)).scalars().all()
@@ -87,7 +87,7 @@ def test_full_cycle_submit_digest_and_verify_evidence(client, session, team_with
     # --- "no blockers" was not mistaken for a blocker ------------------------
     blockers = [c for c in claims if c.kind == ClaimKind.BLOCKER.value]
     assert len(blockers) == 1, [b.text for b in blockers]
-    assert blockers[0].member_name == "Ada Okafor"
+    assert blockers[0].member_name == "Aarav Sharma"
     assert "staging credentials" in blockers[0].text
 
     # --- the digest page links each blocker to its source --------------------
@@ -100,7 +100,7 @@ def test_full_cycle_submit_digest_and_verify_evidence(client, session, team_with
     evidence = client.get(f"/evidence/{source_id}")
     assert evidence.status_code == 200
     assert "Waiting on staging credentials from infra." in evidence.text
-    assert "Ada Okafor" in evidence.text
+    assert "Aarav Sharma" in evidence.text
 
     # --- the cycle is marked digested ---------------------------------------
     session.expire_all()
