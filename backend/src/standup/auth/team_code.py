@@ -4,9 +4,8 @@ A team code does not prove who someone is. It proves they were given it by
 someone on the team; the person then says who they are by name. That keeps
 sign-in to two fields, with no email, no password and no per-person secret,
 which suits a small team whose members already know each other. It also keeps
-roles out of member sign-in: every member sees the code on their Team page and
-can share it. The manager portal (``auth/manager.py``) is the one separate
-login, and it holds no code a member does not have (invariant 7).
+roles out of it: every member sees the code on their Team page and can share
+it, so there is no manager behind it (invariant 7).
 
 Pure: no I/O. Codes are stored compact (``CORE7K3MQ``) and shown with a
 hyphen (``CORE-7K3MQ``); what people type is normalised before comparison, so

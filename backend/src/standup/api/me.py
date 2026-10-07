@@ -26,7 +26,6 @@ _ACTIONS = {
     AuditAction.DATA_EXPORTED.value: "exported your data",
     AuditAction.DATA_DELETED.value: "removed your stored submission",
     AuditAction.TRACKER_WRITE.value: "wrote your blocker to the tracker",
-    AuditAction.MEMBER_ADDED.value: "added you to the team",
 }
 
 
@@ -34,8 +33,8 @@ _ACTIONS = {
 def my_team(request: Request, member: CurrentMember) -> HTMLResponse:
     """The member's team: the code to share with a teammate, and who is on it.
 
-    Every member sees the same page. Sharing the code is not a privilege: the
-    manager portal shows the same code, nothing more (invariant 7).
+    Every member sees the same page. Sharing the code is not a privilege, so
+    there is no role behind it (invariant 7).
     """
     return templates.TemplateResponse(
         request=request,
@@ -164,11 +163,7 @@ def _events_about(session: DbSession, member: Member) -> list[dict[str, Any]]:
             "when": as_utc(row.ts).isoformat(),
             "action": row.action,
             "what": _ACTIONS.get(row.action, row.action),
-            # The manager portal's reads are named as such, so "who opened my
-            # updates" never hides the manager behind a bare username.
-            "by": f"{row.actor_id} (manager)"
-            if row.actor_kind == "manager"
-            else names.get(row.actor_id or "", row.actor_id or row.actor_kind),
+            "by": names.get(row.actor_id or "", row.actor_id or row.actor_kind),
             "by_kind": row.actor_kind,
         }
         for row in rows

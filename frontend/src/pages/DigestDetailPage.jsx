@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { api, downloads, managerApi } from "../api/client";
+import { api, downloads } from "../api/client";
 import {
   ExternalLink,
   Quote,
@@ -12,10 +12,7 @@ import {
   Download,
 } from "lucide-react";
 
-export default function DigestDetailPage({ digestId, navigate, manager = false }) {
-  // The manager portal reads the same digest through its own routes.
-  const backTo = manager ? "/manager" : "/digests";
-  const evidencePrefix = manager ? "/manager/evidence/" : "/evidence/";
+export default function DigestDetailPage({ digestId, navigate }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -27,7 +24,7 @@ export default function DigestDetailPage({ digestId, navigate, manager = false }
       try {
         setLoading(true);
         setError(null);
-        const res = await (manager ? managerApi.getDigest(digestId) : api.getDigest(digestId));
+        const res = await api.getDigest(digestId);
         if (isMounted) setData(res);
       } catch (err) {
         if (isMounted) setError(err.message || "Failed to load digest.");
@@ -37,7 +34,7 @@ export default function DigestDetailPage({ digestId, navigate, manager = false }
     };
     loadDigest();
     return () => { isMounted = false; };
-  }, [digestId, manager]);
+  }, [digestId]);
 
   if (loading) {
     return (
@@ -56,8 +53,8 @@ export default function DigestDetailPage({ digestId, navigate, manager = false }
           <AlertTriangle size={17} />
           <span>{error}</span>
         </div>
-        <button type="button" className="btn btn-outline" onClick={() => navigate(backTo)}>
-          <ArrowLeft size={14} /> {manager ? "Back to the manager portal" : "Back to digests"}
+        <button type="button" className="btn btn-outline" onClick={() => navigate("/digests")}>
+          <ArrowLeft size={14} /> Back to digests
         </button>
       </div>
     );
@@ -80,9 +77,9 @@ export default function DigestDetailPage({ digestId, navigate, manager = false }
           type="button"
           className="btn btn-ghost"
           style={{ padding: "5px 10px", fontSize: 13, color: "var(--text-muted)", marginBottom: 16 }}
-          onClick={() => navigate(backTo)}
+          onClick={() => navigate("/digests")}
         >
-          <ArrowLeft size={13} /> {manager ? "Manager portal" : "Digests"}
+          <ArrowLeft size={13} /> Digests
         </button>
 
         <h1>{team_name}</h1>
@@ -152,7 +149,7 @@ export default function DigestDetailPage({ digestId, navigate, manager = false }
                           type="button"
                           className="badge-cite"
                           title="See the exact words this came from"
-                          onClick={() => navigate(`${evidencePrefix}${c.source_id}`)}
+                          onClick={() => navigate(`/evidence/${c.source_id}`)}
                         >
                           <Quote size={10} /> source
                         </button>
@@ -203,8 +200,6 @@ export default function DigestDetailPage({ digestId, navigate, manager = false }
             Every line above is a verbatim quote, verified against its stored source.
           </span>
         </div>
-        {!manager && (
-        <>
         <a
           className="btn btn-outline"
           style={{ fontSize: 13, padding: "7px 14px", flexShrink: 0 }}
@@ -221,8 +216,6 @@ export default function DigestDetailPage({ digestId, navigate, manager = false }
         >
           <Download size={13} /> Spreadsheet (CSV)
         </a>
-        </>
-        )}
         <button
           type="button"
           className="btn btn-outline"

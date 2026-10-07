@@ -13,12 +13,11 @@
 - **Summarises faithfully.** Every digest line is a verbatim quote, verified against the stored source before it ships, and links to an evidence page that highlights the exact words. Blockers come first; a blocker filed in the wrong box is moved up and says why; "No blockers today" or "None" is never read as a blocker; a blocker reported again is shown as **Still blocked**, citing both days.
 - **Writes blockers back to GitHub Issues** as structured records: labels plus a `json` block, one issue per blocker, one comment per later day it is reported. Delivery never blocks a digest.
 - **Exports and imports spreadsheets:** each digest downloads as CSV; made-up or historical updates load from CSV.
-- **Has one manager portal,** behind a username and password: it adds members to a team (they appear on every member's Team page and sign in with the team code), reads the team's digests and evidence, builds digests, and shows a 7-, 14- or 30-day summary of open blockers, day-by-day counts and each person's digest lines, assembled from the verified digests rather than summarised again.
-- **Respects boundaries:** the bot reads only what is sent to it directly and requests no Microsoft Graph permissions; the manager portal sees nothing about a person that their teammates cannot, and each time it opens someone's words that person sees it on **My data**; every opening of someone's stored update (its evidence page) is audited, and that person can see who opened it on **My data**; after the team's retention period the stored submission and every line no digest quoted are removed (the quoted lines stay, as the digest's record).
+- **Respects boundaries:** the bot reads only what is sent to it directly and requests no Microsoft Graph permissions; there is no manager role; every opening of someone's stored update (its evidence page) is audited, and that person can see who opened it on **My data**; after the team's retention period the stored submission and every line no digest quoted are removed (the quoted lines stay, as the digest's record).
 
 Not built yet: consent for external processing (and validator rule V7), redaction, member-initiated deletion, contest/correct on digest lines, an LLM summarizer, syncing GitHub issue state back into the digest (a reconcile job), the written legitimate-interest assessment (`docs/LIA.md`), and a production deployment (HTTPS, a managed host; Docker Compose runs it on one server over HTTP). CLAUDE.md's "not yet written" list is the same.
 
-Two consequences to know. Sign-in tells teams apart, not people: a team code is shared, so anyone holding it can sign in under any name on that team. That is the price of having no accounts, passwords or email, and it suits a small team that knows each other; the audit trail and "who opened my updates" are only as trustworthy as that assumption. `python -m scripts.team_codes --team core --rotate` replaces a code that has leaked. And with GitHub write-back on, each blocker's verbatim text and its author's name go to the configured repository, with no per-member opt-in yet. Point a team at a private repository that the team can already see. And the manager portal is one shared username and password from the environment (`STANDUP_MANAGER_USERNAME`, `STANDUP_MANAGER_PASSWORD`), with no accounts behind it: whoever holds the pair is "the manager" in the audit log.
+Two consequences to know. Sign-in tells teams apart, not people: a team code is shared, so anyone holding it can sign in under any name on that team. That is the price of having no accounts, passwords or email, and it suits a small team that knows each other; the audit trail and "who opened my updates" are only as trustworthy as that assumption. `python -m scripts.team_codes --team core --rotate` replaces a code that has leaked. And with GitHub write-back on, each blocker's verbatim text and its author's name go to the configured repository, with no per-member opt-in yet. Point a team at a private repository that the team can already see.
 
 ---
 
@@ -79,14 +78,14 @@ Under GDPR, **consent is not a valid lawful basis in an employment context** —
 - No productivity or velocity scoring
 - No per-person metrics, leaderboards, streaks, or lateness stats
 - No keystroke, presence, or activity monitoring
-- No manager-only *data*. The one manager login sees the same digests and evidence as the team, adds members and reads period summaries; it gets no fill rates, lateness, streaks or "who didn't submit", one team at a time, and every read of someone's words is audited and shown to that person
+- No manager-only dashboards — **there is no manager role at all**
 - No sentiment or "morale" inference on individuals
 - No cross-team aggregation of individual data
 - No silent collection — every capture is a member's own submission (the one exception is a CSV import of made-up or historical data, audited as an import, not as the member)
 - No retention past the stated window, except the lines a digest quoted, which are the team's record
 - No third-party model sees anyone's text without that person's separate opt-in
 
-Backed by code: the Teams app manifest (`backend/teams/manifest/manifest.json`) requests **zero Microsoft Graph or resource-specific permissions**, which an admin can confirm by reading it and a test asserts. The bot ingests only standup-card submissions in a 1:1 chat. Typed commands there (`standup`, `link`) are answered, and a channel message that @mentions it gets a pointer to the 1:1 chat. Any other message is refused before ingestion and counted as a content-free `scope_violation` row (reason and conversation type only: no text, no sender), with the totals at `GET /scope`. Who a Teams user is comes from a short-lived link code they get from `/me/teams` while signed in, never from a Graph lookup. Also enforced: every page except `/`, `/login` and `/healthz` requires sign-in with the team's shared code and the member's name (no passwords, no accounts, no roles for members: the code is on every member's Team page; the manager portal is the one password-protected login, with no data members lack); a member sees only their own team's digests and evidence, and another team's resources answer 404 so their existence is not disclosed; who submitted an update comes from the session, never the form, so nobody can file as someone else; and every evidence view is audited under the viewing member's id, or as `<username> (manager)` from the portal.
+Backed by code: the Teams app manifest (`backend/teams/manifest/manifest.json`) requests **zero Microsoft Graph or resource-specific permissions**, which an admin can confirm by reading it and a test asserts. The bot ingests only standup-card submissions in a 1:1 chat. Typed commands there (`standup`, `link`) are answered, and a channel message that @mentions it gets a pointer to the 1:1 chat. Any other message is refused before ingestion and counted as a content-free `scope_violation` row (reason and conversation type only: no text, no sender), with the totals at `GET /scope`. Who a Teams user is comes from a short-lived link code they get from `/me/teams` while signed in, never from a Graph lookup. Also enforced: every page except `/`, `/login` and `/healthz` requires sign-in with the team's shared code and the member's name (no passwords, no accounts, no roles: the code is on every member's Team page); a member sees only their own team's digests and evidence, and another team's resources answer 404 so their existence is not disclosed; who submitted an update comes from the session, never the form, so nobody can file as someone else; and every evidence view is audited under the viewing member's id.
 
 ### The faithfulness validator
 
@@ -129,7 +128,7 @@ docker compose up --build
 docker compose logs api | grep -A4 "Team codes"   # sign-in codes
 ```
 
-React app on `http://localhost:3000` (the server pages are there too, e.g. `http://localhost:3000/login`, and on `http://localhost:8000/login`), fake GitHub on `http://localhost:8091`, Postgres behind them, and two days of made-up updates seeded. The manager portal is the React app's **Manager** link (`/#/manager`); the demo sign-in from `.env.example` is username `manager`, password `standup-manager-2026`. Change ports with `WEB_PORT`, `APP_PORT` and `GITHUB_PORT`, e.g. `APP_PORT=9000 WEB_PORT=8080 docker compose up --build`.
+React app on `http://localhost:3000` (the server pages are there too, e.g. `http://localhost:3000/login`, and on `http://localhost:8000/login`), fake GitHub on `http://localhost:8091`, Postgres behind them, and two days of made-up updates seeded. Change ports with `WEB_PORT`, `APP_PORT` and `GITHUB_PORT`, e.g. `APP_PORT=9000 WEB_PORT=8080 docker compose up --build`.
 
 ### Local (Python 3.13 and Node 20)
 
@@ -183,7 +182,7 @@ Then in Cloudflare (Zero Trust > Networks > Tunnels > your tunnel > Public hostn
 
 ```bash
 cd backend
-pytest                       # the full suite (390 tests)
+pytest                       # the full suite (370 tests)
 scripts/demo_check.sh        # the demo, end to end, against a real server
 ruff check . && mypy src && PYTHONPATH=src lint-imports
 ```

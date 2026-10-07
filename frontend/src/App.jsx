@@ -9,8 +9,6 @@ import TeamsLinkPage from "./pages/TeamsLinkPage";
 import LoginPage from "./pages/LoginPage";
 import TeamPage from "./pages/TeamPage";
 import MyDataPage from "./pages/MyDataPage";
-import ManagerLoginPage from "./pages/ManagerLoginPage";
-import ManagerDashboardPage from "./pages/ManagerDashboardPage";
 
 function getRoute() {
   // Support both hash routing and HTML5 path routing
@@ -54,22 +52,6 @@ export default function App() {
     // Route: /login (an old /login/<token> link lands here too)
     if (pathname === "/login" || pathname.startsWith("/login/")) {
       return <LoginPage navigate={navigate} />;
-    }
-
-    // The manager portal: its own sign-in, and its own digest and evidence views.
-    if (pathname === "/manager/login") {
-      return <ManagerLoginPage navigate={navigate} />;
-    }
-    if (pathname === "/manager") {
-      return <ManagerDashboardPage navigate={navigate} />;
-    }
-    if (pathname.startsWith("/manager/digest/")) {
-      const digestId = pathname.replace("/manager/digest/", "");
-      return <DigestDetailPage digestId={digestId} navigate={navigate} manager />;
-    }
-    if (pathname.startsWith("/manager/evidence/")) {
-      const itemId = pathname.replace("/manager/evidence/", "");
-      return <EvidencePage itemId={itemId} navigate={navigate} manager />;
     }
 
     // Route: /me/team

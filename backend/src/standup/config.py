@@ -35,9 +35,6 @@ ENV_FALLBACK_SWITCH = "STANDUP_ENV_EXAMPLE_FALLBACK"
 # The signing key published in .env.example. Anyone can read it, so anyone
 # could forge a session with it: refused outside local and test.
 DEMO_SECRET_KEY = "demo-only-signing-key-published-in-env-example-never-deploy"
-# The manager portal's password published in .env.example. Same rule: it is
-# public, so it is refused outside local and test.
-DEMO_MANAGER_PASSWORD = "standup-manager-2026"
 
 
 def parse_env_file(text: str) -> dict[str, str]:
@@ -131,11 +128,6 @@ class Settings(DatabaseSettings):
     # being silently dropped. CI runs strict; production drops and reports.
     validator_strict: bool = False
 
-    # The manager portal: one username and password pair (see api/manager.py
-    # and invariant 7). Both set switches it on; either blank leaves every
-    # /api/manager route answering 404.
-    manager_username: str = ""
-    manager_password: SecretStr | None = None
 
     # Optional integrations. Each one's credentials become required only when
     # it is switched on, and the error names every missing key at once.
@@ -175,15 +167,6 @@ class Settings(DatabaseSettings):
                 "STANDUP_SECRET_KEY is the demo key published in .env.example; "
                 "generate a real one outside local and test"
             )
-        if (
-            self.manager_password is not None
-            and self.manager_password.get_secret_value() == DEMO_MANAGER_PASSWORD
-            and self.env not in LOCAL_ENVS
-        ):
-            raise ValueError(
-                "STANDUP_MANAGER_PASSWORD is the demo password published in .env.example; "
-                "choose a real one outside local and test"
-            )
         if teams_anonymous_allowed() and self.env not in LOCAL_ENVS:
             raise ValueError(
                 f"{TEAMS_ANONYMOUS_ENV} is only allowed when STANDUP_ENV is local or test; "
@@ -200,13 +183,6 @@ class Settings(DatabaseSettings):
         if missing:
             raise ValueError("missing required settings: " + ", ".join(missing))
         return self
-
-    @property
-    def manager_enabled(self) -> bool:
-        """The manager portal is on only with both a username and a password."""
-        return bool(self.manager_username.strip()) and bool(
-            self.manager_password and self.manager_password.get_secret_value()
-        )
 
 
 @functools.lru_cache(maxsize=1)

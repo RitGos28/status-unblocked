@@ -83,25 +83,3 @@ export const api = {
   // Teams
   getTeamsLink: () => request("/api/me/teams"),
 };
-
-// The manager portal: its own username/password sign-in, under /api/manager.
-export const managerApi = {
-  me: () => request("/api/manager/me"),
-  login: (username, password) =>
-    request("/api/manager/login", {
-      method: "POST",
-      body: JSON.stringify({ username, password }),
-    }),
-  logout: () => request("/api/manager/logout", { method: "POST" }),
-  listTeams: () => request("/api/manager/teams"),
-  getTeam: (teamId) => request(`/api/manager/teams/${teamId}`),
-  addMember: (teamId, displayName, tz) =>
-    request(`/api/manager/teams/${teamId}/members`, {
-      method: "POST",
-      body: JSON.stringify({ display_name: displayName, tz }),
-    }),
-  getSummary: (teamId, days) => request(`/api/manager/teams/${teamId}/summary?days=${days}`),
-  buildDigest: (cycleId) => request(`/api/manager/digests/build/${cycleId}`, { method: "POST" }),
-  getDigest: (digestId) => request(`/api/manager/digest/${digestId}`),
-  getEvidence: (itemId) => request(`/api/manager/evidence/${itemId}`),
-};
