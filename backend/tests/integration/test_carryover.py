@@ -24,11 +24,11 @@ def test_the_second_day_shows_the_blocker_as_still_blocked(
     second = build(client, session)
 
     by_member = {c.member_name: c for c in second.claims}
-    carried = by_member["Aarav Sharma"]
+    carried = by_member["Ritwik Gossain"]
     assert carried.kind == "carryover"
     assert carried.text == BLOCKER
     assert len(carried.citations_json) == 2
-    assert by_member["Rohan Verma"].kind == "blocker"
+    assert by_member["Madhav Kumar"].kind == "blocker"
 
     # Both citations resolve to evidence pages, and the page explains why.
     login_as(client, ada.id)

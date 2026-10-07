@@ -134,7 +134,7 @@ def test_api_my_data_shows_who_opened_my_update(client, session, team_with_membe
     data = client.get("/api/me/data").json()
     assert data["updates"][0]["raw_text"]
     views = [e for e in data["events"] if e["action"] == "evidence.viewed"]
-    assert [e["by"] for e in views] == ["Rohan Verma"]
+    assert [e["by"] for e in views] == ["Madhav Kumar"]
 
 
 def test_api_my_export_is_a_json_file_and_is_audited(client, team_with_members):
@@ -142,7 +142,7 @@ def test_api_my_export_is_a_json_file_and_is_audited(client, team_with_members):
     login_as(client, ada.id)
     response = client.get("/api/me/export")
     assert response.status_code == 200
-    assert response.json()["member"]["display_name"] == "Aarav Sharma"
+    assert response.json()["member"]["display_name"] == "Ritwik Gossain"
     assert "attachment" in response.headers["content-disposition"]
     events = client.get("/api/me/data").json()["events"]
     assert any(e["action"] == "data.exported" for e in events)

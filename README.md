@@ -51,7 +51,7 @@ Sign in with your team's code and your name:
 
 | Team | Team Code | Demo Members |
 | :--- | :--- | :--- |
-| **Core Platform** | `CORE-AR9WS` | `Divyam Manas`, `Aarav Sharma`, `Ananya Patel`, `Rohan Verma`, `Pooja Hegde` |
+| **Core Platform** | `CORE-AR9WS` | `Divyam Manas`, `Ritwik Gossain`, `Shresth Tiwari`, `Madhav Kumar`, `Pooja Hegde` |
 | **Mobile Team** | `MOBI-EFSHY` | `Vikram Malhotra` |
 
 ### Manager Portal Login

@@ -7,8 +7,8 @@ Run: python -m scripts.seed_demo [--with-updates] [--days N]
 - --with-updates: today's made-up updates (Core Platform, and one for Mobile).
 - --days N: N days of made-up updates, ending today (implies --with-updates).
   Earlier days are filed at 09:00 UTC, before the 11:00 cutoff, through the
-  same ingest() path the web form uses. Ada's blocker repeats every day, and
-  Chen files a blocker under Progress, so recurrence and promotion can be shown.
+  same ingest() path the web form uses. Ritwik's blocker repeats every day, and
+  Shresth files a blocker under Progress, so recurrence and promotion can be shown.
 """
 
 import argparse
@@ -27,13 +27,13 @@ DEMO_TEAM_SLUG = "core"
 OTHER_TEAM_SLUG = "mobile"
 
 DEMO_MEMBERS = [
-    ("Aarav Sharma", "Europe/London"),
-    ("Rohan Verma", "America/Sao_Paulo"),
-    ("Ananya Patel", "Asia/Singapore"),
+    ("Ritwik Gossain", "Europe/London"),
+    ("Madhav Kumar", "America/Sao_Paulo"),
+    ("Shresth Tiwari", "Asia/Singapore"),
 ]
 OTHER_MEMBERS = [("Vikram Malhotra", "UTC")]
 # Mobile files one update today, so its day exists and visibly does not appear
-# for Core Platform's members (and Core Platform's does not appear for Dana).
+# for Core Platform's members (and Core Platform's does not appear for Vikram).
 OTHER_UPDATES = {
     "Vikram Malhotra": {
         "progress": "Released the offline mode beta to testers.",
@@ -44,39 +44,39 @@ OTHER_UPDATES = {
 
 
 DEMO_UPDATES = {
-    "Aarav Sharma": {
+    "Ritwik Gossain": {
         "progress": "Shipped the retry logic and reviewed the deployment plan.",
         "blockers": "Waiting on staging credentials from infra.",
         "plan": "Finish the migration and verify the rollout.",
     },
-    "Rohan Verma": {
+    "Madhav Kumar": {
         "progress": "Fixed the flaky integration test.",
         "blockers": "No blockers today.",
         "plan": "Review the database changes.",
     },
-    "Ananya Patel": {
+    "Shresth Tiwari": {
         # The second sentence is a blocker filed under Progress: the digest
         # moves it to Blockers and says why.
         "progress": "Drafted the schema update. Stuck on the deploy pipeline.",
         "blockers": "",
-        "plan": "Pair with Aarav on the migration.",
+        "plan": "Pair with Ritwik on the migration.",
     },
 }
 
-# Earlier days. Ada's blocker is word-for-word the same as today's, so it is
+# Earlier days. Ritwik's blocker is word-for-word the same as today's, so it is
 # recognised as the same blocker across days.
 EARLIER_UPDATES = {
-    "Aarav Sharma": {
+    "Ritwik Gossain": {
         "progress": "Wrote the retry logic tests.",
         "blockers": "Waiting on staging credentials from infra.",
         "plan": "Ship the retry logic.",
     },
-    "Rohan Verma": {
+    "Madhav Kumar": {
         "progress": "Reproduced the flaky integration test.",
         "blockers": "Not blocked.",
         "plan": "Fix the flaky test.",
     },
-    "Ananya Patel": {
+    "Shresth Tiwari": {
         "progress": "Read the schema migration notes.",
         "blockers": "",
         "plan": "Draft the schema update.",

@@ -36,9 +36,9 @@ def test_a_digest_downloads_as_csv_with_one_row_per_line(client, session, team_w
     table = rows(response)
     assert table[0] == HEADER
     body = {(r[0], r[1], r[2]) for r in table[1:]}
-    assert ("Blockers", "Rohan Verma", "Reviewed #214.") not in body
-    assert ("Blockers", "Aarav Sharma", "Waiting on infra.") in body
-    assert ("Progress", "Rohan Verma", "Reviewed #214.") in body
+    assert ("Blockers", "Madhav Kumar", "Reviewed #214.") not in body
+    assert ("Blockers", "Ritwik Gossain", "Waiting on infra.") in body
+    assert ("Progress", "Madhav Kumar", "Reviewed #214.") in body
     assert all(r[3].startswith("http://testserver/evidence/") for r in table[1:])
     assert client.head(f"/digest/{digest.id}.csv").status_code == 200
 

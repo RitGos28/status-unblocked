@@ -12,9 +12,9 @@ from standup.domain.enums import AuditAction, SourceKind
 from standup.ingestion.csv_import import import_updates
 
 GOOD = """date,team,member,progress,blockers,plan
-2026-09-14,core,Aarav Sharma,Wrote the retry tests.,Waiting on staging creds.,Ship the retry logic.
-2026-09-15,core,Aarav Sharma,Shipped retry logic.,Waiting on staging creds.,Finish migration.
-2026-09-15,core,Rohan Verma,Fixed the flaky test.,,Review the database changes.
+2026-09-14,core,Ritwik Gossain,Wrote the retry tests.,Waiting on staging creds.,Ship retry logic.
+2026-09-15,core,Ritwik Gossain,Shipped retry logic.,Waiting on staging creds.,Finish migration.
+2026-09-15,core,Madhav Kumar,Fixed the flaky test.,,Review the database changes.
 """
 
 
@@ -38,10 +38,10 @@ def test_a_file_with_any_bad_row_imports_nothing_and_names_each_problem(
     session, team_with_members
 ):
     bad = GOOD + (
-        "not-a-date,core,Aarav Sharma,x,,\n"
-        "2026-09-15,nope,Aarav Sharma,x,,\n"
+        "not-a-date,core,Ritwik Gossain,x,,\n"
+        "2026-09-15,nope,Ritwik Gossain,x,,\n"
         "2026-09-15,core,Nobody,x,,\n"
-        "2026-09-15,core,Ananya Patel,,,\n"
+        "2026-09-15,core,Shresth Tiwari,,,\n"
     )
     report = import_updates(session, bad, source_name="bad.csv")
     session.commit()
@@ -57,7 +57,9 @@ def test_a_file_with_any_bad_row_imports_nothing_and_names_each_problem(
 
 
 def test_missing_columns_are_reported(session, team_with_members):
-    report = import_updates(session, "date,member\n2026-09-15,Aarav Sharma\n", source_name="x.csv")
+    report = import_updates(
+        session, "date,member\n2026-09-15,Ritwik Gossain\n", source_name="x.csv"
+    )
     assert report.imported == 0
     assert report.errors == ["missing column(s): team, progress, blockers, plan"]
 
@@ -82,7 +84,7 @@ def test_excels_utf8_byte_order_mark_is_ignored(session, team_with_members):
 def test_a_row_dated_in_the_future_is_refused(session, team_with_members):
     from datetime import UTC, datetime
 
-    future = GOOD + "2031-01-01,core,Ananya Patel,Time travel.,,\n"
+    future = GOOD + "2031-01-01,core,Shresth Tiwari,Time travel.,,\n"
     report = import_updates(
         session, future, source_name="x.csv", now=datetime(2026, 10, 5, 12, tzinfo=UTC)
     )
@@ -102,8 +104,8 @@ def test_an_import_never_replaces_a_later_update_for_that_day(
     submit(client, ada.id, progress="Typed into the web form at 10:00.")
     report = import_updates(session, GOOD, source_name="sample.csv")
     session.commit()
-    assert report.imported == 2  # Ada's 09-14 row and Bruno's 09-15 row
-    assert report.kept_later == ["line 3: Aarav Sharma already has a later update for 2026-09-15"]
+    assert report.imported == 2  # Ritwik's 09-14 row and Madhav's 09-15 row
+    assert report.kept_later == ["line 3: Ritwik Gossain already has a later update for 2026-09-15"]
     live = session.execute(
         select(Update.raw_text).where(Update.member_id == ada.id).where(Update.is_live())
     ).scalars().all()
@@ -131,7 +133,7 @@ def test_the_script_reports_a_bad_file_in_one_line(tmp_path, monkeypatch, capsys
     import scripts.import_updates_csv as script
 
     latin = tmp_path / "latin.csv"
-    latin.write_bytes(GOOD.replace("Aarav", "Aaráv").encode("latin-1"))
+    latin.write_bytes(GOOD.replace("Ritwik", "Aaráv").encode("latin-1"))
     for path, expected in (
         (latin, "is not UTF-8"),
         (tmp_path / "missing.csv", "no such file"),

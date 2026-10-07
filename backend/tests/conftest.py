@@ -88,9 +88,9 @@ def team_with_members(session) -> tuple[Team, list[Member]]:
     session.flush()
 
     members = [
-        Member(team_id=team.id, display_name="Aarav Sharma", tz="Europe/London"),
-        Member(team_id=team.id, display_name="Rohan Verma", tz="America/Sao_Paulo"),
-        Member(team_id=team.id, display_name="Ananya Patel", tz="Asia/Singapore"),
+        Member(team_id=team.id, display_name="Ritwik Gossain", tz="Europe/London"),
+        Member(team_id=team.id, display_name="Madhav Kumar", tz="America/Sao_Paulo"),
+        Member(team_id=team.id, display_name="Shresth Tiwari", tz="Asia/Singapore"),
     ]
     session.add_all(members)
     session.commit()

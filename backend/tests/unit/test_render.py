@@ -19,7 +19,7 @@ def claim(text: str = "Shipped it.") -> Claim:
     return Claim(
         kind=ClaimKind.PROGRESS,
         member_id="m1",
-        member_name="Aarav Sharma",
+        member_name="Ritwik Gossain",
         text=text,
         citations=(Citation("s1", text, 0, len(text)),),
     )
@@ -63,7 +63,7 @@ def _promoted(text: str = "Stuck on the deploy pipeline.") -> Claim:
     return Claim(
         kind=ClaimKind.BLOCKER,
         member_id="m1",
-        member_name="Ananya Patel",
+        member_name="Shresth Tiwari",
         text=text,
         citations=(Citation("s1", text, 0, len(text)),),
         matched_rule="promoted:marker:stuck",

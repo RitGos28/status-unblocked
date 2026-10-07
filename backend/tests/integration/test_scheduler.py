@@ -120,7 +120,7 @@ def test_members_with_a_teams_conversation_get_a_link_not_content(
     submit(client, chen.id, blockers="Waiting on staging credentials.")
     report = tick(session, AFTER_CUTOFF, notifier)
 
-    # Ada's notice failed; Bruno's still went out. Chen has no Teams conversation.
+    # Ritwik's notice failed; Madhav's still went out. Shresth has no Teams conversation.
     assert (report.notified, report.notify_failures) == (1, 1)
     ((user, text),) = notifier.sent
     assert user == "bruno"
