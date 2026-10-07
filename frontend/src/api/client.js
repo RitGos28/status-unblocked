@@ -54,6 +54,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ team_code: teamCode, name }),
     }),
+  joinTeam: (teamCode, name, tz) =>
+    request("/api/auth/join", {
+      method: "POST",
+      body: JSON.stringify({ team_code: teamCode, name, tz: tz || "UTC" }),
+    }),
   logout: () => request("/api/auth/logout", { method: "POST" }),
 
   // Submissions
@@ -76,6 +81,35 @@ export const api = {
 
   // Team
   getTeam: () => request("/api/me/team"),
+
+  // Manager Operations
+  getManagerTasks: () => request("/api/manager/tasks"),
+  createManagerTask: (data) =>
+    request("/api/manager/tasks", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  updateManagerTask: (taskId, data) =>
+    request(`/api/manager/tasks/${taskId}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+  deleteManagerTask: (taskId) =>
+    request(`/api/manager/tasks/${taskId}`, {
+      method: "DELETE",
+    }),
+  addManagerMember: (data) =>
+    request("/api/manager/members", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  getManagerSummary: (scope = "daily") =>
+    request(`/api/manager/summary?scope=${encodeURIComponent(scope)}`),
+  updateTeamCode: (customCode) =>
+    request("/api/manager/team-code", {
+      method: "POST",
+      body: JSON.stringify({ custom_code: customCode }),
+    }),
 
   // My data (the JSON export is a plain link: exportUrl)
   getMyData: () => request("/api/me/data"),

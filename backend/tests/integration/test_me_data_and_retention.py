@@ -36,7 +36,7 @@ def test_my_data_shows_my_updates_and_who_opened_them(client, session, team_with
     assert "Waiting on staging credentials." in page
     assert "Reviewed #214." not in page  # only my own updates
     viewers = page.split("Who has opened your updates")[1]
-    assert "Bruno Silva" in viewers
+    assert "Rohan Verma" in viewers
 
 
 def test_my_export_is_json_and_is_itself_audited(client, session, team_with_members):
@@ -48,7 +48,7 @@ def test_my_export_is_json_and_is_itself_audited(client, session, team_with_memb
     assert response.headers["content-type"].startswith("application/json")
     assert "attachment" in response.headers["content-disposition"]
     data = json.loads(response.text)
-    assert data["member"]["display_name"] == "Ada Okafor"
+    assert data["member"]["display_name"] == "Aarav Sharma"
     assert "Waiting on staging credentials." in data["updates"][0]["raw_text"]
     assert any(e["action"] == "update.ingested" for e in data["audit"])
     session.expire_all()

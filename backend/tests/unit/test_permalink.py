@@ -4,7 +4,7 @@ from standup.ingestion.permalink import teams_permalink
 
 
 def test_one_to_one_chat_has_no_permalink_and_says_why():
-    url, reason = teams_permalink("a:1on1-ada", "1002")
+    url, reason = teams_permalink("a:1on1-aarav", "1002")
     assert url is None
     assert "a:-form" in reason
 
@@ -31,7 +31,7 @@ def test_unknown_id_form_is_explained():
 def test_missing_permalinks_are_described_in_plain_words():
     from standup.ingestion.permalink import describe_missing_permalink
 
-    _, teams_reason = teams_permalink("a:1on1-ada", "1002")
+    _, teams_reason = teams_permalink("a:1on1-aarav", "1002")
     assert "1:1 Teams chat" in describe_missing_permalink(teams_reason)
     assert "web form" in describe_missing_permalink("webform: no platform message to link to")
     assert describe_missing_permalink("teams: activity carried no message id") == (
