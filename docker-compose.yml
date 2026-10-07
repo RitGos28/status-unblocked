@@ -1,8 +1,33 @@
-# Local stack. Postgres is included because that is what deployment uses;
-# the app still runs on SQLite with no compose at all (see README).
+# The whole demo stack: `docker compose up --build` after a clone, nothing to
+# configure. Postgres, the API (seeded with two days of made-up updates), the
+# React app, and a fake GitHub that blockers are written to.
+#
+#   Whole app       http://localhost:3000         WEB_PORT   React at /, server pages
+#                                                            (/login, /digests, ...) and
+#                                                            /api through the same port
+#   Backend only    http://localhost:8000/login   APP_PORT
+#   Fake GitHub     http://localhost:8091         GITHUB_PORT
+#
+# Change a port with its variable, e.g. WEB_PORT=8300 docker compose up -d
+#
+# Team codes are printed in the api service's log: docker compose logs api
+# The signing key defaults to the public demo key from backend/.env.example,
+# which the app accepts only because STANDUP_ENV is local.
+#
+# On a server, set these in a .env file next to this one:
+#   STANDUP_ENV=production            refuses the public demo key
+#   STANDUP_SECRET_KEY=<48 random>    python3 -c "import secrets; print(secrets.token_urlsafe(48))"
+#   PUBLIC_HOST=http://<server-ip>    links become PUBLIC_HOST:APP_PORT and PUBLIC_HOST:GITHUB_PORT
+# Behind a tunnel or HTTPS proxy, give the public addresses directly instead:
+#   STANDUP_BASE_URL=https://standup.example.com        (points at WEB_PORT)
+#   GITHUB_PUBLIC_URL=https://standup-github.example.com (points at GITHUB_PORT)
+#   STANDUP_COOKIE_SECURE=true
+#   BIND_ADDR=127.0.0.1               publish ports on this machine only
+# README's "Hosting on a server" has the full commands.
 services:
   db:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_USER: standup
       POSTGRES_PASSWORD: standup
@@ -15,32 +40,53 @@ services:
       timeout: 3s
       retries: 10
 
+  # A stand-in for the GitHub Issues API (backend/scripts/fake_github.py).
+  # In-memory: its issues are gone when it stops.
+  fake-github:
+    build:
+      context: ./backend
+    command: python -m scripts.fake_github --host 0.0.0.0 --port 8091 --public-url ${GITHUB_PUBLIC_URL:-${PUBLIC_HOST:-http://localhost}:${GITHUB_PORT:-8091}}
+    restart: unless-stopped
+    ports:
+      - "${BIND_ADDR:-0.0.0.0}:${GITHUB_PORT:-8091}:8091"
+
   api:
     build:
       context: ./backend
     depends_on:
       db:
         condition: service_healthy
+      fake-github:
+        condition: service_started
     environment:
-      STANDUP_ENV: docker
+      STANDUP_ENV: ${STANDUP_ENV:-local}
       STANDUP_DATABASE_URL: postgresql+psycopg://standup:standup@db:5432/standup
-      STANDUP_BASE_URL: http://localhost:8000
-      # Required; compose refuses to start without it. See backend/.env.example.
-      STANDUP_SECRET_KEY: ${STANDUP_SECRET_KEY:?set STANDUP_SECRET_KEY (see backend/.env.example)}
+      STANDUP_BASE_URL: ${STANDUP_BASE_URL:-${PUBLIC_HOST:-http://localhost}:${APP_PORT:-8000}}
+      STANDUP_SECRET_KEY: ${STANDUP_SECRET_KEY:-demo-only-signing-key-published-in-env-example-never-deploy}
       STANDUP_LOG_JSON: "true"
+      STANDUP_COOKIE_SECURE: ${STANDUP_COOKIE_SECURE:-false}
+      # Builds each team's digest at its cutoff and delivers blockers.
+      STANDUP_SCHEDULER: "true"
+      STANDUP_TRACKER: github
+      STANDUP_GITHUB_TOKEN: demo-token
+      STANDUP_GITHUB_API_URL: http://fake-github:8091
+    restart: unless-stopped
     ports:
-      - "8000:8000"
-    # Migrate, then seed a demo team so the app is usable on first boot.
+      - "${BIND_ADDR:-0.0.0.0}:${APP_PORT:-8000}:8000"
+    # Migrate, seed two days of made-up updates (idempotent across restarts),
+    # point Core Platform's blockers at the fake GitHub, then serve.
     command: >
       sh -c "alembic upgrade head &&
-             python -m scripts.seed_demo &&
+             python -m scripts.seed_demo --days 2 &&
+             python -m scripts.set_github_repo --team core --repo demo/core &&
              uvicorn standup.main:app --host 0.0.0.0 --port 8000"
 
   frontend:
     build:
       context: ./frontend
+    restart: unless-stopped
     ports:
-      - "3000:80"
+      - "${BIND_ADDR:-0.0.0.0}:${WEB_PORT:-3000}:80"
     depends_on:
       - api
 

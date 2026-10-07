@@ -15,7 +15,7 @@
 - **Exports and imports spreadsheets:** each digest downloads as CSV; made-up or historical updates load from CSV.
 - **Respects boundaries:** the bot reads only what is sent to it directly and requests no Microsoft Graph permissions; there is no manager role; every opening of someone's stored update (its evidence page) is audited, and that person can see who opened it on **My data**; after the team's retention period the stored submission and every line no digest quoted are removed (the quoted lines stay, as the digest's record).
 
-Not built yet: consent for external processing (and validator rule V7), redaction, member-initiated deletion, contest/correct on digest lines, an LLM summarizer, syncing GitHub issue state back into the digest (a reconcile job), the written legitimate-interest assessment (`docs/LIA.md`), and deployment. CLAUDE.md's "not yet written" list is the same.
+Not built yet: consent for external processing (and validator rule V7), redaction, member-initiated deletion, contest/correct on digest lines, an LLM summarizer, syncing GitHub issue state back into the digest (a reconcile job), the written legitimate-interest assessment (`docs/LIA.md`), and a production deployment (HTTPS, a managed host; Docker Compose runs it on one server over HTTP). CLAUDE.md's "not yet written" list is the same.
 
 Two consequences to know. Sign-in tells teams apart, not people: a team code is shared, so anyone holding it can sign in under any name on that team. That is the price of having no accounts, passwords or email, and it suits a small team that knows each other; the audit trail and "who opened my updates" are only as trustworthy as that assumption. `python -m scripts.team_codes --team core --rotate` replaces a code that has leaked. And with GitHub write-back on, each blocker's verbatim text and its author's name go to the configured repository, with no per-member opt-in yet. Point a team at a private repository that the team can already see.
 
@@ -119,47 +119,62 @@ A blocker's journey, in short: a line filed under Progress that says "stuck" is 
 
 ## Getting started
 
-### Quick start (monorepo runner)
+Nothing to configure for the demo: with no `backend/.env`, the demo values in [`backend/.env.example`](backend/.env.example) fill in every unset variable (a local fake GitHub, the Teams bot in anonymous mode, and a public demo signing key that the app refuses unless `STANDUP_ENV` is `local` or `test`). [`docs/DEMO.md`](docs/DEMO.md) walks through every demoable feature.
+
+### Docker (one command)
 
 ```bash
-./run.sh all          # launches backend (:8000) and React frontend (:5173)
+docker compose up --build
+docker compose logs api | grep -A4 "Team codes"   # sign-in codes
 ```
 
-Or run each service individually:
+React app on `http://localhost:3000` (the server pages are there too, e.g. `http://localhost:3000/login`, and on `http://localhost:8000/login`), fake GitHub on `http://localhost:8091`, Postgres behind them, and two days of made-up updates seeded. Change ports with `WEB_PORT`, `APP_PORT` and `GITHUB_PORT`, e.g. `APP_PORT=9000 WEB_PORT=8080 docker compose up --build`.
 
-### Backend (FastAPI)
+### Local (Python 3.13 and Node 20)
 
 ```bash
 cd backend
 python3.13 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
-cp .env.example .env
-# Set STANDUP_SECRET_KEY in .env (32+ chars)
-alembic upgrade head
-python -m scripts.seed_demo --days 2
-uvicorn standup.main:app --port 8000
+cd ../frontend && npm install && cd ..
 
-# or, all in one: ./run.sh
+./run.sh all          # backend :8000 (with fake GitHub :8091 and Teams :8092), React :5173
+./run.sh              # backend only
+PORT=9000 WEB_PORT=5174 ./run.sh all   # other ports (also GITHUB_PORT, TEAMS_PORT)
 ```
 
-### Frontend (React JSX)
+Then open `http://127.0.0.1:5173` (React) or `http://127.0.0.1:8000/login`, and sign in with a code the seed printed and one of that team's names.
+
+For anything real, `cp backend/.env.example backend/.env` and replace the demo values: a `.env` switches the fallback off.
+
+### Hosting on a server
+
+On a Linux server with Docker (Ubuntu shown). Replace `203.0.113.10` with the server's public IP or domain, and change the ports if you like.
 
 ```bash
-cd frontend
-npm install
-npm run dev
+curl -fsSL https://get.docker.com | sudo sh
+git clone https://github.com/RitGos28/status-unblocked.git
+cd status-unblocked
+printf 'STANDUP_ENV=production\nSTANDUP_SECRET_KEY=%s\nPUBLIC_HOST=http://203.0.113.10\nWEB_PORT=80\nAPP_PORT=8000\nGITHUB_PORT=8091\n' \
+  "$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')" > .env
+sudo docker compose up -d --build
+sudo docker compose logs api | grep -A4 "Team codes"
 ```
 
-Open `http://localhost:5173` in your browser.
+Open `http://203.0.113.10` (React app), `http://203.0.113.10:8000/login` (server pages) and `http://203.0.113.10:8091` (fake GitHub). Allow those ports in the server's firewall or cloud security group. Compose reads the `.env` next to `docker-compose.yml`; `STANDUP_ENV=production` makes the app refuse the public demo key. Update with `git pull && sudo docker compose up -d --build`; data lives in the `pgdata` volume. This serves plain HTTP: for HTTPS, put a reverse proxy such as Caddy in front and set `STANDUP_COOKIE_SECURE=true` on the `api` service.
 
-### Containerised (Docker Compose)
+
+### Behind a Cloudflare Tunnel (or any HTTPS proxy)
+
+Port `WEB_PORT` serves the whole app: the React app at `/`, and the server pages (`/login`, `/digests`, `/evidence/...`) and `/api` through to the backend. So the tunnel needs one hostname for the app, plus one for the fake GitHub if you want its issues reachable. Use this `.env` instead (replace `example.com` with your domain):
 
 ```bash
-export STANDUP_SECRET_KEY=...
-docker compose up --build
+printf 'STANDUP_ENV=production\nSTANDUP_SECRET_KEY=%s\nSTANDUP_BASE_URL=https://standup.example.com\nGITHUB_PUBLIC_URL=https://standup-github.example.com\nSTANDUP_COOKIE_SECURE=true\nBIND_ADDR=127.0.0.1\nWEB_PORT=8300\nAPP_PORT=8301\nGITHUB_PORT=8302\n' \
+  "$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')" > .env
+docker compose up -d --build
 ```
 
-Open `/login` and sign in with a team code from the seed output and one of that team's names. Then follow [`docs/DEMO.md`](docs/DEMO.md).
+Then in Cloudflare (Zero Trust > Networks > Tunnels > your tunnel > Public hostnames), add `standup.example.com` with service `http://localhost:8300`, and `standup-github.example.com` with service `http://localhost:8302`. `BIND_ADDR=127.0.0.1` keeps the ports off the public interface, so nothing needs opening in the firewall; drop it if `cloudflared` runs in a Docker container rather than on the host, and point the service at the host's address instead. `STANDUP_BASE_URL` and `GITHUB_PUBLIC_URL` are the addresses links in digests and issues use, and `STANDUP_COOKIE_SECURE=true` sends the sign-in cookie over HTTPS only.
 
 ---
 
@@ -167,7 +182,7 @@ Open `/login` and sign in with a team code from the seed output and one of that 
 
 ```bash
 cd backend
-pytest                       # the full suite (266 tests)
+pytest                       # the full suite (370 tests)
 scripts/demo_check.sh        # the demo, end to end, against a real server
 ruff check . && mypy src && PYTHONPATH=src lint-imports
 ```

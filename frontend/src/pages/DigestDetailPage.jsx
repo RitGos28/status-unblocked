@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { api } from "../api/client";
+import { api, downloads } from "../api/client";
 import {
   ExternalLink,
   Quote,
@@ -9,6 +9,7 @@ import {
   ShieldCheck,
   ChevronDown,
   ChevronUp,
+  Download,
 } from "lucide-react";
 
 export default function DigestDetailPage({ digestId, navigate }) {
@@ -199,6 +200,22 @@ export default function DigestDetailPage({ digestId, navigate }) {
             Every line above is a verbatim quote, verified against its stored source.
           </span>
         </div>
+        <a
+          className="btn btn-outline"
+          style={{ fontSize: 13, padding: "7px 14px", flexShrink: 0 }}
+          href={downloads.digestMarkdown(digest.id)}
+          download
+        >
+          <Download size={13} /> Markdown
+        </a>
+        <a
+          className="btn btn-outline"
+          style={{ fontSize: 13, padding: "7px 14px", flexShrink: 0 }}
+          href={downloads.digestCsv(digest.id)}
+          download
+        >
+          <Download size={13} /> Spreadsheet (CSV)
+        </a>
         <button
           type="button"
           className="btn btn-outline"

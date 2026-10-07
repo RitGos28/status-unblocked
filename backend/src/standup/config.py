@@ -6,6 +6,8 @@ the first attribute access somewhere deep in a request.
 
 import functools
 import os
+from collections.abc import MutableMapping
+from pathlib import Path
 from urllib.parse import urlsplit
 
 from pydantic import Field, SecretStr, field_validator, model_validator
@@ -23,6 +25,57 @@ TEAMS_REQUIRED_ENV = (
 # Only ever honoured in a local or test environment.
 TEAMS_ANONYMOUS_ENV = "CONNECTIONS__SERVICE_CONNECTION__SETTINGS__ANONYMOUS_ALLOWED"
 LOCAL_ENVS = frozenset({"local", "test"})
+
+# backend/.env.example holds working demo values. With no backend/.env, they
+# fill in whatever the environment leaves unset, so a fresh checkout runs the
+# demo with nothing to configure. Never outside a local environment.
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+ENV_EXAMPLE_PATH = BACKEND_DIR / ".env.example"
+ENV_FALLBACK_SWITCH = "STANDUP_ENV_EXAMPLE_FALLBACK"
+# The signing key published in .env.example. Anyone can read it, so anyone
+# could forge a session with it: refused outside local and test.
+DEMO_SECRET_KEY = "demo-only-signing-key-published-in-env-example-never-deploy"
+
+
+def parse_env_file(text: str) -> dict[str, str]:
+    """KEY=value lines; blank values, comments and malformed lines are skipped."""
+    values: dict[str, str] = {}
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key, value = key.strip(), value.strip().strip("'\"")
+        if key and value:
+            values[key] = value
+    return values
+
+
+def apply_env_example_fallback(
+    environ: MutableMapping[str, str] = os.environ,
+    example: Path = ENV_EXAMPLE_PATH,
+    dotenv_dirs: tuple[Path, ...] = (Path.cwd(), BACKEND_DIR),
+) -> list[str]:
+    """Fill unset variables from .env.example; return the keys it set.
+
+    Does nothing when a .env exists (that is the real configuration), when
+    STANDUP_ENV already names a non-local environment, or when switched off
+    with STANDUP_ENV_EXAMPLE_FALLBACK=false (the test suite does this).
+    A variable already set always wins.
+    """
+    if environ.get(ENV_FALLBACK_SWITCH, "true").strip().lower() in {"0", "false", "no"}:
+        return []
+    if environ.get("STANDUP_ENV", "local") not in LOCAL_ENVS:
+        return []
+    if any((d / ".env").is_file() for d in dotenv_dirs) or not example.is_file():
+        return []
+    values = parse_env_file(example.read_text(encoding="utf-8"))
+    if values.get("STANDUP_ENV", "local") not in LOCAL_ENVS:
+        return []
+    applied = [key for key in values if key not in environ]
+    for key in applied:
+        environ[key] = values[key]
+    return applied
 
 
 def teams_anonymous_allowed() -> bool:
@@ -109,6 +162,11 @@ class Settings(DatabaseSettings):
     @model_validator(mode="after")
     def _integration_credentials_present(self) -> "Settings":
         missing: list[str] = []
+        if self.secret_key.get_secret_value() == DEMO_SECRET_KEY and self.env not in LOCAL_ENVS:
+            raise ValueError(
+                "STANDUP_SECRET_KEY is the demo key published in .env.example; "
+                "generate a real one outside local and test"
+            )
         if teams_anonymous_allowed() and self.env not in LOCAL_ENVS:
             raise ValueError(
                 f"{TEAMS_ANONYMOUS_ENV} is only allowed when STANDUP_ENV is local or test; "
@@ -129,9 +187,11 @@ class Settings(DatabaseSettings):
 
 @functools.lru_cache(maxsize=1)
 def get_settings() -> Settings:
+    apply_env_example_fallback()
     return Settings()  # type: ignore[call-arg]  # secret_key comes from the environment
 
 
 @functools.lru_cache(maxsize=1)
 def get_database_settings() -> DatabaseSettings:
+    apply_env_example_fallback()
     return DatabaseSettings()

@@ -1,34 +1,69 @@
 # Demo
 
-Everything below runs locally with **no accounts**: no GitHub, no Teams tenant,
-no Docker. `scripts/demo_check.sh` runs this exact script against a real server
-and asserts every step; run it to prove the demo still works.
+Everything below runs locally with **no accounts**: no GitHub, no Teams tenant.
+A local fake GitHub and a fake Teams connector stand in, and the real app code
+talks to them. `scripts/demo_check.sh` runs this script against a real server
+and asserts every step (29 of them); run it to prove the demo still works.
 
 ```bash
-scripts/demo_check.sh          # about 10 seconds; prints one line per step
+cd backend && scripts/demo_check.sh   # about 15 seconds; prints one line per step
 ```
 
-## Setup (once per demo)
+## What you can demo
 
-From the repository root, with the virtual environment active (`source .venv/bin/activate`; see README's Getting started).
+| Feature | Where | Section |
+|---|---|---|
+| Sign-in with a team code and your name; each team sees only its own days | web pages, React app | [1](#1-sign-in-and-team-boundaries) |
+| Teams bot: link an account, get the update card, file through it, "digest ready" notice; channel chat ignored | fake Teams connector | [1b](#1b-the-teams-bot-no-tenant-needed) |
+| Submit and resubmit an update (earlier ones kept unedited) | web pages, React app | [2](#2-submit-and-resubmit) |
+| Load updates from a CSV spreadsheet | `scripts.import_updates_csv` | [2b](#2b-made-up-updates-from-a-spreadsheet) |
+| Daily digest built by the scheduler at each team's cutoff, or by hand | `scripts.tick`, Build button | [3](#3-the-daily-digest-built-by-the-scheduler) |
+| Digest: verbatim quotes with sources, Still blocked, misfiled blockers moved up, negation, section explanations | web pages, React app | [4](#4-what-the-digest-shows) |
+| Digest as Markdown and as a CSV spreadsheet | web pages, React app | [4](#4-what-the-digest-shows) |
+| Blockers written to GitHub as structured issues, one per blocker, plus "Still blocked" comments | fake GitHub | [4b](#4b-blockers-become-github-issues) |
+| Evidence page; tamper detection; the faithfulness validator catching 7 bad claims | web pages, scripts | [5](#5-evidence-and-proving-nothing-was-edited) |
+| My data: who opened my updates, JSON export | web pages, React app | [5b](#5b-my-data) |
+| Retention: old text removed, digests stay readable | `scripts.tick --at` | [5c](#5c-retention) |
+| The React app | browser | [7](#7-the-react-app) |
+| Health, version, scope counts, HTML error pages | HTTP | [6](#6-ops) |
+
+Built but needing your own accounts or tools: [Optional](#optional-needs-your-accounts-or-tools). Not built, so not demoable: [Not built yet](#not-built-yet).
+
+## Setup
+
+Three ways in, from quickest to most hands-on. All of them need nothing configured: with no `backend/.env`, the demo values in `backend/.env.example` fill in anything you have not set (only while `STANDUP_ENV` is `local`; its public signing key is refused anywhere else).
+
+**Docker** (needs Docker running): from the repository root,
 
 ```bash
-python -m scripts.fake_github --port 8091 &   # a local stand-in for the GitHub API
-export STANDUP_TRACKER=github STANDUP_GITHUB_TOKEN=demo STANDUP_GITHUB_API_URL=http://127.0.0.1:8091
+docker compose up --build
+docker compose logs api | grep -A4 "Team codes"   # the sign-in codes
+```
+
+The React app is at `http://localhost:3000`, the server pages at `http://localhost:3000/login` (or straight from the backend at `http://localhost:8000/login`), the fake GitHub at `http://localhost:8091`. Postgres, the in-app scheduler and two days of made-up updates are included. Ports move with `WEB_PORT`, `APP_PORT` and `GITHUB_PORT` (`APP_PORT=9000 docker compose up`). The Teams steps (1b) and the scripts need the local setup below.
+
+**One command, locally** (needs the virtual environment from README's Getting started):
+
+```bash
+./run.sh all        # backend on :8000 with both fakes, React dev server on :5173
+./run.sh            # backend only
+PORT=9000 GITHUB_PORT=9091 TEAMS_PORT=9092 WEB_PORT=5174 ./run.sh all   # other ports
+```
+
+It migrates, seeds two days of updates (printing each team's code), points Core Platform at `demo/core` on the fake GitHub (`:8091`), starts the fake Teams connector (`:8092`) and serves the app. Ctrl-C stops all of it. Run the scripts below from `backend/` with the virtual environment active, in a second terminal.
+
+**By hand**, to see each piece, from `backend/` with the virtual environment active (every variable already has its demo value from `.env.example`; set one only to change it):
+
+```bash
+python -m scripts.fake_github --port 8091 &            # a local stand-in for the GitHub API
 python -m scripts.fake_teams_connector --port 8092 &   # a local stand-in for Teams; records what the bot sends
-export STANDUP_TEAMS_ENABLED=true CONNECTIONS__SERVICE_CONNECTION__SETTINGS__ANONYMOUS_ALLOWED=True
-export STANDUP_DATABASE_URL=sqlite:///./demo.db
-export STANDUP_SECRET_KEY=$(python -c "import secrets; print(secrets.token_urlsafe(48))")
-export STANDUP_BASE_URL=http://127.0.0.1:8000
 alembic upgrade head
 python -m scripts.seed_demo --days 2      # two days of made-up updates; prints each team's sign-in code
 python -m scripts.set_github_repo --team core --repo demo/core
 uvicorn standup.main:app --port 8000
 ```
 
-`./run.sh` is the minimal web-only version: today's updates only, no fake GitHub or Teams, no repo set. It serves on `PORT` (default 8000); set `STANDUP_BASE_URL` to match if you change it, because the digest links in Teams notices and GitHub issues use that address.
-
-The seed prints `Now run: uvicorn standup.main:app --port <port>`: use that port, because the links the app hands out point at `STANDUP_BASE_URL`. All dates in the demo are **UTC dates**: "today" and "yesterday" mean the UTC calendar day, which can differ from your local date (for example, early morning in India is still the previous day in UTC).
+The app logs a `config.demo_secret_key` warning: expected, it is the public demo key. Links in digests, Teams notices and GitHub issues use `STANDUP_BASE_URL` (`http://127.0.0.1:8000` by default), so serve on that port or set it. All dates in the demo are **UTC dates**: "today" and "yesterday" mean the UTC calendar day, which can differ from your local date (for example, early morning in India is still the previous day in UTC).
 
 ## 1. Sign-in and team boundaries
 - Open `/digests` without signing in: **401**, "Sign in with your team code".
@@ -100,14 +135,14 @@ The scheduler pass in step 3 also delivered the blockers to the (fake) GitHub, t
 - `python -m scripts.verify_integrity` → "audit chain intact; every stored update matches its pinned hash". This holds under load too: the demo check opens the same evidence 20 times at once first, and every view is recorded on one unbroken chain.
 - Edit any stored update in a *copy* of the database and run it against the copy: it names the tampered update and exits 1. (`scripts/demo_check.sh` does exactly this.)
   ```bash
-  cp demo.db tampered.db
+  cp standup.db tampered.db
   sqlite3 tampered.db "UPDATE \"update\" SET raw_text = replace(raw_text, 'staging', 'prod')"
   STANDUP_DATABASE_URL=sqlite:///./tampered.db python -m scripts.verify_integrity   # names each edited update; exit 1
   ```
 - `python -m scripts.faithfulness_demo` → the validator at work on today's Core Platform updates. The rules summarizer's lines all pass; then seven claims an unfaithful summarizer could write, built from the same real updates, are each **withheld**, with the rule that caught it: an invented source (V2), a misquote (V3), "fully unblocked" citing the blocker (V9), the blocker hidden under Progress and progress filed as a blocker (V10), an added number (V4), the wrong person credited (V6). It reads only; nothing is built or stored.
 
 ## 5b. My data
-- As Ada, open **My data** in the header: her updates, everything recorded about her, and **Who has opened your updates**. Open one of Ada's evidence pages as Bruno first, and his name appears there. This is the audit log, readable by the person it is about.
+- As Ada, open **My data** in the header (on the server pages or in the React app): her updates, everything recorded about her, and **Who has opened your updates**. Open one of Ada's evidence pages as Bruno first, and his name appears there. This is the audit log, readable by the person it is about.
 - **Download it as JSON** (`/me/export`): the same data as a file. The export is itself recorded.
 
 ## 5c. Retention
@@ -126,8 +161,24 @@ The full stored submissions are removed, and so is every line no digest quoted (
 - `/healthz`, `/readyz`.
 - Any error opened in a browser is an HTML page; API clients get `application/problem+json`.
 
+## 7. The React app
+The same app, as a single-page front end over the `/api` routes. With `./run.sh all` it is at `http://127.0.0.1:5173`; with Docker at `http://localhost:3000`.
+- **Sign in** with a team code and a name, exactly as in step 1. **Team** shows the code.
+- **Submit** files an update through the same ingest path as the web form.
+- **Digests** lists the team's days, with **Build digest** / **Rebuild**; a day whose updates retention removed says so instead.
+- A digest shows the sections with their explanations, a source link per line, the GitHub issue number per blocker, and **Markdown** and **Spreadsheet (CSV)** downloads (the same files as the server pages).
+- **Evidence** highlights the quoted words.
+- **Teams** gives the `link <code>` for step 1b.
+- **My data** shows who opened your updates and everything recorded about you, with **Download it as JSON**.
+
+`demo_check.sh` checks the API behind these pages (step 25: My data, export, both downloads, team scoping, and the list linking the last build); it does not drive a browser.
+
 ## Optional: needs your accounts or tools
-- **GitHub Issues write-back against a real repo:** leave `STANDUP_GITHUB_API_URL` unset, set `STANDUP_GITHUB_TOKEN` to a fine-grained token with Issues read/write on one repo, and `python -m scripts.set_github_repo --team core --repo owner/name`, then build a digest.
-- **The rendered card in a real Teams client, without a tenant:** Microsoft 365 Agents Playground. Install it with `npm install -g @microsoft/m365agentsplayground` (checked on npm: version 0.2.28; the older `@microsoft/teams-app-test-tool` is deprecated in its favour), run the app with the two Teams variables above, then run `agentsplayground` and set its bot endpoint to `http://127.0.0.1:8000/api/messages` (see `agentsplayground --help` for the option). Type `standup` to get the card.
-- **A real Teams tenant:** register an Entra app and Azure Bot, set the three `CONNECTIONS__…` variables and leave `ANONYMOUS_ALLOWED` unset, then sideload `python -m scripts.make_teams_zip --bot-id <app id> --base-url <public URL>`.
-- **Postgres via Docker:** `export STANDUP_SECRET_KEY=...; docker compose up --build` (needs the Docker daemon running).
+The real GitHub repo and the real tenant need a real configuration, so put it in `backend/.env` (`cp .env.example .env`, then edit): a `.env` switches the demo fallback off.
+- **GitHub Issues write-back against a real repo:** set `STANDUP_GITHUB_API_URL=https://api.github.com` and `STANDUP_GITHUB_TOKEN` to a fine-grained token with Issues read/write on one repo, and `python -m scripts.set_github_repo --team core --repo owner/name`, then build a digest.
+- **The rendered card in a real Teams client, without a tenant:** Microsoft 365 Agents Playground. Install it with `npm install -g @microsoft/m365agentsplayground` (checked on npm: version 0.2.28; the older `@microsoft/teams-app-test-tool` is deprecated in its favour), run the app (the demo values already turn the bot on in anonymous mode), then run `agentsplayground` and set its bot endpoint to `http://127.0.0.1:8000/api/messages` (see `agentsplayground --help` for the option). Type `standup` to get the card.
+- **A real Teams tenant:** register an Entra app and Azure Bot, set the three `CONNECTIONS__…` variables and remove `ANONYMOUS_ALLOWED`, then sideload `python -m scripts.make_teams_zip --bot-id <app id> --base-url <public URL>`.
+- **Docker:** `docker compose up --build` (needs the Docker daemon running); see Setup. For a server, README's "Hosting on a server".
+
+## Not built yet
+These are not in the code, so there is nothing to demo: consent for external processing (validator rule V7), redaction, member-initiated deletion, contest/correct on digest lines, an LLM summarizer, syncing GitHub issue state back into the digest, the legitimate-interest assessment (`docs/LIA.md`), and a production deployment with HTTPS. The in-app scheduler (`STANDUP_SCHEDULER=true`) runs in the Docker setup, but `demo_check.sh` exercises the same pass through `scripts/tick`.

@@ -181,24 +181,30 @@ export default function DigestsPage({ navigate, searchParams }) {
                             <BookOpen size={12} /> Read
                           </button>
                         )}
-                        <button
-                          type="button"
-                          className="btn btn-ghost"
-                          style={{ padding: "5px 12px", fontSize: 13 }}
-                          disabled={isBuilding}
-                          onClick={() => handleBuild(r.cycle.id)}
-                        >
-                          {isBuilding ? (
-                            <>
-                              <span className="loading-spinner" style={{ width: 12, height: 12 }} />
-                              Building…
-                            </>
-                          ) : r.digest ? (
-                            "Rebuild"
-                          ) : (
-                            "Build digest"
-                          )}
-                        </button>
+                        {r.final ? (
+                          <span className="muted" style={{ fontSize: 12 }}>
+                            Updates removed by retention
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            className="btn btn-ghost"
+                            style={{ padding: "5px 12px", fontSize: 13 }}
+                            disabled={isBuilding}
+                            onClick={() => handleBuild(r.cycle.id)}
+                          >
+                            {isBuilding ? (
+                              <>
+                                <span className="loading-spinner" style={{ width: 12, height: 12 }} />
+                                Building…
+                              </>
+                            ) : r.digest ? (
+                              "Rebuild"
+                            ) : (
+                              "Build digest"
+                            )}
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
