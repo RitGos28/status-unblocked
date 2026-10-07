@@ -1,72 +1,59 @@
 import React, { useState, useEffect } from "react";
 import { api } from "../api/client";
 import { useAuth } from "../context/AuthContext";
+import { Briefcase, Calendar, Check, Copy, Plus, RefreshCw, Trash2, X } from "lucide-react";
 import {
-  Briefcase,
-  CheckCircle2,
-  Clock,
-  AlertCircle,
-  Plus,
-  Users,
-  UserPlus,
-  FileText,
-  KeyRound,
-  Copy,
-  Check,
-  Trash2,
-  Sparkles,
-  TrendingUp,
-  RefreshCw,
-  Calendar,
-  AlertTriangle,
-  Lock,
-  Unlock,
-  ShieldAlert,
-  ShieldCheck,
-} from "lucide-react";
+  Avatar,
+  EmptyState,
+  Loading,
+  Notice,
+  PriorityBadge,
+  Segmented,
+  SignInRequired,
+  Stat,
+  StatusSelect,
+  Tabs,
+  STATUS_LABELS,
+} from "../components/ui";
 
-export default function ManagerPage({ navigate }) {
+const STATUS_FILTERS = ["all", "pending", "in_progress", "completed", "blocked"];
+
+const TAB_IDS = ["tasks", "summary", "members", "teamcode"];
+
+export default function ManagerPage({ navigate, searchParams }) {
   const { user } = useAuth();
   const [tasks, setTasks] = useState([]);
   const [teamInfo, setTeamInfo] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("tasks"); // "tasks" | "members" | "summary" | "teamcode"
+  // ?tab=summary opens that tab directly, so a tab can be linked to.
+  const requested = searchParams ? searchParams.get("tab") : null;
+  const [activeTab, setActiveTab] = useState(TAB_IDS.includes(requested) ? requested : "tasks");
   const [statusFilter, setStatusFilter] = useState("all");
 
-  // Manager Auth & Access Protection state
-  const [isManager, setIsManager] = useState(null); // null = checking, false = locked, true = unlocked
+  // null = checking, false = locked, true = unlocked
+  const [isManager, setIsManager] = useState(null);
   const [authUsername, setAuthUsername] = useState("");
   const [authPassword, setAuthPassword] = useState("");
   const [authenticating, setAuthenticating] = useState(false);
   const [authError, setAuthError] = useState(null);
 
-  // Summary state
-  const [summaryScope, setSummaryScope] = useState("daily"); // "daily" | "project"
+  const [summaryScope, setSummaryScope] = useState("daily");
   const [summaryData, setSummaryData] = useState(null);
   const [loadingSummary, setLoadingSummary] = useState(false);
   const [summaryCopied, setSummaryCopied] = useState(false);
 
-  // New Task form state
   const [showTaskModal, setShowTaskModal] = useState(false);
-  const [taskTitle, setTaskTitle] = useState("");
-  const [taskDescription, setTaskDescription] = useState("");
-  const [taskAssignee, setTaskAssignee] = useState("");
-  const [taskPriority, setTaskPriority] = useState("medium");
-  const [taskDueDate, setTaskDueDate] = useState("");
   const [savingTask, setSavingTask] = useState(false);
 
-  // Add Member form state
   const [newMemberName, setNewMemberName] = useState("");
   const [newMemberTz, setNewMemberTz] = useState("Asia/Kolkata");
   const [savingMember, setSavingMember] = useState(false);
 
-  // Team Code state
   const [customCodeInput, setCustomCodeInput] = useState("");
   const [savingCode, setSavingCode] = useState(false);
   const [codeCopied, setCodeCopied] = useState(false);
 
-  // General messages
-  const [feedback, setFeedback] = useState(null); // { type: 'success' | 'error', message: '' }
+  const [feedback, setFeedback] = useState(null); // { tone, message }
 
   const checkManagerAuth = async () => {
     try {
@@ -87,34 +74,25 @@ export default function ManagerPage({ navigate }) {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [tasksRes, teamRes] = await Promise.all([
-        api.getManagerTasks(),
-        api.getTeam(),
-      ]);
+      const [tasksRes, teamRes] = await Promise.all([api.getManagerTasks(), api.getTeam()]);
       setTasks(tasksRes.tasks || []);
       setTeamInfo(teamRes.team || null);
     } catch (err) {
-      if (err.status === 401) {
-        setIsManager(false);
-      } else {
-        setFeedback({ type: "error", message: err.message || "Failed to load manager data." });
-      }
+      if (err.status === 401) setIsManager(false);
+      else setFeedback({ tone: "danger", message: err.message || "Could not load the dashboard." });
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (user) {
-      checkManagerAuth();
-    }
+    if (user) checkManagerAuth();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
-  // Load summary whenever user switches to summary tab or toggles scope
   useEffect(() => {
-    if (activeTab === "summary" && user && isManager) {
-      loadSummary(summaryScope);
-    }
+    if (activeTab === "summary" && user && isManager) loadSummary(summaryScope);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, summaryScope, isManager]);
 
   const loadSummary = async (scope) => {
@@ -123,11 +101,8 @@ export default function ManagerPage({ navigate }) {
       const res = await api.getManagerSummary(scope);
       setSummaryData(res);
     } catch (err) {
-      if (err.status === 401) {
-        setIsManager(false);
-      } else {
-        setFeedback({ type: "error", message: err.message || "Failed to generate summary." });
-      }
+      if (err.status === 401) setIsManager(false);
+      else setFeedback({ tone: "danger", message: err.message || "Could not build the summary." });
     } finally {
       setLoadingSummary(false);
     }
@@ -147,7 +122,7 @@ export default function ManagerPage({ navigate }) {
         loadData();
       }
     } catch (err) {
-      setAuthError(err.message || "Invalid manager credentials.");
+      setAuthError(err.message || "That username and password do not match.");
     } finally {
       setAuthenticating(false);
     }
@@ -157,7 +132,7 @@ export default function ManagerPage({ navigate }) {
     try {
       await api.lockManager();
     } catch {
-      // ignore
+      // Locking locally is enough.
     } finally {
       setIsManager(false);
       setTasks([]);
@@ -165,27 +140,21 @@ export default function ManagerPage({ navigate }) {
     }
   };
 
-  const handleCreateTask = async (e) => {
-    e.preventDefault();
-    if (!taskTitle.trim()) return;
+  const handleCreateTask = async (draft) => {
     try {
       setSavingTask(true);
       const res = await api.createManagerTask({
-        title: taskTitle.trim(),
-        description: taskDescription.trim(),
-        assigned_to_id: taskAssignee || null,
-        priority: taskPriority,
-        due_date: taskDueDate || null,
+        title: draft.title.trim(),
+        description: draft.description.trim(),
+        assigned_to_id: draft.assignee || null,
+        priority: draft.priority,
+        due_date: draft.dueDate || null,
       });
       setTasks((prev) => [res.task, ...prev]);
-      setTaskTitle("");
-      setTaskDescription("");
-      setTaskAssignee("");
-      setTaskDueDate("");
       setShowTaskModal(false);
-      setFeedback({ type: "success", message: `Task "${res.task.title}" created successfully.` });
+      setFeedback({ tone: "success", message: `Task "${res.task.title}" created.` });
     } catch (err) {
-      setFeedback({ type: "error", message: err.message || "Failed to create task." });
+      setFeedback({ tone: "danger", message: err.message || "Could not create the task." });
     } finally {
       setSavingTask(false);
     }
@@ -196,18 +165,18 @@ export default function ManagerPage({ navigate }) {
       const res = await api.updateManagerTask(taskId, { status: newStatus });
       setTasks((prev) => prev.map((t) => (t.id === taskId ? res.task : t)));
     } catch (err) {
-      setFeedback({ type: "error", message: err.message || "Failed to update task status." });
+      setFeedback({ tone: "danger", message: err.message || "Could not update the task." });
     }
   };
 
   const handleDeleteTask = async (taskId) => {
-    if (!window.confirm("Are you sure you want to delete this task?")) return;
+    if (!window.confirm("Delete this task?")) return;
     try {
       await api.deleteManagerTask(taskId);
       setTasks((prev) => prev.filter((t) => t.id !== taskId));
-      setFeedback({ type: "success", message: "Task deleted." });
+      setFeedback({ tone: "success", message: "Task deleted." });
     } catch (err) {
-      setFeedback({ type: "error", message: err.message || "Failed to delete task." });
+      setFeedback({ tone: "danger", message: err.message || "Could not delete the task." });
     }
   };
 
@@ -221,15 +190,14 @@ export default function ManagerPage({ navigate }) {
         tz: newMemberTz.trim() || "UTC",
       });
       setNewMemberName("");
-      // Reload team info to reflect new member in team list and dropdowns
       const teamRes = await api.getTeam();
       setTeamInfo(teamRes.team || null);
       setFeedback({
-        type: "success",
-        message: `Member "${res.member.display_name}" added to the team! Visible on Team page and assignments.`,
+        tone: "success",
+        message: `${res.member.display_name} is on the team. They sign in with the team code and that name.`,
       });
     } catch (err) {
-      setFeedback({ type: "error", message: err.message || "Failed to add member." });
+      setFeedback({ tone: "danger", message: err.message || "Could not add the member." });
     } finally {
       setSavingMember(false);
     }
@@ -241,18 +209,15 @@ export default function ManagerPage({ navigate }) {
       const res = await api.updateTeamCode(customCode);
       setTeamInfo((prev) => (prev ? { ...prev, join_code: res.join_code } : prev));
       setCustomCodeInput("");
-      setFeedback({
-        type: "success",
-        message: `Team code updated to ${res.join_code}. Members can now use this code on any deployment!`,
-      });
+      setFeedback({ tone: "success", message: `The team code is now ${res.join_code}.` });
     } catch (err) {
-      setFeedback({ type: "error", message: err.message || "Failed to update team code." });
+      setFeedback({ tone: "danger", message: err.message || "Could not change the team code." });
     } finally {
       setSavingCode(false);
     }
   };
 
-  const copyToClipboard = (text, setCopiedFn) => {
+  const copy = (text, setCopiedFn) => {
     navigator.clipboard.writeText(text);
     setCopiedFn(true);
     setTimeout(() => setCopiedFn(false), 2000);
@@ -260,992 +225,504 @@ export default function ManagerPage({ navigate }) {
 
   const copySummaryMarkdown = () => {
     if (!summaryData) return;
+    const s = summaryData;
+    const who = (t) => (t.assigned_to_name ? ` (${t.assigned_to_name})` : "");
     const lines = [
-      `# ${summaryData.headline}`,
-      `Generated: ${new Date(summaryData.generated_at).toLocaleString()}`,
+      `# ${s.headline}`,
+      `Generated: ${new Date(s.generated_at).toLocaleString()}`,
       "",
-      `## Key Stats`,
-      `- Total Tasks: ${summaryData.stats.total_tasks}`,
-      `- Completed: ${summaryData.stats.completed} (${summaryData.stats.completion_rate}%)`,
-      `- In Progress: ${summaryData.stats.in_progress}`,
-      `- Blocked: ${summaryData.stats.blocked}`,
-      `- Standup Updates: ${summaryData.stats.updates_submitted}`,
+      "## Tasks",
+      `- Total: ${s.stats.total_tasks}`,
+      `- Completed: ${s.stats.completed} (${s.stats.completion_rate}%)`,
+      `- In progress: ${s.stats.in_progress}`,
+      `- Blocked: ${s.stats.blocked}`,
+      `- Standup updates: ${s.stats.updates_submitted}`,
       "",
-      `## Key Accomplishments & Completed Tasks`,
-      ...(summaryData.completed_tasks.length
-        ? summaryData.completed_tasks.map(
-            (t) => `- [x] ${t.title} ${t.assigned_to_name ? `(@${t.assigned_to_name})` : ""}`
-          )
-        : ["- None recorded"]),
+      "## Completed",
+      ...(s.completed_tasks.length ? s.completed_tasks.map((t) => `- [x] ${t.title}${who(t)}`) : ["- None"]),
       "",
-      `## In-Progress Focus`,
-      ...(summaryData.in_progress_tasks.length
-        ? summaryData.in_progress_tasks.map(
-            (t) => `- [ ] ${t.title} ${t.assigned_to_name ? `(@${t.assigned_to_name})` : ""}`
-          )
-        : ["- None currently in progress"]),
+      "## In progress",
+      ...(s.in_progress_tasks.length ? s.in_progress_tasks.map((t) => `- [ ] ${t.title}${who(t)}`) : ["- None"]),
       "",
-      `## Blockers & Risks`,
-      ...(summaryData.standup_blockers.length
-        ? summaryData.standup_blockers.map((b) => `- ⚠️ ${b.member_name}: ${b.blocker}`)
-        : ["- No blockers reported"]),
+      "## Blockers",
+      ...(s.standup_blockers.length ? s.standup_blockers.map((b) => `- ${b.member_name}: ${b.blocker}`) : ["- None reported"]),
       "",
-      `## Team Member Breakdown`,
-      ...summaryData.member_breakdowns.map(
+      "## By member",
+      ...s.member_breakdowns.map(
         (m) =>
           `### ${m.member_name}\n- Tasks: ${m.tasks_completed}/${m.tasks_total} completed\n- Progress: ${
             m.latest_progress || "No update"
           }\n- Plan: ${m.latest_plan || "None"}`
       ),
     ];
-    copyToClipboard(lines.join("\n"), setSummaryCopied);
+    copy(lines.join("\n"), setSummaryCopied);
   };
 
-  if (!user) {
-    return (
-      <div className="card" style={{ textAlign: "center", padding: "40px 30px" }}>
-        <Briefcase size={32} color="var(--text-muted)" style={{ marginBottom: 14 }} />
-        <h3 style={{ marginBottom: 8 }}>Sign In Required</h3>
-        <p className="muted" style={{ marginBottom: 20 }}>
-          Please sign in with your team code to access the manager dashboard.
-        </p>
-        <button type="button" className="btn btn-primary" onClick={() => navigate("/login")}>
-          Sign in
-        </button>
-      </div>
-    );
+  if (!user) return <SignInRequired navigate={navigate} what="open the manager dashboard" />;
+
+  if (isManager === null || (loading && tasks.length === 0 && !authError && isManager !== false)) {
+    return <Loading label="Checking access…" />;
   }
 
-  // Verifying manager permissions
-  if (isManager === null || (loading && tasks.length === 0 && !authError)) {
-    return (
-      <div className="card" style={{ textAlign: "center", padding: "60px 20px" }}>
-        <span className="loading-spinner" style={{ width: 26, height: 26, marginBottom: 16 }} />
-        <div style={{ color: "var(--text-secondary)", fontSize: 14, fontWeight: 500 }}>
-          Checking manager authorization…
-        </div>
-      </div>
-    );
-  }
-
-  // Manager Locked / Non-manager screen
   if (isManager === false) {
     return (
-      <div className="stagger" style={{ maxWidth: 520, margin: "40px auto 0" }}>
-        <div className="card card-elevated" style={{ padding: "36px 32px" }}>
-          <div style={{ textAlign: "center", marginBottom: 24 }}>
-            <div
-              style={{
-                width: 54,
-                height: 54,
-                borderRadius: "50%",
-                background: "rgba(239, 68, 68, 0.12)",
-                border: "1px solid rgba(239, 68, 68, 0.25)",
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                marginBottom: 16,
-              }}
-            >
-              <Lock size={26} color="#ef4444" />
-            </div>
-            <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>
-              Manager Access Restricted
-            </h2>
-            <p style={{ color: "var(--text-secondary)", fontSize: 13.5, lineHeight: 1.6, margin: 0 }}>
-              Team members cannot access task delegation, add members, or view managerial reports. Enter your manager credentials to unlock this portal.
-            </p>
-          </div>
-
-          {authError && (
-            <div className="notice-box notice-warning" style={{ marginBottom: 18 }}>
-              <AlertCircle size={16} />
-              <span>{authError}</span>
-            </div>
-          )}
-
-          <form onSubmit={handleManagerLogin} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            <div className="form-group" style={{ marginBottom: 0 }}>
+      <div className="narrow">
+        <h1>Manager</h1>
+        <p className="lead mb-24">
+          Assign tasks, add members and read a summary of the team's work. This needs the
+          manager username and password, which are separate from the team code.
+        </p>
+        <div className="card">
+          {authError && <Notice tone="danger">{authError}</Notice>}
+          <form onSubmit={handleManagerLogin}>
+            <div className="form-group">
               <label htmlFor="mgr-user">
-                <span>Manager User ID</span>
+                <span>Username</span>
               </label>
               <input
                 id="mgr-user"
                 type="text"
-                className="text-input"
-                placeholder="e.g. manager"
                 value={authUsername}
                 onChange={(e) => setAuthUsername(e.target.value)}
                 required
                 autoFocus
                 autoComplete="username"
+                spellCheck={false}
               />
             </div>
-
-            <div className="form-group" style={{ marginBottom: 0 }}>
+            <div className="form-group">
               <label htmlFor="mgr-pass">
                 <span>Password</span>
               </label>
               <input
                 id="mgr-pass"
                 type="password"
-                className="text-input"
-                placeholder="Enter manager password"
                 value={authPassword}
                 onChange={(e) => setAuthPassword(e.target.value)}
                 required
                 autoComplete="current-password"
               />
             </div>
-
-            <div
-              style={{
-                background: "var(--surface-sunken)",
-                border: "1px dashed var(--border-subtle)",
-                borderRadius: "var(--radius-sm)",
-                padding: "10px 14px",
-                fontSize: 12,
-                color: "var(--text-muted)",
-                lineHeight: 1.5,
-              }}
-            >
-              💡 <strong>Default Manager Credentials</strong>:<br />
-              User ID: <code style={{ color: "var(--accent-bright)", fontWeight: 600 }}>manager</code> &nbsp;|&nbsp; Password: <code style={{ color: "var(--accent-bright)", fontWeight: 600 }}>status2026</code>
-            </div>
-
             <button
               type="submit"
-              className="btn btn-primary"
+              className="btn btn-primary btn-block mt-8"
               disabled={authenticating || !authUsername.trim() || !authPassword}
-              style={{ width: "100%", justifyContent: "center", marginTop: 4, height: 40 }}
             >
-              {authenticating ? (
-                <>
-                  <span className="loading-spinner" style={{ width: 14, height: 14 }} /> Unlocking…
-                </>
-              ) : (
-                <>
-                  <Unlock size={15} /> Unlock Manager Dashboard
-                </>
-              )}
+              {authenticating ? "Signing in…" : "Sign in"}
             </button>
           </form>
-
-          <div style={{ marginTop: 20, textAlign: "center" }}>
-            <button
-              type="button"
-              className="btn btn-ghost"
-              style={{ fontSize: 13, color: "var(--text-muted)" }}
-              onClick={() => navigate("/")}
-            >
-              ← Back to Team Dashboard
-            </button>
-          </div>
         </div>
+        <p className="muted mt-16">
+          Demo credentials: <code className="code">manager</code> / <code className="code">status2026</code>
+        </p>
       </div>
     );
   }
 
-  const filteredTasks = tasks.filter((t) => {
-    if (statusFilter === "all") return true;
-    return t.status === statusFilter;
-  });
-
+  const filteredTasks = tasks.filter((t) => statusFilter === "all" || t.status === statusFilter);
   const memberNames = teamInfo?.members || [];
+  const count = (status) => tasks.filter((t) => t.status === status).length;
+
+  const TABS = [
+    { id: "tasks", label: "Tasks", count: tasks.length },
+    { id: "summary", label: "Summary" },
+    { id: "members", label: "Members", count: memberNames.length },
+    { id: "teamcode", label: "Team code" },
+  ];
 
   return (
-    <div className="stagger">
-      {/* Header */}
+    <div>
       <div className="page-header">
         <div>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <h1>Manager Dashboard</h1>
-            <span className="badge badge-primary">{teamInfo?.name || user.team_name}</span>
-            <span className="badge badge-success" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-              <ShieldCheck size={12} /> Authorized
-            </span>
-          </div>
-          <p className="subtitle" style={{ marginBottom: 0 }}>
-            Assign tasks to team members, track daily deliverables, and generate end-of-day project summaries.
-          </p>
+          <h1>Manager</h1>
+          <p className="lead">{teamInfo?.name || user.team_name}</p>
         </div>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => setShowTaskModal(true)}
-          >
-            <Plus size={15} /> Assign Task
+        <div className="page-header-actions">
+          <button type="button" className="btn btn-ghost btn-sm" onClick={handleLockManager}>
+            Lock
           </button>
-          <button
-            type="button"
-            className="btn btn-outline"
-            onClick={() => {
-              setActiveTab("summary");
-              loadSummary(summaryScope);
-            }}
-          >
-            <Sparkles size={15} color="var(--accent-bright)" /> Generate Summary
-          </button>
-          <button
-            type="button"
-            className="btn btn-ghost"
-            onClick={handleLockManager}
-            style={{ fontSize: 13, gap: 6 }}
-            title="Lock manager session"
-          >
-            <Lock size={14} /> Lock
+          <button type="button" className="btn btn-primary btn-sm" onClick={() => setShowTaskModal(true)}>
+            <Plus size={14} /> New task
           </button>
         </div>
       </div>
 
-      {/* Global feedback message */}
       {feedback && (
-        <div
-          className={`notice-box ${feedback.type === "error" ? "notice-warn" : "notice-info"}`}
-          style={{ marginBottom: 20 }}
-        >
-          {feedback.type === "error" ? <AlertTriangle size={16} /> : <CheckCircle2 size={16} />}
-          <span>{feedback.message}</span>
-          <button
-            type="button"
-            className="btn btn-ghost"
-            style={{ marginLeft: "auto", padding: "2px 8px", fontSize: 12 }}
-            onClick={() => setFeedback(null)}
-          >
-            Dismiss
-          </button>
-        </div>
+        <Notice tone={feedback.tone} onDismiss={() => setFeedback(null)}>
+          {feedback.message}
+        </Notice>
       )}
 
-      {/* Nav Tabs */}
-      <div className="tab-pill-group" style={{ marginBottom: 24 }}>
-        <button
-          type="button"
-          className={`tab-pill ${activeTab === "tasks" ? "active" : ""}`}
-          onClick={() => setActiveTab("tasks")}
-        >
-          <Briefcase size={14} />
-          <span>Team Tasks ({tasks.length})</span>
-        </button>
-        <button
-          type="button"
-          className={`tab-pill ${activeTab === "summary" ? "active" : ""}`}
-          onClick={() => setActiveTab("summary")}
-        >
-          <FileText size={14} />
-          <span>Summarize Work</span>
-        </button>
-        <button
-          type="button"
-          className={`tab-pill ${activeTab === "members" ? "active" : ""}`}
-          onClick={() => setActiveTab("members")}
-        >
-          <Users size={14} />
-          <span>Team Members ({memberNames.length})</span>
-        </button>
-        <button
-          type="button"
-          className={`tab-pill ${activeTab === "teamcode" ? "active" : ""}`}
-          onClick={() => setActiveTab("teamcode")}
-        >
-          <KeyRound size={14} />
-          <span>Team Code & Deployment</span>
-        </button>
-      </div>
+      <Tabs tabs={TABS} active={activeTab} onChange={setActiveTab} />
 
-      {/* ================================================================= */}
-      {/* TAB 1: TEAM TASKS */}
-      {/* ================================================================= */}
       {activeTab === "tasks" && (
         <div>
-          {/* Quick Stats Banner */}
-          <div className="stat-cards-grid" style={{ marginBottom: 24 }}>
-            <div className="stat-card">
-              <span className="stat-card-label">Total Tasks</span>
-              <span className="stat-card-value">{tasks.length}</span>
-            </div>
-            <div className="stat-card">
-              <span className="stat-card-label">In Progress</span>
-              <span className="stat-card-value" style={{ color: "var(--accent-bright)" }}>
-                {tasks.filter((t) => t.status === "in_progress").length}
-              </span>
-            </div>
-            <div className="stat-card">
-              <span className="stat-card-label">Completed</span>
-              <span className="stat-card-value" style={{ color: "var(--success)" }}>
-                {tasks.filter((t) => t.status === "completed").length}
-              </span>
-            </div>
-            <div className="stat-card">
-              <span className="stat-card-label">Blocked</span>
-              <span className="stat-card-value" style={{ color: "var(--warn)" }}>
-                {tasks.filter((t) => t.status === "blocked").length}
-              </span>
-            </div>
+          <div className="stats mb-16">
+            <Stat label="Open" value={tasks.length - count("completed")} />
+            <Stat label="In progress" value={count("in_progress")} tone="accent" />
+            <Stat label="Completed" value={count("completed")} tone="success" />
+            <Stat label="Blocked" value={count("blocked")} tone={count("blocked") ? "danger" : ""} />
           </div>
 
-          {/* Filter Bar */}
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              flexWrap: "wrap",
-              gap: 12,
-              marginBottom: 16,
-            }}
-          >
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              {["all", "pending", "in_progress", "completed", "blocked"].map((st) => (
+          <div className="filter-bar">
+            <div className="filter-group" role="group" aria-label="Filter by status">
+              {STATUS_FILTERS.map((st) => (
                 <button
                   key={st}
                   type="button"
-                  className={`btn ${statusFilter === st ? "btn-primary" : "btn-outline"}`}
-                  style={{ fontSize: 12, padding: "5px 12px", textTransform: "capitalize" }}
+                  className={`filter-chip ${statusFilter === st ? "active" : ""}`}
                   onClick={() => setStatusFilter(st)}
                 >
-                  {st.replace("_", " ")}
+                  {st === "all" ? "All" : STATUS_LABELS[st]}
                 </button>
               ))}
             </div>
-            <button
-              type="button"
-              className="btn btn-outline"
-              style={{ fontSize: 13, padding: "6px 12px" }}
-              onClick={loadData}
-              title="Refresh tasks"
-            >
-              <RefreshCw size={13} /> Refresh
+            <button type="button" className="btn btn-ghost btn-sm" onClick={loadData} title="Refresh">
+              <RefreshCw size={13} className={loading ? "spin" : ""} /> Refresh
             </button>
           </div>
 
           {loading ? (
-            <div style={{ textAlign: "center", padding: 50 }}>
-              <span className="loading-spinner" />
-            </div>
+            <Loading />
           ) : filteredTasks.length === 0 ? (
-            <div className="card" style={{ textAlign: "center", padding: "50px 20px" }}>
-              <Briefcase size={32} color="var(--text-muted)" style={{ marginBottom: 12 }} />
-              <h3>No tasks found</h3>
-              <p className="muted" style={{ marginBottom: 16 }}>
-                {statusFilter === "all"
-                  ? "Get started by assigning a task to a team member."
-                  : `No tasks currently marked as "${statusFilter.replace("_", " ")}".`}
-              </p>
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={() => setShowTaskModal(true)}
-              >
-                <Plus size={14} /> Assign New Task
-              </button>
-            </div>
+            <EmptyState
+              icon={Briefcase}
+              title={statusFilter === "all" ? "No tasks yet" : `No ${STATUS_LABELS[statusFilter].toLowerCase()} tasks`}
+              action={
+                statusFilter === "all" && (
+                  <button type="button" className="btn btn-primary btn-sm" onClick={() => setShowTaskModal(true)}>
+                    <Plus size={14} /> New task
+                  </button>
+                )
+              }
+            >
+              {statusFilter === "all" ? "Assign a task to someone on the team." : null}
+            </EmptyState>
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              {filteredTasks.map((task) => (
-                <div key={task.id} className="card card-elevated" style={{ padding: "18px 20px" }}>
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "flex-start",
-                      justifyContent: "space-between",
-                      gap: 14,
-                      flexWrap: "wrap",
-                    }}
-                  >
-                    <div style={{ flex: 1, minWidth: 260 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                        <span
-                          className={`badge ${
-                            task.priority === "urgent"
-                              ? "badge-warn"
-                              : task.priority === "high"
-                              ? "badge-amber"
-                              : task.priority === "medium"
-                              ? "badge-primary"
-                              : "badge-neutral"
-                          }`}
-                        >
-                          {task.priority.toUpperCase()}
-                        </span>
-                        <h3 style={{ fontSize: 16, margin: 0 }}>{task.title}</h3>
+            <div className="card card-flush">
+              <div className="list">
+                {filteredTasks.map((task) => (
+                  <div key={task.id} className="task">
+                    <div className="task-main">
+                      <div className={`task-title ${task.status === "completed" ? "done" : ""}`}>
+                        {task.title}
                       </div>
-                      {task.description && (
-                        <p className="muted" style={{ fontSize: 13, marginBottom: 10 }}>
-                          {task.description}
-                        </p>
-                      )}
-                      <div className="stat-row" style={{ marginTop: 8 }}>
-                        <div className="stat-chip">
-                          <Users size={12} />
-                          <span>
-                            Assigned to:{" "}
-                            <strong>{task.assigned_to_name || "Unassigned"}</strong>
-                          </span>
-                        </div>
+                      {task.description && <div className="task-desc">{task.description}</div>}
+                      <div className="meta task-meta">
+                        <span>{task.assigned_to_name || "Unassigned"}</span>
+                        <PriorityBadge priority={task.priority} />
                         {task.due_date && (
-                          <div className="stat-chip">
-                            <Calendar size={12} />
-                            <span>Due: {task.due_date}</span>
-                          </div>
+                          <span className="meta-item">
+                            <Calendar size={12} /> Due {task.due_date}
+                          </span>
                         )}
                         {task.completed_at && (
-                          <div className="stat-chip" style={{ color: "var(--success)" }}>
-                            <CheckCircle2 size={12} />
-                            <span>Done {new Date(task.completed_at).toLocaleDateString()}</span>
-                          </div>
+                          <span>Done {new Date(task.completed_at).toLocaleDateString()}</span>
                         )}
                       </div>
                     </div>
-
-                    {/* Quick Status Control */}
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <select
-                        value={task.status}
-                        onChange={(e) => handleUpdateStatus(task.id, e.target.value)}
-                        className="select-status"
-                        style={{
-                          background:
-                            task.status === "completed"
-                              ? "var(--success-bg)"
-                              : task.status === "blocked"
-                              ? "var(--warn-bg)"
-                              : task.status === "in_progress"
-                              ? "var(--accent-dim)"
-                              : "var(--bg-surface)",
-                          color:
-                            task.status === "completed"
-                              ? "var(--success)"
-                              : task.status === "blocked"
-                              ? "var(--warn)"
-                              : task.status === "in_progress"
-                              ? "var(--accent-bright)"
-                              : "var(--text-secondary)",
-                          borderColor: "var(--border-subtle)",
-                          fontSize: 13,
-                          padding: "6px 12px",
-                          borderRadius: "var(--r-md)",
-                          fontWeight: 500,
-                          cursor: "pointer",
-                        }}
-                      >
-                        <option value="pending">⏳ Pending</option>
-                        <option value="in_progress">⚡ In Progress</option>
-                        <option value="completed">✓ Completed</option>
-                        <option value="blocked">⚠️ Blocked</option>
-                      </select>
-
+                    <div className="task-aside">
+                      <StatusSelect value={task.status} onChange={(v) => handleUpdateStatus(task.id, v)} />
                       <button
                         type="button"
-                        className="btn btn-ghost"
+                        className="btn btn-danger-ghost btn-sm btn-icon"
                         onClick={() => handleDeleteTask(task.id)}
                         title="Delete task"
-                        style={{ padding: "6px 8px", color: "var(--text-muted)" }}
+                        aria-label="Delete task"
                       >
                         <Trash2 size={14} />
                       </button>
                     </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           )}
         </div>
       )}
 
-      {/* ================================================================= */}
-      {/* TAB 2: SUMMARIZE WORK FEATURE */}
-      {/* ================================================================= */}
       {activeTab === "summary" && (
-        <div className="stagger">
-          <div className="card card-elevated" style={{ padding: "26px 26px" }}>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                flexWrap: "wrap",
-                gap: 14,
-                marginBottom: 20,
-              }}
-            >
-              <div>
-                <h2 style={{ fontSize: 18, marginBottom: 4 }}>End-of-Day & Project Summary</h2>
-                <p className="muted" style={{ fontSize: 13, margin: 0 }}>
-                  Automated synthesis of completed tasks, ongoing deliverables, blockers, and standup contributions.
-                </p>
-              </div>
-
-              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                <div className="tab-pill-group" style={{ margin: 0 }}>
-                  <button
-                    type="button"
-                    className={`tab-pill ${summaryScope === "daily" ? "active" : ""}`}
-                    onClick={() => setSummaryScope("daily")}
-                  >
-                    Daily
-                  </button>
-                  <button
-                    type="button"
-                    className={`tab-pill ${summaryScope === "project" ? "active" : ""}`}
-                    onClick={() => setSummaryScope("project")}
-                  >
-                    Project-Wide
-                  </button>
-                </div>
-
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  onClick={copySummaryMarkdown}
-                  disabled={!summaryData}
-                  style={{ fontSize: 13 }}
-                >
-                  {summaryCopied ? <Check size={14} /> : <Copy size={14} />}
-                  {summaryCopied ? "Copied" : "Copy Report"}
-                </button>
-              </div>
-            </div>
-
-            {loadingSummary ? (
-              <div style={{ textAlign: "center", padding: "60px 20px" }}>
-                <span className="loading-spinner" />
-                <p className="muted" style={{ marginTop: 14 }}>
-                  Synthesizing deliverables, standup reports, and blockers…
-                </p>
-              </div>
-            ) : !summaryData ? (
-              <p className="muted">No summary data available.</p>
-            ) : (
-              <div>
-                {/* Executive Headline Banner */}
-                <div
-                  style={{
-                    padding: "16px 20px",
-                    background: "var(--accent-dim)",
-                    border: "1px solid var(--accent-border)",
-                    borderRadius: "var(--r-md)",
-                    marginBottom: 24,
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <Sparkles size={18} color="var(--accent-bright)" />
-                    <strong style={{ fontSize: 15, color: "var(--text-primary)" }}>
-                      {summaryData.headline}
-                    </strong>
-                  </div>
-                  <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 4 }}>
-                    Generated on {new Date(summaryData.generated_at).toLocaleString()}
-                  </div>
-                </div>
-
-                {/* Metrics Breakdown */}
-                <div className="stat-cards-grid" style={{ marginBottom: 24 }}>
-                  <div className="stat-card">
-                    <span className="stat-card-label">Completion Rate</span>
-                    <span className="stat-card-value" style={{ color: "var(--success)" }}>
-                      {summaryData.stats.completion_rate}%
-                    </span>
-                  </div>
-                  <div className="stat-card">
-                    <span className="stat-card-label">Completed Tasks</span>
-                    <span className="stat-card-value">{summaryData.stats.completed}</span>
-                  </div>
-                  <div className="stat-card">
-                    <span className="stat-card-label">In Progress</span>
-                    <span className="stat-card-value" style={{ color: "var(--accent-bright)" }}>
-                      {summaryData.stats.in_progress}
-                    </span>
-                  </div>
-                  <div className="stat-card">
-                    <span className="stat-card-label">Identified Blockers</span>
-                    <span
-                      className="stat-card-value"
-                      style={{
-                        color:
-                          summaryData.stats.blocked + summaryData.standup_blockers.length > 0
-                            ? "var(--warn)"
-                            : "var(--text-secondary)",
-                      }}
-                    >
-                      {summaryData.stats.blocked + summaryData.standup_blockers.length}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Accomplishments Section */}
-                <h3 style={{ fontSize: 15, marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
-                  <CheckCircle2 size={16} color="var(--success)" /> Key Accomplishments & Finished Work
-                </h3>
-                <div className="card" style={{ padding: "14px 18px", marginBottom: 20 }}>
-                  {summaryData.completed_tasks.length === 0 ? (
-                    <p className="muted" style={{ margin: 0, fontSize: 13 }}>
-                      No tasks marked completed yet for this period.
-                    </p>
-                  ) : (
-                    <ul style={{ paddingLeft: 20, margin: 0, display: "flex", flexDirection: "column", gap: 6 }}>
-                      {summaryData.completed_tasks.map((t) => (
-                        <li key={t.id} style={{ fontSize: 14 }}>
-                          <strong>{t.title}</strong>
-                          {t.assigned_to_name && (
-                            <span className="muted" style={{ marginLeft: 6 }}>
-                              — completed by {t.assigned_to_name}
-                            </span>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-
-                {/* Blockers & Risks Section */}
-                <h3 style={{ fontSize: 15, marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
-                  <AlertCircle size={16} color="var(--warn)" /> Active Blockers & Impediments
-                </h3>
-                <div className="card" style={{ padding: "14px 18px", marginBottom: 20 }}>
-                  {summaryData.standup_blockers.length === 0 && summaryData.blocked_tasks.length === 0 ? (
-                    <p className="muted" style={{ margin: 0, fontSize: 13, color: "var(--success)" }}>
-                      ✓ All clear! No open blockers reported.
-                    </p>
-                  ) : (
-                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                      {summaryData.standup_blockers.map((b, i) => (
-                        <div key={i} className="notice-box notice-warn" style={{ padding: "8px 12px" }}>
-                          <AlertTriangle size={14} />
-                          <span>
-                            <strong>{b.member_name}:</strong> {b.blocker}
-                          </span>
-                        </div>
-                      ))}
-                      {summaryData.blocked_tasks.map((t) => (
-                        <div key={t.id} className="notice-box notice-warn" style={{ padding: "8px 12px" }}>
-                          <AlertTriangle size={14} />
-                          <span>
-                            <strong>Task Blocked:</strong> {t.title} ({t.assigned_to_name || "Unassigned"})
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Team Contributions Breakdown */}
-                <h3 style={{ fontSize: 15, marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
-                  <Users size={16} color="var(--accent-bright)" /> Team Member Contribution Breakdown
-                </h3>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 14 }}>
-                  {summaryData.member_breakdowns.map((m) => (
-                    <div key={m.member_id} className="card card-elevated" style={{ padding: "16px 18px" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                        <strong style={{ fontSize: 15 }}>{m.member_name}</strong>
-                        <span className="badge badge-neutral" style={{ fontSize: 11 }}>
-                          {m.tasks_completed}/{m.tasks_total} Tasks Done
-                        </span>
-                      </div>
-                      {m.latest_progress && (
-                        <p style={{ fontSize: 13, marginBottom: 6, color: "var(--text-secondary)" }}>
-                          <strong>Progress:</strong> {m.latest_progress}
-                        </p>
-                      )}
-                      {m.latest_blockers && (
-                        <p style={{ fontSize: 13, marginBottom: 6, color: "var(--warn)" }}>
-                          <strong>Blocker:</strong> {m.latest_blockers}
-                        </p>
-                      )}
-                      {m.latest_plan && (
-                        <p style={{ fontSize: 13, margin: 0, color: "var(--text-muted)" }}>
-                          <strong>Plan:</strong> {m.latest_plan}
-                        </p>
-                      )}
-                      {!m.latest_progress && !m.latest_plan && (
-                        <p className="muted" style={{ fontSize: 12, margin: 0 }}>
-                          No standup update submitted yet for this cycle.
-                        </p>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
+        <SummaryTab
+          scope={summaryScope}
+          setScope={setSummaryScope}
+          data={summaryData}
+          loading={loadingSummary}
+          copied={summaryCopied}
+          onCopy={copySummaryMarkdown}
+          onRefresh={() => loadSummary(summaryScope)}
+        />
       )}
 
-      {/* ================================================================= */}
-      {/* TAB 3: TEAM MEMBERS */}
-      {/* ================================================================= */}
       {activeTab === "members" && (
-        <div className="stagger">
-          {/* Add Member Card */}
-          <div className="card card-elevated" style={{ padding: "24px 26px", marginBottom: 24 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-              <UserPlus size={18} color="var(--accent-bright)" />
-              <h3 style={{ fontSize: 17, margin: 0 }}>Add Team Member</h3>
-            </div>
-            <p className="muted" style={{ fontSize: 13, marginBottom: 20 }}>
-              Add a new teammate directly. They will immediately appear on the Team page, in task assignment dropdowns, and can sign in with the team code.
-            </p>
-
+        <div>
+          <h2>Add a member</h2>
+          <p className="section-hint">
+            They appear on the Team page at once and sign in with the team code and this name.
+          </p>
+          <div className="card">
             <form onSubmit={handleAddMember}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
-                <div className="form-group" style={{ margin: 0 }}>
+              <div className="grid-2">
+                <div className="form-group">
                   <label htmlFor="member_name">
-                    <span>Full Name</span>
-                    <span className="hint">e.g. Pooja Hegde</span>
+                    <span>Name</span>
                   </label>
                   <input
                     id="member_name"
                     type="text"
                     value={newMemberName}
                     onChange={(e) => setNewMemberName(e.target.value)}
-                    placeholder="e.g. Rahul Deshmukh"
+                    placeholder="Rahul Deshmukh"
                     required
                     disabled={savingMember}
                   />
                 </div>
-                <div className="form-group" style={{ margin: 0 }}>
+                <div className="form-group">
                   <label htmlFor="member_tz">
-                    <span>Timezone</span>
-                    <span className="hint">for standup cycles</span>
+                    <span>Time zone</span>
+                    <span className="hint">sets their standup day</span>
                   </label>
                   <input
                     id="member_tz"
                     type="text"
                     value={newMemberTz}
                     onChange={(e) => setNewMemberTz(e.target.value)}
-                    placeholder="e.g. Asia/Kolkata or UTC"
+                    placeholder="Asia/Kolkata"
+                    spellCheck={false}
                     disabled={savingMember}
                   />
                 </div>
               </div>
-
-              <button
-                type="submit"
-                className="btn btn-primary"
-                disabled={savingMember || !newMemberName.trim()}
-              >
-                {savingMember ? "Adding member…" : "Add to Team"}
-              </button>
+              <div className="form-actions">
+                <button type="submit" className="btn btn-primary" disabled={savingMember || !newMemberName.trim()}>
+                  {savingMember ? "Adding…" : "Add member"}
+                </button>
+              </div>
             </form>
           </div>
 
-          {/* Current Team Members Directory */}
-          <h2 style={{ fontSize: 17, marginBottom: 12 }}>Current Team Roster</h2>
-          <div className="card card-elevated" style={{ padding: "8px 24px" }}>
-            {memberNames.map((name) => (
-              <div key={name} className="claim-row">
-                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <div className="user-avatar" style={{ width: 28, height: 28, fontSize: 12 }}>
-                    {name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
+          <h2>Members ({memberNames.length})</h2>
+          <div className="card card-flush">
+            <div className="list">
+              {(teamInfo?.members_detailed || memberNames.map((n) => ({ display_name: n }))).map((m) => (
+                <div key={m.id || m.display_name} className="list-row" style={{ alignItems: "center" }}>
+                  <Avatar name={m.display_name} />
+                  <div className="list-main">
+                    <span className="list-text">{m.display_name}</span>
                   </div>
-                  <span className="claim-who" style={{ fontSize: 14 }}>{name}</span>
-                </div>
-                <div className="claim-content">
-                  <span className="muted" style={{ fontSize: 12 }}>
-                    {name === user.display_name ? "(You)" : "Active Teammate"}
+                  <span className="muted small">
+                    {m.tz || ""}
+                    {m.display_name === user.display_name ? (m.tz ? " · you" : "you") : ""}
                   </span>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
       )}
 
-      {/* ================================================================= */}
-      {/* TAB 4: TEAM CODE & DEPLOYMENT SYNC */}
-      {/* ================================================================= */}
       {activeTab === "teamcode" && (
-        <div className="stagger">
-          <div className="card card-elevated" style={{ padding: "26px 26px", marginBottom: 20 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-              <KeyRound size={20} color="var(--accent-bright)" />
-              <h3 style={{ fontSize: 17, margin: 0 }}>Team Sign-in & Sync Code</h3>
-            </div>
-            <p className="muted" style={{ fontSize: 13, marginBottom: 20 }}>
-              The code every member of {teamInfo?.name || "your team"} uses to sign in or join. No passwords required.
-            </p>
-
-            <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", marginBottom: 18 }}>
-              <code className="code-inline" style={{ fontSize: 24, letterSpacing: "0.08em", padding: "8px 16px" }}>
-                {teamInfo?.join_code || "..."}
-              </code>
-              <button
-                type="button"
-                className="btn btn-outline"
-                onClick={() => copyToClipboard(teamInfo?.join_code || "", setCodeCopied)}
-              >
-                {codeCopied ? <Check size={14} color="var(--success)" /> : <Copy size={14} />}
-                {codeCopied ? "Copied" : "Copy Code"}
+        <div>
+          <h2>Team code</h2>
+          <p className="section-hint">
+            What every member of {teamInfo?.name || "the team"} types to sign in, with their name.
+          </p>
+          <div className="card">
+            <div className="row">
+              <code className="code-display">{teamInfo?.join_code || "…"}</code>
+              <button type="button" className="btn btn-sm" onClick={() => copy(teamInfo?.join_code || "", setCodeCopied)}>
+                {codeCopied ? <Check size={13} /> : <Copy size={13} />} {codeCopied ? "Copied" : "Copy"}
               </button>
               <button
                 type="button"
-                className="btn btn-outline"
+                className="btn btn-sm"
                 onClick={() => handleUpdateTeamCode(null)}
                 disabled={savingCode}
-                title="Rotate to a new random code"
+                title="Replace the code with a new random one"
               >
-                <RefreshCw size={14} /> Regenerate Random Code
+                <RefreshCw size={13} /> Issue a new code
               </button>
             </div>
+            <p className="muted mt-16">
+              Issuing a new code does not sign anyone out. Share the new one with the team.
+            </p>
+          </div>
 
-            {/* Sync Local with Deployed Feature */}
-            <div
-              style={{
-                marginTop: 24,
-                paddingTop: 20,
-                borderTop: "1px solid var(--border-subtle)",
-              }}
-            >
-              <h4 style={{ fontSize: 15, marginBottom: 6 }}>Sync Local and Deployed Team Code</h4>
-              <p className="muted" style={{ fontSize: 13, marginBottom: 14 }}>
-                If you generated a team code on your local PC (e.g. <code>CORE-7K3MQ</code>) and want the deployed website to accept that exact same code, enter it below to synchronize them:
-              </p>
-
-              <div style={{ display: "flex", gap: 10, maxWidth: 440 }}>
-                <input
-                  type="text"
-                  value={customCodeInput}
-                  onChange={(e) => setCustomCodeInput(e.target.value)}
-                  placeholder="e.g. CORE-7K3MQ"
-                  style={{ textTransform: "uppercase" }}
-                  disabled={savingCode}
-                />
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  onClick={() => handleUpdateTeamCode(customCodeInput)}
-                  disabled={savingCode || !customCodeInput.trim()}
-                  style={{ flexShrink: 0 }}
-                >
-                  {savingCode ? "Saving…" : "Save Custom Code"}
-                </button>
-              </div>
+          <h2>Set a specific code</h2>
+          <p className="section-hint">
+            To keep the code you already use elsewhere, for example on a local copy of the app,
+            enter it here so both accept the same one.
+          </p>
+          <div className="card">
+            <div className="form-row" style={{ maxWidth: 440 }}>
+              <input
+                type="text"
+                className="input-caps"
+                value={customCodeInput}
+                onChange={(e) => setCustomCodeInput(e.target.value)}
+                placeholder="CORE-7K3MQ"
+                spellCheck={false}
+                disabled={savingCode}
+              />
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{ flex: "0 0 auto" }}
+                onClick={() => handleUpdateTeamCode(customCodeInput)}
+                disabled={savingCode || !customCodeInput.trim()}
+              >
+                {savingCode ? "Saving…" : "Save code"}
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ================================================================= */}
-      {/* MODAL: ASSIGN TASK */}
-      {/* ================================================================= */}
       {showTaskModal && (
-        <div className="modal-backdrop" onClick={() => setShowTaskModal(false)}>
-          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <Briefcase size={18} color="var(--accent-bright)" />
-                <h3 style={{ fontSize: 17, margin: 0 }}>Assign Team Task</h3>
-              </div>
-              <button
-                type="button"
-                className="btn btn-ghost"
-                onClick={() => setShowTaskModal(false)}
-                style={{ padding: "4px 8px" }}
-              >
-                ✕
-              </button>
-            </div>
+        <TaskModal
+          members={assignees(tasks, teamInfo)}
+          saving={savingTask}
+          onClose={() => setShowTaskModal(false)}
+          onSubmit={handleCreateTask}
+        />
+      )}
+    </div>
+  );
+}
 
-            <form onSubmit={handleCreateTask}>
-              <div className="form-group">
-                <label htmlFor="task_title">
-                  <span>Task Title</span>
-                  <span className="hint">what needs to be accomplished</span>
-                </label>
-                <input
-                  id="task_title"
-                  type="text"
-                  value={taskTitle}
-                  onChange={(e) => setTaskTitle(e.target.value)}
-                  placeholder="e.g. Fix database connection pooling on staging"
-                  required
-                  disabled={savingTask}
-                />
-              </div>
+function SummaryTab({ scope, setScope, data, loading, copied, onCopy, onRefresh }) {
+  const SCOPES = [
+    { value: "daily", label: "Today" },
+    { value: "project", label: "All time" },
+  ];
+  return (
+    <div>
+      <div className="row-between mb-16">
+        <div>
+          <h2 style={{ margin: 0 }}>Summary</h2>
+          <p className="section-hint" style={{ margin: "4px 0 0" }}>
+            Task status, completed work and reported blockers, from the tasks and standup updates.
+          </p>
+        </div>
+        <div className="row">
+          <Segmented options={SCOPES} value={scope} onChange={setScope} />
+          <button type="button" className="btn btn-ghost btn-sm btn-icon" onClick={onRefresh} title="Refresh" aria-label="Refresh">
+            <RefreshCw size={13} className={loading ? "spin" : ""} />
+          </button>
+          <button type="button" className="btn btn-sm" onClick={onCopy} disabled={!data}>
+            {copied ? <Check size={13} /> : <Copy size={13} />} {copied ? "Copied" : "Copy as Markdown"}
+          </button>
+        </div>
+      </div>
 
-              <div className="form-group">
-                <label htmlFor="task_desc">
-                  <span>Description & Context</span>
-                  <span className="hint">optional background or links</span>
-                </label>
-                <textarea
-                  id="task_desc"
-                  rows={3}
-                  value={taskDescription}
-                  onChange={(e) => setTaskDescription(e.target.value)}
-                  placeholder="Details, requirements, or PR references…"
-                  disabled={savingTask}
-                />
-              </div>
+      {loading ? (
+        <Loading label="Building the summary…" />
+      ) : !data ? (
+        <EmptyState title="No summary yet" />
+      ) : (
+        <div>
+          <div className="card card-pad-sm mb-16">
+            <strong>{data.headline}</strong>
+            <div className="muted small mt-8">Generated {new Date(data.generated_at).toLocaleString()}</div>
+          </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-                <div className="form-group">
-                  <label htmlFor="task_assignee">Assign to Member</label>
-                  <select
-                    id="task_assignee"
-                    value={taskAssignee}
-                    onChange={(e) => setTaskAssignee(e.target.value)}
-                    disabled={savingTask}
-                    className="select-status"
-                    style={{ width: "100%", padding: "9px 12px", background: "var(--bg-surface)" }}
-                  >
-                    <option value="">Unassigned</option>
-                    {tasksResAssignees(tasks, teamInfo).map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.display_name}
-                      </option>
-                    ))}
-                  </select>
+          <div className="stats mb-24">
+            <Stat label="Completion" value={`${data.stats.completion_rate}%`} tone="success" />
+            <Stat label="Completed" value={data.stats.completed} />
+            <Stat label="In progress" value={data.stats.in_progress} tone="accent" />
+            <Stat
+              label="Blockers"
+              value={data.stats.blocked + data.standup_blockers.length}
+              tone={data.stats.blocked + data.standup_blockers.length > 0 ? "danger" : ""}
+            />
+            <Stat label="Updates filed" value={data.stats.updates_submitted} />
+          </div>
+
+          <h2>Completed</h2>
+          <div className="card card-flush">
+            {data.completed_tasks.length === 0 ? (
+              <p className="muted" style={{ padding: "12px 16px" }}>
+                Nothing marked completed in this period.
+              </p>
+            ) : (
+              <div className="list">
+                {data.completed_tasks.map((t) => (
+                  <div key={t.id} className="list-row">
+                    <span className="list-who">{t.assigned_to_name || "Unassigned"}</span>
+                    <div className="list-main">
+                      <span className="list-text">{t.title}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <h2>Blockers</h2>
+          <div className="card card-flush">
+            {data.standup_blockers.length === 0 && data.blocked_tasks.length === 0 ? (
+              <p className="muted" style={{ padding: "12px 16px" }}>
+                No blockers reported.
+              </p>
+            ) : (
+              <div className="list">
+                {data.standup_blockers.map((b, i) => (
+                  <div key={`s${i}`} className="list-row">
+                    <span className="list-who">{b.member_name}</span>
+                    <div className="list-main">
+                      <span className="list-text">{b.blocker}</span>
+                      <span className="list-note">from today's standup update</span>
+                    </div>
+                  </div>
+                ))}
+                {data.blocked_tasks.map((t) => (
+                  <div key={t.id} className="list-row">
+                    <span className="list-who">{t.assigned_to_name || "Unassigned"}</span>
+                    <div className="list-main">
+                      <span className="list-text">{t.title}</span>
+                      <span className="list-note">task marked blocked</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <h2>By member</h2>
+          <div className="grid-cards">
+            {data.member_breakdowns.map((m) => (
+              <div key={m.member_id} className="card card-pad-sm">
+                <div className="row-between mb-8">
+                  <strong>{m.member_name}</strong>
+                  <span className="badge">
+                    {m.tasks_completed}/{m.tasks_total} tasks done
+                  </span>
                 </div>
-
-                <div className="form-group">
-                  <label htmlFor="task_priority">Priority</label>
-                  <select
-                    id="task_priority"
-                    value={taskPriority}
-                    onChange={(e) => setTaskPriority(e.target.value)}
-                    disabled={savingTask}
-                    className="select-status"
-                    style={{ width: "100%", padding: "9px 12px", background: "var(--bg-surface)" }}
-                  >
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
-                    <option value="urgent">Urgent</option>
-                  </select>
-                </div>
+                {m.latest_progress || m.latest_blockers || m.latest_plan ? (
+                  <dl className="kv">
+                    {m.latest_progress && (
+                      <>
+                        <dt>Progress</dt>
+                        <dd>{m.latest_progress}</dd>
+                      </>
+                    )}
+                    {m.latest_blockers && (
+                      <>
+                        <dt>Blocker</dt>
+                        <dd>{m.latest_blockers}</dd>
+                      </>
+                    )}
+                    {m.latest_plan && (
+                      <>
+                        <dt>Today</dt>
+                        <dd>{m.latest_plan}</dd>
+                      </>
+                    )}
+                  </dl>
+                ) : (
+                  <p className="muted">No standup update yet today.</p>
+                )}
               </div>
-
-              <div className="form-group">
-                <label htmlFor="task_due">Due Date</label>
-                <input
-                  id="task_due"
-                  type="date"
-                  value={taskDueDate}
-                  onChange={(e) => setTaskDueDate(e.target.value)}
-                  disabled={savingTask}
-                />
-              </div>
-
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 20 }}>
-                <button
-                  type="button"
-                  className="btn btn-outline"
-                  onClick={() => setShowTaskModal(false)}
-                  disabled={savingTask}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  disabled={savingTask || !taskTitle.trim()}
-                >
-                  {savingTask ? "Assigning…" : "Create & Assign Task"}
-                </button>
-              </div>
-            </form>
+            ))}
           </div>
         </div>
       )}
@@ -1253,13 +730,114 @@ export default function ManagerPage({ navigate }) {
   );
 }
 
-// Helper to deduce member IDs for dropdown
-function tasksResAssignees(tasks, teamInfo) {
-  if (teamInfo?.members_detailed?.length) {
-    return teamInfo.members_detailed;
-  }
+function TaskModal({ members, saving, onClose, onSubmit }) {
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [assignee, setAssignee] = useState("");
+  const [priority, setPriority] = useState("medium");
+  const [dueDate, setDueDate] = useState("");
+
+  const submit = (e) => {
+    e.preventDefault();
+    if (!title.trim()) return;
+    onSubmit({ title, description, assignee, priority, dueDate });
+  };
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal-card" role="dialog" aria-modal="true" aria-labelledby="task-modal-title" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3 id="task-modal-title">New task</h3>
+          <button type="button" className="btn btn-ghost btn-sm btn-icon" onClick={onClose} aria-label="Close">
+            <X size={15} />
+          </button>
+        </div>
+
+        <form onSubmit={submit}>
+          <div className="form-group">
+            <label htmlFor="task_title">
+              <span>Title</span>
+            </label>
+            <input
+              id="task_title"
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Fix connection pooling on staging"
+              required
+              autoFocus
+              disabled={saving}
+            />
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="task_desc">
+              <span>Details</span>
+              <span className="hint">optional</span>
+            </label>
+            <textarea
+              id="task_desc"
+              rows={3}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Context, links, acceptance criteria"
+              disabled={saving}
+            />
+          </div>
+
+          <div className="grid-2">
+            <div className="form-group">
+              <label htmlFor="task_assignee">
+                <span>Assign to</span>
+              </label>
+              <select id="task_assignee" value={assignee} onChange={(e) => setAssignee(e.target.value)} disabled={saving}>
+                <option value="">Unassigned</option>
+                {members.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.display_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="form-group">
+              <label htmlFor="task_priority">
+                <span>Priority</span>
+              </label>
+              <select id="task_priority" value={priority} onChange={(e) => setPriority(e.target.value)} disabled={saving}>
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+                <option value="urgent">Urgent</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="task_due">
+              <span>Due date</span>
+              <span className="hint">optional</span>
+            </label>
+            <input id="task_due" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} disabled={saving} />
+          </div>
+
+          <div className="form-actions">
+            <button type="button" className="btn" onClick={onClose} disabled={saving}>
+              Cancel
+            </button>
+            <button type="submit" className="btn btn-primary" disabled={saving || !title.trim()}>
+              {saving ? "Creating…" : "Create task"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// Members to assign to: the team's list, or, failing that, whoever already has a task.
+function assignees(tasks, teamInfo) {
+  if (teamInfo?.members_detailed?.length) return teamInfo.members_detailed;
   const map = new Map();
-  // Fallback: deduce from tasks
   tasks.forEach((t) => {
     if (t.assigned_to_id && t.assigned_to_name) {
       map.set(t.assigned_to_id, { id: t.assigned_to_id, display_name: t.assigned_to_name });

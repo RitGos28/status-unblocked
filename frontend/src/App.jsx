@@ -62,7 +62,7 @@ export default function App() {
 
     // Route: /manager
     if (pathname === "/manager") {
-      return <ManagerPage navigate={navigate} />;
+      return <ManagerPage navigate={navigate} searchParams={searchParams} />;
     }
 
     // Route: /me/data

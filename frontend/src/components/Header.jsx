@@ -1,102 +1,67 @@
 import React from "react";
-import { ShieldCheck, LogOut, Send, BookOpen, Zap, Users, Database, Briefcase } from "lucide-react";
+import { LogOut } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import { Avatar } from "./ui";
+
+const LINKS = [
+  { to: "/submit", label: "Submit", match: (p) => p === "/submit" },
+  { to: "/digests", label: "Digests", match: (p) => p.startsWith("/digest") || p.startsWith("/evidence") },
+  { to: "/me/team", label: "Team", match: (p) => p === "/me/team" },
+  { to: "/manager", label: "Manager", match: (p) => p === "/manager" },
+  { to: "/me/teams", label: "Teams bot", match: (p) => p === "/me/teams" },
+  { to: "/me/data", label: "My data", match: (p) => p === "/me/data" },
+];
 
 export default function Header({ currentPath, navigate }) {
   const { user, logout } = useAuth();
 
-  const handleLogout = async (e) => {
-    e.preventDefault();
+  const handleLogout = async () => {
     await logout();
     navigate("/?signed_out=1");
   };
 
-  const initials = user
-    ? user.display_name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()
-    : "";
-
   return (
     <header className="app-header">
-      <div className="brand-wrapper" onClick={() => navigate("/")}>
-        <ShieldCheck className="brand-icon" />
-        <span className="brand-title">Status Unblocked</span>
-      </div>
+      <button type="button" className="brand" onClick={() => navigate("/")}>
+        <span className="brand-mark" aria-hidden="true" />
+        Status Unblocked
+      </button>
 
       {user && (
-        <nav className="nav-links">
-          <button
-            type="button"
-            className={`nav-link ${currentPath === "/submit" ? "active" : ""}`}
-            onClick={() => navigate("/submit")}
-          >
-            <Send size={14} /> Submit
-          </button>
-          <button
-            type="button"
-            className={`nav-link ${currentPath.startsWith("/digest") ? "active" : ""}`}
-            onClick={() => navigate("/digests")}
-          >
-            <BookOpen size={14} /> Digests
-          </button>
-          <button
-            type="button"
-            className={`nav-link ${currentPath === "/me/team" ? "active" : ""}`}
-            onClick={() => navigate("/me/team")}
-          >
-            <Users size={14} /> Team
-          </button>
-          <button
-            type="button"
-            className={`nav-link ${currentPath === "/manager" ? "active" : ""}`}
-            onClick={() => navigate("/manager")}
-          >
-            <Briefcase size={14} /> Manager
-          </button>
-          <button
-            type="button"
-            className={`nav-link ${currentPath === "/me/teams" ? "active" : ""}`}
-            onClick={() => navigate("/me/teams")}
-          >
-            <Zap size={14} /> Teams
-          </button>
-          <button
-            type="button"
-            className={`nav-link ${currentPath === "/me/data" ? "active" : ""}`}
-            onClick={() => navigate("/me/data")}
-          >
-            <Database size={14} /> My data
-          </button>
+        <nav className="nav" aria-label="Main">
+          {LINKS.map((l) => (
+            <button
+              key={l.to}
+              type="button"
+              className={`nav-link ${l.match(currentPath) ? "active" : ""}`}
+              onClick={() => navigate(l.to)}
+            >
+              {l.label}
+            </button>
+          ))}
         </nav>
       )}
 
-      <div className="header-user-meta">
+      <div className="header-right">
         {user ? (
           <>
-            <div className="user-pill">
-              <div className="user-avatar">{initials}</div>
-              <span style={{ color: "var(--text-secondary)", fontWeight: 500, fontSize: 13 }}>
-                {user.display_name}
-              </span>
-              <span style={{ color: "var(--border-strong)" }}>·</span>
-              <span style={{ color: "var(--text-muted)", fontSize: 12 }}>{user.team_name}</span>
-            </div>
+            <span className="user-chip">
+              <Avatar name={user.display_name} />
+              <strong>{user.display_name}</strong>
+              <span>{user.team_name}</span>
+            </span>
             <button
               type="button"
+              className="btn btn-ghost btn-sm btn-icon"
               onClick={handleLogout}
-              className="btn btn-ghost"
-              style={{ padding: "6px 10px", fontSize: 13, gap: 5 }}
               title="Sign out"
+              aria-label="Sign out"
             >
-              <LogOut size={13} />
+              <LogOut size={14} />
             </button>
           </>
         ) : (
-          <button
-            type="button"
-            className="btn btn-outline"
-            onClick={() => navigate("/login")}
-            style={{ padding: "6px 14px", fontSize: 13 }}
-          >
+          <button type="button" className="btn btn-sm" onClick={() => navigate("/login")}>
             Sign in
           </button>
         )}

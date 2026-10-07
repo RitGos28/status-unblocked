@@ -1,15 +1,18 @@
 import React, { useState } from "react";
 import { useAuth } from "../context/AuthContext";
-import { AlertTriangle, ArrowRight, KeyRound, UserPlus, Users, LogIn } from "lucide-react";
+import { Notice, Segmented } from "../components/ui";
+
+const MODES = [
+  { value: "login", label: "Sign in" },
+  { value: "join", label: "Join a team" },
+];
 
 export default function LoginPage({ navigate }) {
   const { login, joinTeam, user } = useAuth();
-  const [tab, setTab] = useState("login"); // "login" | "join"
+  const [mode, setMode] = useState("login");
   const [teamCode, setTeamCode] = useState("");
   const [name, setName] = useState("");
-  const [tz, setTz] = useState(
-    Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Kolkata"
-  );
+  const [tz, setTz] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
 
@@ -18,7 +21,7 @@ export default function LoginPage({ navigate }) {
     setSubmitting(true);
     setError(null);
     try {
-      if (tab === "join") {
+      if (mode === "join") {
         await joinTeam(teamCode, name, tz);
       } else {
         await login(teamCode, name);
@@ -27,8 +30,8 @@ export default function LoginPage({ navigate }) {
     } catch (err) {
       setError(
         err.message ||
-          (tab === "join"
-            ? "Could not join team with that code."
+          (mode === "join"
+            ? "Could not join a team with that code."
             : "That team code and name do not match anyone.")
       );
     } finally {
@@ -36,76 +39,48 @@ export default function LoginPage({ navigate }) {
     }
   };
 
+  const joining = mode === "join";
+
   return (
-    <div style={{ maxWidth: 460, margin: "40px auto 0" }}>
-      <div className="card card-elevated" style={{ padding: "36px 32px" }}>
-        {/* Toggle Mode */}
-        <div className="tab-pill-group" style={{ marginBottom: 24 }}>
-          <button
-            type="button"
-            className={`tab-pill ${tab === "login" ? "active" : ""}`}
-            onClick={() => {
-              setTab("login");
-              setError(null);
-            }}
-          >
-            <LogIn size={14} />
-            <span>Sign in</span>
-          </button>
-          <button
-            type="button"
-            className={`tab-pill ${tab === "join" ? "active" : ""}`}
-            onClick={() => {
-              setTab("join");
-              setError(null);
-            }}
-          >
-            <UserPlus size={14} />
-            <span>Join team with code</span>
-          </button>
-        </div>
+    <div className="narrow">
+      <div className="row-between mb-16">
+        <h1>{joining ? "Join a team" : "Sign in"}</h1>
+        <Segmented
+          options={MODES}
+          value={mode}
+          onChange={(v) => {
+            setMode(v);
+            setError(null);
+          }}
+        />
+      </div>
+      <p className="lead mb-24">
+        {joining
+          ? "Enter the code your team shared with you and the name you want to be listed under."
+          : "Your team's code and the name your team lists you under. There are no passwords."}
+      </p>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
-          <KeyRound size={20} color="var(--accent-bright)" />
-          <h3 style={{ fontSize: 19, margin: 0 }}>
-            {tab === "login" ? "Sign in to your team" : "Join team with code"}
-          </h3>
-        </div>
-        <p className="muted" style={{ fontSize: 13, marginBottom: 22 }}>
-          {tab === "login"
-            ? "Your team's code, and the name your team knows you by. There are no passwords."
-            : "Enter the team code shared by your team or manager, along with your name to join."}
-        </p>
-
+      <div className="card">
         {user && (
-          <p className="notice-box notice-info" style={{ fontSize: 13, marginBottom: 18 }}>
-            Currently signed in as <strong>{user.display_name}</strong>. Submitting will switch your active session.
-          </p>
+          <Notice tone="info">
+            You are signed in as {user.display_name}. Signing in again switches who you are.
+          </Notice>
         )}
-
-        {error && (
-          <div className="notice-box notice-warn" style={{ marginBottom: 18 }}>
-            <AlertTriangle size={16} />
-            <span>{error}</span>
-          </div>
-        )}
+        {error && <Notice tone="danger">{error}</Notice>}
 
         <form onSubmit={handleSubmit}>
           <div className="form-group">
             <label htmlFor="team_code">
               <span>Team code</span>
-              <span className="hint">
-                {tab === "login"
-                  ? "from your team page"
-                  : "shared by your manager / local or deployed team"}
-              </span>
+              <span className="hint">{joining ? "shared by your team" : "on your Team page"}</span>
             </label>
             <input
               id="team_code"
               type="text"
+              className="input-caps"
               value={teamCode}
               onChange={(e) => setTeamCode(e.target.value)}
-              placeholder="e.g. CORE-7K3MQ"
+              placeholder="CORE-7K3MQ"
               autoComplete="off"
               autoCapitalize="characters"
               spellCheck={false}
@@ -117,34 +92,33 @@ export default function LoginPage({ navigate }) {
           <div className="form-group">
             <label htmlFor="name">
               <span>Your name</span>
-              <span className="hint">
-                {tab === "login" ? "as your team lists you" : "how you want to appear on the team"}
-              </span>
+              <span className="hint">{joining ? "as it should appear" : "as your team lists you"}</span>
             </label>
             <input
               id="name"
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Aarav Sharma"
+              placeholder="Aarav Sharma"
               autoComplete="name"
               disabled={submitting}
               required
             />
           </div>
 
-          {tab === "join" && (
+          {joining && (
             <div className="form-group">
               <label htmlFor="tz">
-                <span>Timezone</span>
-                <span className="hint">for standup cycles & cutoffs</span>
+                <span>Time zone</span>
+                <span className="hint">sets your standup day</span>
               </label>
               <input
                 id="tz"
                 type="text"
                 value={tz}
                 onChange={(e) => setTz(e.target.value)}
-                placeholder="e.g. Asia/Kolkata or UTC"
+                placeholder="Asia/Kolkata"
+                spellCheck={false}
                 disabled={submitting}
               />
             </div>
@@ -152,40 +126,19 @@ export default function LoginPage({ navigate }) {
 
           <button
             type="submit"
-            className="btn btn-primary"
+            className="btn btn-primary btn-block mt-8"
             disabled={submitting || !teamCode.trim() || !name.trim()}
-            style={{ width: "100%", marginTop: 8 }}
           >
-            {submitting ? (
-              <span className="loading-spinner" style={{ width: 14, height: 14 }} />
-            ) : tab === "login" ? (
-              "Sign in"
-            ) : (
-              "Join team"
-            )}{" "}
-            {!submitting && <ArrowRight size={14} />}
+            {submitting ? <span className="loading-spinner" /> : joining ? "Join team" : "Sign in"}
           </button>
         </form>
-
-        <div
-          style={{
-            marginTop: 24,
-            paddingTop: 16,
-            borderTop: "1px solid var(--border-subtle)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 7,
-            color: "var(--text-muted)",
-            fontSize: 12,
-          }}
-        >
-          <Users size={13} />
-          {tab === "login"
-            ? "New here? Switch to 'Join team with code' above to create your profile."
-            : "One shared team code connects all members seamlessly."}
-        </div>
       </div>
+
+      <p className="muted mt-16">
+        {joining
+          ? "Already on the team? Use Sign in instead."
+          : "New to the team? Choose Join a team and use the same code."}
+      </p>
     </div>
   );
 }
