@@ -13,10 +13,11 @@ from fastapi import Depends, Request
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
+from standup.auth.manager import MANAGER_SESSION_KEY
 from standup.config import Settings, get_settings
 from standup.db.models import Member
 from standup.db.session import get_session_factory
-from standup.domain.errors import NotFoundError, UnauthorizedError
+from standup.domain.errors import ManagerUnauthorizedError, NotFoundError, UnauthorizedError
 from standup.domain.models import Clock, SystemClock
 from standup.ingestion.permalink import describe_missing_permalink
 from standup.summarize.base import Summarizer
@@ -64,9 +65,7 @@ def get_summarizer(settings: Annotated[Settings, Depends(get_settings)]) -> Summ
     """
     if settings.summarizer == "rules":
         return RulesSummarizer()
-    raise ValueError(
-        f"unknown summarizer {settings.summarizer!r} (available: 'rules')"
-    )
+    raise ValueError(f"unknown summarizer {settings.summarizer!r} (available: 'rules')")
 
 
 def tracker_from_settings(settings: Settings) -> TrackerAdapter:
@@ -107,12 +106,46 @@ def ensure_same_team(member: Member, team_id: str, what: str) -> None:
     """Team scoping, in one place.
 
     Another team's resource answers 404, not 403, so its existence is not
-    disclosed. There is no override and no admin role (invariant 7).
+    disclosed. Members have no override: the manager portal reads teams
+    through its own routes in ``api/manager.py``, never through these.
     """
     if member.team_id != team_id:
         raise NotFoundError(f"That {what} does not exist, or it belongs to another team.")
+
+
+def get_optional_manager(
+    request: Request, settings: Annotated[Settings, Depends(get_settings)]
+) -> str | None:
+    """The signed-in manager's username, or None. Nothing when the portal is off."""
+    if not settings.manager_enabled:
+        return None
+    username = request.session.get(MANAGER_SESSION_KEY)
+    if not username or username != settings.manager_username.strip():
+        return None
+    return str(username)
+
+
+def get_current_manager(
+    manager: Annotated[str | None, Depends(get_optional_manager)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> str:
+    """A signed-in manager, or 401 (404 when the portal is not configured)."""
+    if not settings.manager_enabled:
+        raise NotFoundError(
+            "The manager portal is not switched on: set STANDUP_MANAGER_USERNAME "
+            "and STANDUP_MANAGER_PASSWORD."
+        )
+    if manager is None:
+        raise ManagerUnauthorizedError(
+            "Sign in to the manager portal with its username and password."
+        )
+    return manager
+
+
 AppSettings = Annotated[Settings, Depends(get_settings)]
 AppClock = Annotated[Clock, Depends(get_clock)]
 AppSummarizer = Annotated[Summarizer, Depends(get_summarizer)]
 CurrentMember = Annotated[Member, Depends(get_current_member)]
 OptionalMember = Annotated[Member | None, Depends(get_optional_member)]
+CurrentManager = Annotated[str, Depends(get_current_manager)]
+OptionalManager = Annotated[str | None, Depends(get_optional_manager)]

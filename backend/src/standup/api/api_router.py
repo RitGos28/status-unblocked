@@ -99,19 +99,22 @@ def api_logout(request: Request) -> dict[str, Any]:
     return {"success": True}
 
 
-@router.get("/digests")
-def api_list_digests(session: DbSession, member: CurrentMember) -> dict[str, Any]:
-    """List standup cycles and digests for the viewer's team."""
+def cycle_rows(session: DbSession, team_id: str) -> list[dict[str, Any]]:
+    """One team's standup days, newest first, each with its latest digest.
+
+    Shared by the member's list and the manager portal, so both show the same
+    days and link the same build (invariant 14: by build order, not clock).
+    """
     cycles = (
         session.execute(
             select(StandupCycle)
-            .where(StandupCycle.team_id == member.team_id)
+            .where(StandupCycle.team_id == team_id)
             .order_by(StandupCycle.local_date.desc())
         )
         .scalars()
         .all()
     )
-
+    team = session.get(Team, team_id)
     rows = []
     for cycle in cycles:
         digest = latest_digest(session, cycle.id)
@@ -124,7 +127,6 @@ def api_list_digests(session: DbSession, member: CurrentMember) -> dict[str, Any
             .scalars()
             .all()
         )
-        team = session.get(Team, cycle.team_id)
         rows.append(
             {
                 "cycle": {
@@ -144,10 +146,15 @@ def api_list_digests(session: DbSession, member: CurrentMember) -> dict[str, Any
                 "team_name": team.name if team else "Team",
             }
         )
+    return rows
 
+
+@router.get("/digests")
+def api_list_digests(session: DbSession, member: CurrentMember) -> dict[str, Any]:
+    """List standup cycles and digests for the viewer's team."""
     return {
         "viewer": _format_member(member),
-        "rows": rows,
+        "rows": cycle_rows(session, member.team_id),
     }
 
 
@@ -210,7 +217,16 @@ def api_view_digest(
     if digest is None or cycle is None:
         raise NotFoundError("That digest does not exist, or it belongs to another team.")
     ensure_same_team(member, cycle.team_id, "digest")
+    return digest_payload(session, digest, cycle, clock.now()) | {
+        "viewer": _format_member(member)
+    }
 
+
+def digest_payload(
+    session: DbSession, digest: Digest, cycle: StandupCycle, now: datetime
+) -> dict[str, Any]:
+    """A digest as the React app renders it: sections of validated claims,
+    each with its citations and tracker issue. Shared with the manager portal."""
     team = session.get(Team, cycle.team_id)
     fingerprints = [c.tracker_fingerprint for c in digest.claims if c.tracker_fingerprint]
     links = {
@@ -219,7 +235,6 @@ def api_view_digest(
             select(TrackerLink).where(TrackerLink.fingerprint.in_(fingerprints))
         ).scalars()
     }
-    now = clock.now()
     issues = {
         fp: {
             "number": link.issue_number,
@@ -275,7 +290,6 @@ def api_view_digest(
         },
         "team_name": team.name if team else "Team",
         "sections": sections,
-        "viewer": _format_member(member),
     }
 
 
@@ -332,7 +346,12 @@ def api_view_evidence(
         object_ids={"update_item_id": item_id, "update_id": update.id},
         purpose="citation verification",
     )
+    return evidence_payload(item, update)
 
+
+def evidence_payload(item: UpdateItem, update: Update) -> dict[str, Any]:
+    """The stored text around a cited span. The caller has already recorded
+    the audit row, because who is looking differs (a member or the manager)."""
     if update.is_purged or update.raw_text is None:
         return {
             "expired": True,

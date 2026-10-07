@@ -57,6 +57,9 @@ export STANDUP_GITHUB_API_URL="$GH"
 # to a local fake connector instead of Microsoft.
 export STANDUP_TEAMS_ENABLED=true
 export CONNECTIONS__SERVICE_CONNECTION__SETTINGS__ANONYMOUS_ALLOWED=True
+# The manager portal: one username and password pair, for this run only.
+export STANDUP_MANAGER_USERNAME=manager
+export STANDUP_MANAGER_PASSWORD="demo-check-$(date +%s)-manager"
 replay() { $PY -m scripts.teams_replay "$@" --app "$BASE" --connector "$TEAMS" >/dev/null; }
 bot_said() { curl -s "$TEAMS/messages"; }
 
@@ -346,6 +349,45 @@ curl -s -b "$WORK/ada.jar" "$BASE/api/me/export" | $PY -c 'import json,sys; asse
 API_LATEST="$(curl -s -b "$WORK/ada.jar" "$BASE/api/digests" | $PY -c 'import json,sys; print(json.load(sys.stdin)["rows"][0]["digest"]["id"])')"
 [ "$API_LATEST" = "$REBUILT" ] || fail "/api/digests links the last build ($API_LATEST, not $REBUILT)"
 pass "React app's API: My data, export, Markdown and CSV downloads match the pages; another team gets 404; the list links the last build"
+
+# --- the manager portal: one password, team admin, a period summary -----------
+mgr_login() {
+    status -c "$1" -X POST "$BASE/api/manager/login" -H 'content-type: application/json' \
+        --data "{\"username\":\"$2\",\"password\":\"$3\"}"
+}
+mgr_json() { curl -s -b "$WORK/mgr.jar" -H 'content-type: application/json' "$@"; }
+[ "$(status "$BASE/api/manager/teams")" = 401 ] || fail "signed out: /api/manager/teams is 401"
+[ "$(mgr_login "$WORK/mgr.jar" manager wrong-password)" = 401 ] || fail "a wrong manager password is refused"
+[ "$(mgr_login "$WORK/mgr.jar" nobody "$STANDUP_MANAGER_PASSWORD")" = 401 ] || fail "a wrong manager username is refused"
+[ "$(mgr_login "$WORK/mgr.jar" manager "$STANDUP_MANAGER_PASSWORD")" = 200 ] || fail "the manager signs in"
+CORE_ID="$(mgr_json "$BASE/api/manager/teams" | $PY -c 'import json,sys; print([t["id"] for t in json.load(sys.stdin)["teams"] if t["slug"]=="core"][0])')"
+[ -n "$CORE_ID" ] || fail "the manager sees Core Platform in the team list"
+ADD_BODY='{"display_name":"Erin Novak","tz":"Europe/Dublin"}'
+grep -q '"display_name":"Erin Novak"' <<<"$(mgr_json -X POST "$BASE/api/manager/teams/$CORE_ID/members" --data "$ADD_BODY")" \
+    || fail "the manager adds Erin Novak to Core Platform"
+[ "$(status -b "$WORK/mgr.jar" -X POST "$BASE/api/manager/teams/$CORE_ID/members" -H 'content-type: application/json' --data "$ADD_BODY")" = 409 ] \
+    || fail "adding the same name twice is refused"
+grep -q "Erin Novak" <<<"$(curl -s -b "$WORK/ada.jar" "$BASE/me/team")" || fail "Ada's Team page lists Erin"
+[ "$(sign_in "$WORK/erin.jar" "$CORE_CODE" "Erin Novak")" = 303 ] || fail "Erin signs in with the team code and her name"
+grep -q "added you to the team" <<<"$(curl -s -b "$WORK/erin.jar" "$BASE/api/me/data")" || fail "Erin's My data says the manager added her"
+pass "manager portal: wrong credentials refused; the manager adds Erin to Core Platform, Ada sees her on Team, Erin signs in"
+mgr_json "$BASE/api/manager/teams/$CORE_ID/summary?days=7" >"$WORK/summary.json"
+$PY - "$WORK/summary.json" <<'EOF2' || fail "the 7-day summary lists Ada's two-day blocker as open, with the digests and per-member lines"
+import json, sys
+d = json.load(open(sys.argv[1]))
+open_ = d["blockers"]["open"]
+assert any("staging credentials" in b["text"] and b["days_reported"] == 2 for b in open_), open_
+assert d["totals"]["digests_built"] >= 2 and d["totals"]["open_blockers"] >= 1, d["totals"]
+assert {p["display_name"] for p in d["by_member"]} >= {"Ada Okafor", "Bruno Silva", "Chen Wei"}
+assert all(line["citations"] for p in d["by_member"] for line in p["lines"])
+EOF2
+grep -q '"quote":"Waiting on staging credentials' <<<"$(mgr_json "$BASE/api/manager$EVIDENCE")" \
+    || fail "the manager opens Ada's evidence through the portal"
+grep -q "manager (manager)" <<<"$(curl -s -b "$WORK/ada.jar" "$BASE/api/me/data")" \
+    || fail "Ada's My data shows the manager opened her update"
+grep -q "Waiting on staging credentials" <<<"$(mgr_json "$BASE/api/manager/digest/$REBUILT")" || fail "the manager reads today's digest"
+! grep -q "$STANDUP_MANAGER_PASSWORD" "$WORK/server.log" || fail "the manager password never appears in the server log"
+pass "manager portal: the 7-day summary is read from the digests (Ada's blocker open for 2 days, every line cited); a manager's evidence view shows on Ada's My data"
 
 # --- ops and error pages -----------------------------------------------------
 curl -s "$BASE/scope" | grep -q '"scope_violations":1' || fail "/scope counts the one refused channel message"

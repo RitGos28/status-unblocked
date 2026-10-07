@@ -69,7 +69,7 @@ The app logs a `config.demo_secret_key` warning: expected, it is the public demo
 - Open `/digests` without signing in: **401**, "Sign in with your team code".
 - Open `/login`. Sign-in is two fields: the team's code and your name, no password. The seed printed a code per team (for example `CORE-7K3MQ` for Core Platform). Type Core Platform's code with the name **Ada Okafor**, however you capitalise or space them: you land on **Digests**, which lists only Core Platform's days. Mobile also has a day today (Dana filed an update), and it is not listed; the header shows who you are signed in as.
 - Try Core Platform's code with a name that is not on the team, or a code no team has: the same "do not match anyone" message, so a code cannot be used to find out whether a team exists.
-- **Team** in the header shows the code to every member, with who is on the team. There is no owner of the code and no manager: anyone on the team shares it, and `python -m scripts.team_codes --team core --rotate` issues a new one (people already signed in stay signed in).
+- **Team** in the header shows the code to every member, with who is on the team. There is no owner of the code: anyone on the team shares it (the manager portal in 1c shows the same code), and `python -m scripts.team_codes --team core --rotate` issues a new one (people already signed in stay signed in).
 - After step 3 (once a digest exists), sign in as **Dana Park** with Mobile's code and paste a Core Platform digest or evidence URL: **404**. Another team's pages are not just forbidden; they do not exist for her. Core Platform's code with Dana's name does not sign her in at all.
 
 ## 1b. The Teams bot (no tenant needed)
@@ -81,6 +81,14 @@ Activities are replayed to the bot as Teams would send them (`scripts/teams_repl
 - `python -m scripts.teams_replay channel_mention` → "I don't read channel conversations…".
 - After the scheduler pass in step 3, the connector shows one "The Core Platform digest for <date> is ready (… blockers, 1 still open from an earlier day)" message for Ada per day's digest, sent with no credentials. (Each pass also logs an SDK warning, "App ID is not provided": expected in this anonymous demo mode.)
 - `python -m scripts.teams_replay personal_card_submit` → "Recorded for Core Platform": a card submission goes through the same ingest path as the web form.
+
+## 1c. The manager portal
+The React app (`npm run dev` in `frontend/`, or `./run.sh all`, then `http://localhost:5173`; in Docker, `http://localhost:3000`) has a **Manager** link in the header. It is a separate, password-protected sign-in: `.env.example` sets username `manager` and password `standup-manager-2026` (`STANDUP_MANAGER_USERNAME`, `STANDUP_MANAGER_PASSWORD`; with either unset the portal is off and every `/api/manager` address answers 404).
+- A wrong username or password gets the same "do not match" message. Sign in: the portal shows one team at a time, with **Summary**, **Digests** and **Members** tabs.
+- **Members**: add **Erin Novak** (time zone `Europe/Dublin`). She appears on the list at once and on every member's **Team** page; sign in as Erin with Core Platform's code and her name. Adding the same name again is refused. Erin's **My data** records that the manager added her.
+- **Digests**: every standup day with its digest; **Build digest** or **Rebuild** does what a member's button does. Read a digest: it is the same digest, every line a verbatim quote with a **source** link.
+- **Summary** (after step 3, so digests exist): the last 7, 14 or 30 days read from the digests, never summarised again. **Open blockers** lists Ada's "Waiting on staging credentials from infra." as reported on 2 days with its issue number; **Day by day** counts updates, blockers, progress and plans per day; **By member** lists each person's digest lines in their own words. Nothing is scored, ranked or counted per person, and nobody is listed for *not* submitting.
+- Open a **source** from the portal, then sign in as Ada and open **My data**: "manager (manager) opened your update". The manager is the one login with its own password, and it leaves the same trail as anyone else.
 
 ## 2. Submit, and resubmit
 - As Ada, **Submit update**. The seed already gave her an update today, so this one replaces it in the digest; so does every later one (the earlier ones are kept unedited, because stored text is never rewritten). Double-clicking Submit is safe.

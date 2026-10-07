@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse, Response
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.sessions import SessionMiddleware
 
-from standup.api import api_router, auth, digests, evidence, health, me, web_forms
+from standup.api import api_router, auth, digests, evidence, health, manager, me, web_forms
 from standup.config import DEMO_SECRET_KEY, get_settings
 from standup.db.models import Member
 from standup.db.session import create_all, session_scope
@@ -153,6 +153,9 @@ def create_app() -> FastAPI:
     app.include_router(evidence.router)
     app.include_router(me.router)
     app.include_router(api_router.router)
+    # Always mounted; every route answers 404 until the username and password
+    # are configured (see deps.get_current_manager).
+    app.include_router(manager.router)
     if settings.teams_enabled:
         # Imported only when switched on, so the SDK is not loaded otherwise.
         from standup.api.teams_router import mount_teams

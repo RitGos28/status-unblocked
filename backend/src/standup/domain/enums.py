@@ -54,3 +54,6 @@ class AuditAction(StrEnum):
     DATA_EXPORTED = "data.exported"
     DATA_DELETED = "data.deleted"
     TRACKER_WRITE = "tracker.write"
+    # The manager portal added this member to a team. Not a read of anyone's
+    # text, but recorded on the same chain so the member can see who did it.
+    MEMBER_ADDED = "member.added"

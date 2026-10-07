@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from "react";
-import { api } from "../api/client";
+import { api, managerApi } from "../api/client";
 import { ArrowLeft, ExternalLink, Quote, ShieldCheck, AlertCircle, User, Clock, Hash } from "lucide-react";
 
-export default function EvidencePage({ itemId, navigate }) {
+export default function EvidencePage({ itemId, navigate, manager = false }) {
+  const backTo = manager ? "/manager" : "/digests";
+  const backLabel = manager ? "Back to the manager portal" : "Back to digests";
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -13,7 +15,7 @@ export default function EvidencePage({ itemId, navigate }) {
       try {
         setLoading(true);
         setError(null);
-        const res = await api.getEvidence(itemId);
+        const res = await (manager ? managerApi.getEvidence(itemId) : api.getEvidence(itemId));
         if (isMounted) setData(res);
       } catch (err) {
         if (isMounted) setError(err.message || "Failed to load evidence.");
@@ -23,7 +25,7 @@ export default function EvidencePage({ itemId, navigate }) {
     };
     loadEvidence();
     return () => { isMounted = false; };
-  }, [itemId]);
+  }, [itemId, manager]);
 
   if (loading) {
     return (
@@ -42,8 +44,8 @@ export default function EvidencePage({ itemId, navigate }) {
           <AlertCircle size={17} />
           <span>{error}</span>
         </div>
-        <button type="button" className="btn btn-outline" onClick={() => navigate("/digests")}>
-          <ArrowLeft size={14} /> Back to digests
+        <button type="button" className="btn btn-outline" onClick={() => navigate(backTo)}>
+          <ArrowLeft size={14} /> {backLabel}
         </button>
       </div>
     );
@@ -65,9 +67,9 @@ export default function EvidencePage({ itemId, navigate }) {
           type="button"
           className="btn btn-ghost"
           style={{ padding: "5px 10px", fontSize: 13, color: "var(--text-muted)", marginBottom: 16 }}
-          onClick={() => navigate("/digests")}
+          onClick={() => navigate(backTo)}
         >
-          <ArrowLeft size={13} /> Back to digests
+          <ArrowLeft size={13} /> {backLabel}
         </button>
         <h1>Source Verification</h1>
       </div>
@@ -146,8 +148,8 @@ export default function EvidencePage({ itemId, navigate }) {
       </div>
 
       <div style={{ marginTop: 20 }}>
-        <button type="button" className="btn btn-outline" onClick={() => navigate("/digests")}>
-          <ArrowLeft size={14} /> Back to digests
+        <button type="button" className="btn btn-outline" onClick={() => navigate(backTo)}>
+          <ArrowLeft size={14} /> {backLabel}
         </button>
       </div>
     </div>

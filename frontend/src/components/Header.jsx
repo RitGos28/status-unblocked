@@ -1,5 +1,5 @@
 import React from "react";
-import { ShieldCheck, LogOut, Send, BookOpen, Zap, Users, Database } from "lucide-react";
+import { ShieldCheck, LogOut, Send, BookOpen, Zap, Users, Database, Briefcase } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 
 export default function Header({ currentPath, navigate }) {
@@ -63,6 +63,14 @@ export default function Header({ currentPath, navigate }) {
       )}
 
       <div className="header-user-meta">
+        <button
+          type="button"
+          className={`nav-link ${currentPath.startsWith("/manager") ? "active" : ""}`}
+          onClick={() => navigate("/manager")}
+          title="The manager portal: team admin and progress summaries"
+        >
+          <Briefcase size={14} /> Manager
+        </button>
         {user ? (
           <>
             <div className="user-pill">

@@ -1,8 +1,9 @@
 """Sign in with a team code and your name; sign out.
 
-There are no passwords and no roles. A team code is shared by the whole team
-(every member sees it on their Team page) and the name says who you are; see
-``auth/team_code.py`` for the trade that makes.
+Members have no passwords and no roles. A team code is shared by the whole
+team (every member sees it on their Team page) and the name says who you are;
+see ``auth/team_code.py`` for the trade that makes. The manager portal signs
+in separately, with a username and password, at ``/api/manager/login``.
 """
 
 from fastapi import APIRouter, Form, Request, Response

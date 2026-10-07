@@ -157,3 +157,32 @@ def test_demo_secret_key_works_locally():
 def test_demo_secret_key_is_refused_outside_local():
     with pytest.raises(ValidationError, match="demo key published in .env.example"):
         Settings(_env_file=None, secret_key=DEMO_SECRET_KEY, env="production")
+
+
+def test_manager_portal_is_off_without_both_credentials():
+    base = {"_env_file": None, "secret_key": DEMO_SECRET_KEY, "env": "local"}
+    assert Settings(**base).manager_enabled is False
+    assert Settings(**base, manager_username="manager").manager_enabled is False
+    assert Settings(**base, manager_password="x").manager_enabled is False
+    assert Settings(**base, manager_username=" manager ", manager_password="x").manager_enabled
+
+
+def test_demo_manager_password_is_refused_outside_local():
+    from standup.config import DEMO_MANAGER_PASSWORD
+
+    ok = Settings(
+        _env_file=None,
+        secret_key="a-real-key-that-is-at-least-32-characters-long",
+        env="local",
+        manager_username="manager",
+        manager_password=DEMO_MANAGER_PASSWORD,
+    )
+    assert ok.manager_enabled
+    with pytest.raises(ValidationError, match="demo password published in .env.example"):
+        Settings(
+            _env_file=None,
+            secret_key="a-real-key-that-is-at-least-32-characters-long",
+            env="production",
+            manager_username="manager",
+            manager_password=DEMO_MANAGER_PASSWORD,
+        )

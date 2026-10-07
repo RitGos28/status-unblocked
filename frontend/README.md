@@ -11,6 +11,7 @@ Modern React application for Status Unblocked, built with Vite, React 18, and JS
 - **Rich Digest Viewer**: Verbatim quote claims, rule explanation subtext, tracker links with age badges, and one-click citation source navigation.
 - **Verifiable Evidence Inspector**: Canonical evidence view with character-offset highlights on original submissions and cryptographic audit notice.
 - **Teams Bot Linking**: Seamless 1:1 bot pairing code display with copy-to-clipboard functionality.
+- **Manager Portal** (`/#/manager`): a separate username/password sign-in; one team at a time with a 7/14/30-day summary read from the digests (open blockers, day-by-day counts, each person's lines), the day list with Build/Rebuild, and Add member. Demo credentials come from `backend/.env.example`.
 
 ## Development
 

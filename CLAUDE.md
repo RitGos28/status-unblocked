@@ -52,7 +52,7 @@ cd backend
 python3.13 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 
-pytest                                    # full suite (370 tests)
+pytest                                    # full suite (390 tests)
 pytest tests/unit                         # fast pass
 pytest tests/e2e -v                       # end-to-end smoke
 pytest tests/unit/test_validator.py       # one file
@@ -101,7 +101,7 @@ uvicorn standup.main:app --reload
 python -m scripts.team_codes     # every team's sign-in code; --team SLUG --rotate issues a new one
 ```
 
-Open `/login` and sign in with a team's code and a member's name, then `/submit` and `/digests`. `docker compose up --build` runs the demo with nothing set: Postgres, the API with the in-app scheduler, the React app behind nginx, and the fake GitHub. nginx (`frontend/nginx.conf`) serves only `/` and `/assets/` itself (the React app routes with `#/...`) and proxies every other path to the API, so `WEB_PORT` alone serves the whole app. Ports `APP_PORT`, `WEB_PORT`, `GITHUB_PORT`, bound to `BIND_ADDR`; links use `STANDUP_BASE_URL` and `GITHUB_PUBLIC_URL`, defaulting to `PUBLIC_HOST` plus the port. It defaults to the demo key and `STANDUP_ENV=local`; README's "Hosting on a server" sets `STANDUP_ENV=production` and a real key. In tests, `tests/helpers.login_as(client, member_id)` signs in through the real `/login` route with that member's team code and name.
+Open `/login` and sign in with a team's code and a member's name, then `/submit` and `/digests`. The manager portal is the React app's `/#/manager` (`npm run dev` in `frontend/`, or `./run.sh all`); `.env.example` sets its demo sign-in to username `manager`, password `standup-manager-2026`. `docker compose up --build` runs the demo with nothing set: Postgres, the API with the in-app scheduler, the React app behind nginx, and the fake GitHub. nginx (`frontend/nginx.conf`) serves only `/` and `/assets/` itself (the React app routes with `#/...`) and proxies every other path to the API, so `WEB_PORT` alone serves the whole app. Ports `APP_PORT`, `WEB_PORT`, `GITHUB_PORT`, bound to `BIND_ADDR`; links use `STANDUP_BASE_URL` and `GITHUB_PUBLIC_URL`, defaulting to `PUBLIC_HOST` plus the port. It defaults to the demo key and `STANDUP_ENV=local`; README's "Hosting on a server" sets `STANDUP_ENV=production` and a real key. In tests, `tests/helpers.login_as(client, member_id)` signs in through the real `/login` route with that member's team code and name.
 
 ### import-linter
 
@@ -182,8 +182,8 @@ src/standup/
   config.py        pydantic-settings, STANDUP_ prefix; .env.example fallback for the demo
   deps.py          DI: get_db, get_clock, get_summarizer; Jinja templates
   logging_conf.py  structlog + secret scrubbing
-  api/             health (+ /scope, /version), auth (/login form + /api/auth/login), me (/me/team, /me/teams, /me/data, /me/export), web_forms, evidence, digests (+ .md, .csv), teams_router, api_router (/api/*: JSON for the React app, reusing the page handlers for downloads and export)
-  auth/            team_code (pure: generate/normalise/format), signin (code + name -> member), teams_link (bot pairing codes)
+  api/             health (+ /scope, /version), auth (/login form + /api/auth/login), me (/me/team, /me/teams, /me/data, /me/export), web_forms, evidence, digests (+ .md, .csv), teams_router, api_router (/api/*: JSON for the React app, reusing the page handlers for downloads and export; exports cycle_rows/digest_payload/evidence_payload), manager (/api/manager/*: the portal, invariant 7)
+  auth/            team_code (pure: generate/normalise/format), signin (code + name -> member), teams_link (bot pairing codes), manager (pure: the portal's username + password check)
   domain/          enums, errors, models (Clock, SystemClock, FakeClock), timezones (+ as_utc), text (content_sha256), urls   (pure, zero I/O)
   ingestion/       base, web_adapter, teams_adapter (+ scope gate, card), csv_import, permalink, normalizer, service (the one ingest() path)
   summarize/       base, rules, validator, render, service
@@ -197,9 +197,11 @@ src/standup/
 
 Planned but **not yet written** — do not import these, and do not assume they exist:
 
-`api/privacy.py`, `api/admin.py`, `summarize/llm.py`, `summarize/prompts.py`, `privacy/{consent,visibility,redaction}.py`, member-initiated deletion (`/me/delete`), contest/correct on digest lines, syncing GitHub issue state back (the tracker reconcile job), proactive "time to file" prompts, `docs/LIA.md`, and a production deployment (HTTPS, a managed host; Compose runs it on one server over HTTP). README's "Not built yet" is the same list. (Export exists as `/me/export` in `api/me.py`; retention as `privacy/retention.py`.)
+`api/privacy.py`, `summarize/llm.py`, `summarize/prompts.py`, `privacy/{consent,visibility,redaction}.py`, member-initiated deletion (`/me/delete`), contest/correct on digest lines, syncing GitHub issue state back (the tracker reconcile job), proactive "time to file" prompts, `docs/LIA.md`, and a production deployment (HTTPS, a managed host; Compose runs it on one server over HTTP). README's "Not built yet" is the same list. (Export exists as `/me/export` in `api/me.py`; retention as `privacy/retention.py`.)
 
 **Auth is a shared team code plus the member's name, and team scoping is enforced.** `Team.join_code` is shown to every member at `/me/team`; `auth/signin.sign_in()` resolves code + name to one active member and answers the same way for a wrong code and a wrong name. A code proves membership of a team, not identity: do not build anything that assumes a session is unforgeable by a teammate. `deps.CurrentMember` resolves the signed-in member from the session cookie (401 otherwise). Every route that touches a team's data checks `deps.ensure_same_team()`, which answers 404 for another team's resources. A new route that reads digests, evidence or updates must do the same.
+
+**The manager portal is the one other login.** `STANDUP_MANAGER_USERNAME` and `STANDUP_MANAGER_PASSWORD` (both required to switch it on; `auth/manager.py` compares them constant-time) sign one manager in at `POST /api/manager/login`, stored as `session["manager"]` next to any member sign-in. `deps.CurrentManager` guards every `/api/manager` route: 404 while the portal is unconfigured, 401 when not signed in. The portal picks a team and reads it through its own routes in `api/manager.py`, never through the member routes, so `ensure_same_team` stays a member-only check. The React app serves it at `/#/manager`; there is no Jinja page for it.
 
 ---
 
@@ -235,7 +237,7 @@ Wanting to import a SQLAlchemy model into `summarize/` is the signal you are abo
 
 6. **Redaction must run before `SourceDoc` construction** once it exists (not built yet), so a secret cannot reach a third-party model even by accident.
 
-7. **No manager role.** No role hierarchy, no manager-only view, no per-person metrics. Digests are team-scoped and visible to every member equally. If a request needs "so the lead can see who didn't submit", that is the surveillance anti-pattern — push back rather than building it.
+7. **The manager sees what the team sees, and is seen doing it.** There is one manager login (`api/manager.py`), and it may: add members, read a team's digests and evidence, build a digest, and get a period summary. The summary is assembled from validated `DigestClaim` rows, never re-summarised, so it is exactly as faithful as the digests. What the portal must never get is anything a member cannot see about a teammate: no per-person metrics, fill rates, streaks or lateness, no "who has not submitted", no raw text outside the audited evidence view, no cross-team aggregation (one team at a time). Every manager read of someone's words is `record_audit`ed with `actor_kind="manager"` and shows on that person's My data as "<username> (manager)". Digests stay visible to every member equally. If a request needs "so the lead can see who didn't submit", that is the surveillance anti-pattern — push back rather than building it.
 
 8. **External writes go through the outbox.** `build_digest` only calls `tracker.outbox.enqueue_blocker_issues`; HTTP happens in `drain()`, after the response or from `scripts/drain_outbox`. `drain()` is single-runner: it must hold the `outbox-drain` lease (`db/lease.py`), because two drains could both see "no issue yet" for the same blocker and both create one. The build route commits before scheduling the drain, because FastAPI runs background tasks before `get_db` teardown commits. Pass the injected clock's `now` through (`build_digest(now=...)`), or outbox rows will not be due under a `FakeClock`.
 
@@ -270,7 +272,7 @@ Ruff excludes `src/standup/migrations/versions/` — Alembic writes those.
 
 ## Secrets and config
 
-- `SecretStr` for every credential. `config.py` requires `STANDUP_SECRET_KEY` (32+ chars); `STANDUP_GITHUB_TOKEN` becomes required with `STANDUP_TRACKER=github`, the three Teams `CONNECTIONS__…` keys with `STANDUP_TEAMS_ENABLED=true` (unless anonymous Playground mode, which is refused outside `local`/`test`), and `STANDUP_BASE_URL` with `STANDUP_SCHEDULER=true`. Startup names every missing key at once. Alembic reads only `DatabaseSettings`, so migrations need no secrets.
+- `SecretStr` for every credential. `config.py` requires `STANDUP_SECRET_KEY` (32+ chars); `STANDUP_MANAGER_PASSWORD` is optional but, like the demo key, its `.env.example` value (`config.DEMO_MANAGER_PASSWORD`) is refused outside `local`/`test`; `STANDUP_GITHUB_TOKEN` becomes required with `STANDUP_TRACKER=github`, the three Teams `CONNECTIONS__…` keys with `STANDUP_TEAMS_ENABLED=true` (unless anonymous Playground mode, which is refused outside `local`/`test`), and `STANDUP_BASE_URL` with `STANDUP_SCHEDULER=true`. Startup names every missing key at once. Alembic reads only `DatabaseSettings`, so migrations need no secrets.
 - `.env` is gitignored; **`.env.example` must stay complete** — every key present, with a working *demo* value where the demo needs one and blank where only a real account would do. It is the accountless demo's configuration (see the fallback above), so never put a real credential in it. Its `STANDUP_SECRET_KEY` is public: `config.DEMO_SECRET_KEY`, refused unless `STANDUP_ENV` is `local`/`test`, and the app logs `config.demo_secret_key` when it runs with it.
 - `logging_conf.py` scrubs sensitive key names and secret-shaped values (GitHub tokens, AWS keys, JWTs) from every log line. `tests/unit/test_logging.py` asserts a known secret never reaches the stream. Team codes travel in the sign-in form body, never in a path, so the access log does not need redacting; `demo_check.sh` asserts no code appears in the server log.
 

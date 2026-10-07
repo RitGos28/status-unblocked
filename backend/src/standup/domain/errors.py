@@ -15,9 +15,23 @@ class UnauthorizedError(StandupError):
     title = "Sign in with your team code"
 
 
+class ManagerUnauthorizedError(UnauthorizedError):
+    """No manager signed in. The portal has its own username and password."""
+
+    status_code = 401
+    title = "Sign in to the manager portal"
+
+
 class NotFoundError(StandupError):
     status_code = 404
     title = "Not found"
+
+
+class BadRequestError(StandupError):
+    """The request's own content is wrong: an empty name, an unknown time zone."""
+
+    status_code = 400
+    title = "Invalid input"
 
 
 class ValidationFailure(StandupError):
