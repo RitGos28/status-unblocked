@@ -42,7 +42,7 @@ docker compose logs api | grep -A4 "Team codes"   # the sign-in codes
 
 The React app is at `http://localhost:3000`, the server pages at `http://localhost:3000/login` (or straight from the backend at `http://localhost:8000/login`), the fake GitHub at `http://localhost:8091`. Postgres, the in-app scheduler and two days of made-up updates are included. Ports move with `WEB_PORT`, `APP_PORT` and `GITHUB_PORT` (`APP_PORT=9000 docker compose up`). The Teams steps (1b) and the scripts need the local setup below.
 
-**One command, locally** (needs the virtual environment from README's Getting started):
+**One command, locally** (needs the virtual environment from README's Quickstart):
 
 ```bash
 ./run.sh all        # backend on :8000 with both fakes, React dev server on :5173
@@ -178,7 +178,7 @@ The real GitHub repo and the real tenant need a real configuration, so put it in
 - **GitHub Issues write-back against a real repo:** set `STANDUP_GITHUB_API_URL=https://api.github.com` and `STANDUP_GITHUB_TOKEN` to a fine-grained token with Issues read/write on one repo, and `python -m scripts.set_github_repo --team core --repo owner/name`, then build a digest.
 - **The rendered card in a real Teams client, without a tenant:** Microsoft 365 Agents Playground. Install it with `npm install -g @microsoft/m365agentsplayground` (checked on npm: version 0.2.28; the older `@microsoft/teams-app-test-tool` is deprecated in its favour), run the app (the demo values already turn the bot on in anonymous mode), then run `agentsplayground` and set its bot endpoint to `http://127.0.0.1:8000/api/messages` (see `agentsplayground --help` for the option). Type `standup` to get the card.
 - **A real Teams tenant:** register an Entra app and Azure Bot, set the three `CONNECTIONS__…` variables and remove `ANONYMOUS_ALLOWED`, then sideload `python -m scripts.make_teams_zip --bot-id <app id> --base-url <public URL>`.
-- **Docker:** `docker compose up --build` (needs the Docker daemon running); see Setup. For a server, README's "Hosting on a server".
+- **Docker:** `docker compose up --build` (needs the Docker daemon running); see Setup. The comments at the top of `docker-compose.yml` list the settings for a server.
 
 ## Not built yet
 These are not in the code, so there is nothing to demo: consent for external processing (validator rule V7), redaction, member-initiated deletion, contest/correct on digest lines, an LLM summarizer, syncing GitHub issue state back into the digest, the legitimate-interest assessment (`docs/LIA.md`), and a production deployment with HTTPS. The in-app scheduler (`STANDUP_SCHEDULER=true`) runs in the Docker setup, but `demo_check.sh` exercises the same pass through `scripts/tick`.

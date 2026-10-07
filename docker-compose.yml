@@ -23,7 +23,7 @@
 #   GITHUB_PUBLIC_URL=https://standup-github.example.com (points at GITHUB_PORT)
 #   STANDUP_COOKIE_SECURE=true
 #   BIND_ADDR=127.0.0.1               publish ports on this machine only
-# README's "Hosting on a server" has the full commands.
+#   STANDUP_MANAGER_PASSWORD=<yours>  the manager portal's default password is public
 services:
   db:
     image: postgres:16-alpine
@@ -65,6 +65,8 @@ services:
       STANDUP_SECRET_KEY: ${STANDUP_SECRET_KEY:-demo-only-signing-key-published-in-env-example-never-deploy}
       STANDUP_LOG_JSON: "true"
       STANDUP_COOKIE_SECURE: ${STANDUP_COOKIE_SECURE:-false}
+      STANDUP_MANAGER_USERNAME: ${STANDUP_MANAGER_USERNAME:-manager}
+      STANDUP_MANAGER_PASSWORD: ${STANDUP_MANAGER_PASSWORD:-status2026}
       # Builds each team's digest at its cutoff and delivers blockers.
       STANDUP_SCHEDULER: "true"
       STANDUP_TRACKER: github

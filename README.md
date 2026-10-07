@@ -5,6 +5,30 @@
 
 ---
 
+## 🎯 The Problem
+
+**The brief** (*The Status-Update Tax*, [`projectstatement.txt`](projectstatement.txt)): on a distributed team, daily standups and status-chasing eat everyone's morning. Build a bot that collects short async updates from each member and summarises progress and blockers into one daily digest.
+
+A standup call puts 6–10 people across timezones in one slot to hear eight updates, most of which don't matter to any given listener. The usual fix, "just post your update in the channel", swaps one tax for another: a wall of text nobody reads, and blockers typed into the void.
+
+**Collecting updates is the easy part.** Three things are hard:
+
+1. **Summarising faithfully.** Ten updates into one digest without inventing or distorting anything. If a summary says someone is "unblocked" when they aren't, the digest is worse than useless.
+2. **Follow-through.** A blocker in a chat message has no owner and no status, and it scrolls away. Nothing knows on Wednesday that Monday's blocker is still open.
+3. **Trust.** The moment a status tool feels like surveillance, people write defensive updates and the data stops being worth reading.
+
+The brief names these as its three **enterprise-grade** requirements. Here is how each one is answered:
+
+| Requirement | What we built |
+| :--- | :--- |
+| **"Make summaries faithful and link each blocker back to its source message."** | Every digest line is the author's exact words. A faithfulness validator checks every line against its stored source before the digest ships, and drops any line that fails. Each line links to an evidence page that highlights the quoted words. |
+| **"Write structured output back to a task tracker."** | Each blocker becomes a GitHub issue with labels and a JSON block (who, the quote, first reported, days reported, links back). The same blocker on a later day adds a "Still blocked" comment instead of a duplicate issue. |
+| **"Respect channel and privacy boundaries — don't become surveillance."** | The Teams bot reads only messages sent to it directly and requests no Microsoft Graph permissions. Every opening of someone's stored update is audited, and they can see who opened it on **My Data**. Old updates are deleted after the team's retention period. |
+
+**Target:** about 90 seconds to write an update and 30 seconds to read the digest, instead of a 15-minute call.
+
+---
+
 ## ⚡ Quickstart (Run in 30 Seconds)
 
 You can run the entire stack locally with one command:
@@ -44,15 +68,24 @@ cd ..
 
 ## 🔑 Demo Credentials
 
-Status Unblocked is designed to be frictionless — no complicated sign-up forms or email confirmations:
+Status Unblocked is designed to be frictionless — no complicated sign-up forms or email confirmations.
 
 ### Team Member Login
-Sign in with your team's code and your name:
+Sign in with your team's code and your name. Each team's code is generated when the demo data is seeded, so every install has its own. The seed prints them, and you can print them again at any time:
 
-| Team | Team Code | Demo Members |
+```bash
+cd backend && python -m scripts.team_codes             # local
+docker compose exec api python -m scripts.team_codes   # Docker
+```
+
+The seed creates two teams of made-up updates, each person planted to show off a feature:
+
+| Team | Member | What their updates demonstrate |
 | :--- | :--- | :--- |
-| **Core Platform** | `CORE-AR9WS` | `Divyam Manas`, `Ritwik Gossain`, `Shresth Tiwari`, `Madhav Kumar`, `Pooja Hegde` |
-| **Mobile Team** | `MOBI-EFSHY` | `Vikram Malhotra` |
+| **Core Platform** | `Ritwik Gossain` | The same blocker on two days: listed as **Still Blocked** citing both days, and one GitHub issue with a follow-up comment |
+| | `Madhav Kumar` | "Not blocked." and "No blockers today." are correctly *not* counted as blockers |
+| | `Shresth Tiwari` | A blocker typed under Progress ("Stuck on the deploy pipeline.") is moved to Blockers, with a note saying why |
+| **Mobile** | `Vikram Malhotra` | A second team: Core Platform's pages answer 404 for them, and the reverse |
 
 ### Manager Portal Login
 To prevent regular team members from accessing managerial controls, the manager portal is protected with dedicated credentials:
@@ -61,6 +94,8 @@ To prevent regular team members from accessing managerial controls, the manager 
 | :--- | :--- | :--- |
 | **User ID** | `manager` | Configurable via `STANDUP_MANAGER_USERNAME` |
 | **Password** | `status2026` | Configurable via `STANDUP_MANAGER_PASSWORD` |
+
+> ⚠️ These defaults are public (they are in this README), so they are for a local demo only. Anywhere other people can reach, set `STANDUP_MANAGER_PASSWORD` to your own value, in `backend/.env` or, for Docker, in the `.env` next to `docker-compose.yml`.
 
 ---
 
@@ -87,6 +122,41 @@ To prevent regular team members from accessing managerial controls, the manager 
 - **No Micromanagement Surveillance**: No keystroke logging, no activity tracking, and no employee productivity scores.
 - **Audit Logging**: Stored updates are strictly protected. If an evidence page is viewed, an audit log records the view, and the author can inspect access history on their **My Data** page.
 - **Data Retention Policies**: Automated cleanup purges expired historical records while preserving verified digest records.
+
+---
+
+## 🎬 Demo Walkthrough
+
+[`docs/DEMO.md`](docs/DEMO.md) walks through every demoable feature step by step, with no accounts needed: a local fake GitHub and a fake Teams connector stand in for the real services. `backend/scripts/demo_check.sh` runs that walkthrough against a real server and checks every step (29 of them); CI runs it on every change.
+
+### How the faithfulness validator works
+
+Every digest line must pass these rules before it ships. A line that fails is withheld, never published:
+
+| Rule | Checks that… |
+| :--- | :--- |
+| **V1** | the line cites at least one source |
+| **V2** | every cited source exists in that day's updates |
+| **V3** | the quoted words are exactly the source's words at the recorded position |
+| **V4** | every number in the line appears in a cited quote |
+| **V5** | every issue number, link or @handle in the line appears in a cited quote |
+| **V6** | the line is credited to the person who wrote the source |
+| **V7** | no source outside what its author consented to share (**not built yet**) |
+| **V8** | a line written in its own words (not a quote) isn't padded far beyond its sources |
+| **V9** | the line's text *is* its quote, not a paraphrase |
+| **V10** | the line sits in the section its source belongs to (a blocker can't be hidden under Progress) |
+
+`python -m scripts.faithfulness_demo` shows it at work: the real lines pass, and seven deliberately unfaithful claims are each withheld, naming the rule that caught them.
+
+### Not built yet
+
+- An AI (LLM) summarizer. The summarizer today is rule-based and extractive; any future model would have to pass the same validator.
+- Consent before sending data to an outside service (rule V7), and redaction of secrets.
+- Members deleting their own data, and contesting or correcting a digest line.
+- Syncing GitHub issue state (closed, assigned) back into the digest.
+- A written legitimate-interest assessment (`docs/LIA.md`).
+
+**Microsoft Teams:** the bot is built on Microsoft's official Agents SDK, but it has only been tested against a local stand-in for Teams and hand-written messages, never a real Teams tenant. **GitHub:** blockers go to a local stand-in by default; pointing them at real GitHub needs a token and a repository.
 
 ---
 
@@ -123,7 +193,7 @@ status-unblocked/
 │   │   ├── db/               # SQLAlchemy models & Alembic migrations
 │   │   ├── summarize/        # Zero-hallucination extractive engine & validator
 │   │   └── ingestion/        # Webform & Teams bot ingestion adapters
-│   └── tests/                # Comprehensive unit & integration test suite (370+ tests)
+│   └── tests/                # Comprehensive unit & integration test suite (372 tests)
 │
 ├── frontend/                 # Modern React Frontend (Vite + JSX)
 │   ├── src/
@@ -146,7 +216,7 @@ Run tests and linters across the project:
 ### Backend Tests
 ```bash
 cd backend
-.venv/bin/pytest                     # Runs full test suite (370+ tests passing)
+.venv/bin/pytest                     # Runs full test suite (372 tests)
 .venv/bin/ruff check .               # Linting checks
 .venv/bin/mypy src                   # Strict static type checking
 ```
