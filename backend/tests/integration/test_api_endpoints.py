@@ -171,8 +171,34 @@ def test_api_manager_tasks_and_members_and_summary(client, team_with_members):
     member = team_with_members[1][0]
     login_as(client, member.id)
 
-    # 1. Add member
-    add_res = client.post("/api/manager/members", json={"name": "Kavita Rao", "tz": "Asia/Kolkata"})
+    # 1. Unauthenticated manager request is rejected
+    unauth_res = client.get("/api/manager/tasks")
+    assert unauth_res.status_code == 401
+
+    # 2. Invalid credentials rejected
+    bad_auth = client.post(
+        "/api/manager/auth",
+        json={"username": "wrong_user", "password": "wrong_password"},
+    )
+    assert bad_auth.status_code == 401
+
+    # 3. Successful manager authentication
+    auth_res = client.post(
+        "/api/manager/auth",
+        json={"username": "manager", "password": "status2026"},
+    )
+    assert auth_res.status_code == 200
+    assert auth_res.json()["is_manager"] is True
+
+    status_res = client.get("/api/manager/status")
+    assert status_res.status_code == 200
+    assert status_res.json()["is_manager"] is True
+
+    # 4. Add member
+    add_res = client.post(
+        "/api/manager/members",
+        json={"name": "Kavita Rao", "tz": "Asia/Kolkata"},
+    )
     assert add_res.status_code == 200
     kavita = add_res.json()["member"]
     assert kavita["display_name"] == "Kavita Rao"
@@ -182,7 +208,7 @@ def test_api_manager_tasks_and_members_and_summary(client, team_with_members):
     assert team_res.status_code == 200
     assert "Kavita Rao" in team_res.json()["team"]["members"]
 
-    # 2. Create task
+    # 5. Create task assigned to Kavita
     task_res = client.post(
         "/api/manager/tasks",
         json={
@@ -198,30 +224,69 @@ def test_api_manager_tasks_and_members_and_summary(client, team_with_members):
     assert task_res.json()["task"]["title"] == "Migrate database indexes"
     assert task_res.json()["task"]["assigned_to_name"] == "Kavita Rao"
 
-    # 3. List tasks
+    # 6. List tasks as manager
     list_res = client.get("/api/manager/tasks")
     assert list_res.status_code == 200
     assert len(list_res.json()["tasks"]) >= 1
 
-    # 4. Update task status to completed
-    update_res = client.patch(f"/api/manager/tasks/{task_id}", json={"status": "completed"})
+    # 7. Member view of assigned tasks: sign in as Kavita
+    login_as(client, kavita["id"])
+    my_tasks_res = client.get("/api/me/tasks")
+    assert my_tasks_res.status_code == 200
+    my_tasks = my_tasks_res.json()["tasks"]
+    assert len(my_tasks) == 1
+    assert my_tasks[0]["id"] == task_id
+    assert my_tasks[0]["title"] == "Migrate database indexes"
+
+    # Kavita updates task status to in_progress
+    update_my_res = client.patch(
+        f"/api/me/tasks/{task_id}",
+        json={"status": "in_progress"},
+    )
+    assert update_my_res.status_code == 200
+    assert update_my_res.json()["task"]["status"] == "in_progress"
+
+    # Kavita cannot access manager dashboard routes
+    assert client.get("/api/manager/tasks").status_code == 401
+
+    # 8. Re-authenticate as manager and mark completed
+    auth_res2 = client.post(
+        "/api/manager/auth",
+        json={"username": "manager", "password": "status2026"},
+    )
+    assert auth_res2.status_code == 200
+
+    update_res = client.patch(
+        f"/api/manager/tasks/{task_id}",
+        json={"status": "completed"},
+    )
     assert update_res.status_code == 200
     assert update_res.json()["task"]["status"] == "completed"
     assert update_res.json()["task"]["completed_at"] is not None
 
-    # 5. Get manager summary
+    # 9. Get manager summary
     summary_res = client.get("/api/manager/summary?scope=daily")
     assert summary_res.status_code == 200
     summary = summary_res.json()
     assert summary["stats"]["completed"] >= 1
     assert "Migrate database indexes" in [t["title"] for t in summary["completed_tasks"]]
 
-    # 6. Team code update / custom code
+    # 10. Team code update / custom code
     code_res = client.post("/api/manager/team-code", json={"custom_code": "TEST-SYNC9"})
     assert code_res.status_code == 200
     assert "TEST-SYNC9" in code_res.json()["join_code"]
 
-    # 7. Delete task
+    # 11. Lock manager session
+    lock_res = client.post("/api/manager/lock")
+    assert lock_res.status_code == 200
+    assert lock_res.json()["is_manager"] is False
+    assert client.get("/api/manager/tasks").status_code == 401
+
+    # 12. Delete task (re-auth as manager)
+    client.post(
+        "/api/manager/auth",
+        json={"username": "manager", "password": "status2026"},
+    )
     del_res = client.delete(f"/api/manager/tasks/{task_id}")
     assert del_res.status_code == 200
 

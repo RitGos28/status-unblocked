@@ -96,6 +96,15 @@ class UpdateTeamCodePayload(BaseModel):
     custom_code: str | None = Field(default=None)
 
 
+class ManagerAuthPayload(BaseModel):
+    username: str = Field(default="")
+    password: str = Field(default="")
+
+
+class MemberTaskUpdatePayload(BaseModel):
+    status: str
+
+
 def _format_member(member: Member) -> dict[str, Any]:
     return {
         "id": member.id,
@@ -535,9 +544,115 @@ def _format_task(task: TeamTask) -> dict[str, Any]:
     }
 
 
+def _ensure_manager(request: Request) -> None:
+    """Verify that current session has authenticated as manager."""
+    if not request.session.get("is_manager", False):
+        raise UnauthorizedError(
+            "Manager authorization required. Please authenticate with manager credentials."
+        )
+
+
+# ---------------------------------------------------------------------
+# Manager Authentication & Access Control
+# ---------------------------------------------------------------------
+
+
+@router.post("/manager/auth")
+def api_manager_auth(
+    payload: ManagerAuthPayload,
+    request: Request,
+    settings: AppSettings,
+) -> dict[str, Any]:
+    """Authenticate with manager credentials (User ID and Password)."""
+    username = payload.username.strip()
+    password = payload.password.strip()
+    if username == settings.manager_username and password == settings.manager_password:
+        request.session["is_manager"] = True
+        return {"success": True, "is_manager": True}
+    raise UnauthorizedError("Invalid manager credentials.")
+
+
+@router.get("/manager/status")
+def api_manager_status(request: Request) -> dict[str, Any]:
+    """Check if the current session has manager access."""
+    return {"is_manager": bool(request.session.get("is_manager", False))}
+
+
+@router.post("/manager/lock")
+def api_manager_lock(request: Request) -> dict[str, Any]:
+    """Lock manager access for current session."""
+    request.session.pop("is_manager", None)
+    return {"success": True, "is_manager": False}
+
+
+# ---------------------------------------------------------------------
+# Member Assigned Tasks Endpoints (Visible on Member Dashboard)
+# ---------------------------------------------------------------------
+
+
+@router.get("/me/tasks")
+def api_my_tasks(session: DbSession, member: CurrentMember) -> dict[str, Any]:
+    """List all tasks assigned to the authenticated team member."""
+    tasks = (
+        session.execute(
+            select(TeamTask)
+            .where(
+                TeamTask.team_id == member.team_id,
+                TeamTask.assigned_to_id == member.id,
+            )
+            .order_by(TeamTask.created_at.desc())
+        )
+        .scalars()
+        .all()
+    )
+    return {
+        "tasks": [_format_task(t) for t in tasks],
+        "member": _format_member(member),
+    }
+
+
+@router.patch("/me/tasks/{task_id}")
+def api_update_my_task(
+    task_id: str,
+    payload: MemberTaskUpdatePayload,
+    session: DbSession,
+    member: CurrentMember,
+    clock: AppClock,
+) -> dict[str, Any]:
+    """Allow an authenticated team member to update the status of their assigned task."""
+    task = session.get(TeamTask, task_id)
+    if not task or task.team_id != member.team_id or task.assigned_to_id != member.id:
+        raise NotFoundError("Task not found or not assigned to you.")
+
+    valid_statuses = ["pending", "in_progress", "completed", "blocked"]
+    if payload.status not in valid_statuses:
+        raise BadRequestError(f"Invalid status. Must be one of: {', '.join(valid_statuses)}")
+
+    if payload.status == "completed" and task.status != "completed":
+        task.completed_at = clock.now()
+    elif payload.status != "completed":
+        task.completed_at = None
+
+    task.status = payload.status
+    session.commit()
+    session.refresh(task)
+    return {
+        "success": True,
+        "task": _format_task(task),
+    }
+
+
+# ---------------------------------------------------------------------
+# Manager Operations (Protected)
+# ---------------------------------------------------------------------
+
+
 @router.get("/manager/tasks")
-def api_list_tasks(session: DbSession, member: CurrentMember) -> dict[str, Any]:
+def api_list_tasks(
+    session: DbSession, member: CurrentMember, request: Request
+) -> dict[str, Any]:
     """List all team tasks for the manager's team."""
+    _ensure_manager(request)
     tasks = (
         session.execute(
             select(TeamTask)
@@ -555,9 +670,13 @@ def api_list_tasks(session: DbSession, member: CurrentMember) -> dict[str, Any]:
 
 @router.post("/manager/tasks")
 def api_create_task(
-    payload: TaskCreatePayload, session: DbSession, member: CurrentMember
+    payload: TaskCreatePayload,
+    session: DbSession,
+    member: CurrentMember,
+    request: Request,
 ) -> dict[str, Any]:
     """Create a new team task assigned to a team member."""
+    _ensure_manager(request)
     title = payload.title.strip()
     if not title:
         raise BadRequestError("Task title cannot be empty.")
@@ -598,8 +717,10 @@ def api_update_task(
     session: DbSession,
     member: CurrentMember,
     clock: AppClock,
+    request: Request,
 ) -> dict[str, Any]:
     """Update task details, assignment, or completion status."""
+    _ensure_manager(request)
     task = session.get(TeamTask, task_id)
     if not task or task.team_id != member.team_id:
         raise NotFoundError("Task not found on your team.")
@@ -649,8 +770,14 @@ def api_update_task(
 
 
 @router.delete("/manager/tasks/{task_id}")
-def api_delete_task(task_id: str, session: DbSession, member: CurrentMember) -> dict[str, Any]:
+def api_delete_task(
+    task_id: str,
+    session: DbSession,
+    member: CurrentMember,
+    request: Request,
+) -> dict[str, Any]:
     """Delete a task from the team."""
+    _ensure_manager(request)
     task = session.get(TeamTask, task_id)
     if not task or task.team_id != member.team_id:
         raise NotFoundError("Task not found on your team.")
@@ -661,9 +788,13 @@ def api_delete_task(task_id: str, session: DbSession, member: CurrentMember) -> 
 
 @router.post("/manager/members")
 def api_add_member(
-    payload: AddMemberPayload, session: DbSession, member: CurrentMember
+    payload: AddMemberPayload,
+    session: DbSession,
+    member: CurrentMember,
+    request: Request,
 ) -> dict[str, Any]:
     """Add a new member to the manager's team. Appears immediately on the team page."""
+    _ensure_manager(request)
     name = payload.name.strip()
     if not name:
         raise BadRequestError("Member name cannot be empty.")
@@ -704,9 +835,11 @@ def api_manager_summary(
     session: DbSession,
     member: CurrentMember,
     clock: AppClock,
+    request: Request,
     scope: str = "daily",
 ) -> dict[str, Any]:
     """Generate an end-of-day or project summary of tasks and submitted work."""
+    _ensure_manager(request)
     team = member.team
     tasks = (
         session.execute(
@@ -835,9 +968,13 @@ def api_manager_summary(
 
 @router.post("/manager/team-code")
 def api_update_team_code(
-    payload: UpdateTeamCodePayload, session: DbSession, member: CurrentMember
+    payload: UpdateTeamCodePayload,
+    session: DbSession,
+    member: CurrentMember,
+    request: Request,
 ) -> dict[str, Any]:
     """Set a custom team code (e.g. to sync local and deployed) or regenerate one."""
+    _ensure_manager(request)
     team = session.get(Team, member.team_id)
     if team is None:
         raise NotFoundError("Team not found.")

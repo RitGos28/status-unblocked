@@ -82,6 +82,23 @@ export const api = {
   // Team
   getTeam: () => request("/api/me/team"),
 
+  // Member Tasks (Assigned by Manager)
+  getMyTasks: () => request("/api/me/tasks"),
+  updateMyTask: (taskId, data) =>
+    request(`/api/me/tasks/${taskId}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+
+  // Manager Auth & Access Control
+  loginManager: (username, password) =>
+    request("/api/manager/auth", {
+      method: "POST",
+      body: JSON.stringify({ username, password }),
+    }),
+  getManagerStatus: () => request("/api/manager/status"),
+  lockManager: () => request("/api/manager/lock", { method: "POST" }),
+
   // Manager Operations
   getManagerTasks: () => request("/api/manager/tasks"),
   createManagerTask: (data) =>

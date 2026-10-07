@@ -19,6 +19,10 @@ import {
   RefreshCw,
   Calendar,
   AlertTriangle,
+  Lock,
+  Unlock,
+  ShieldAlert,
+  ShieldCheck,
 } from "lucide-react";
 
 export default function ManagerPage({ navigate }) {
@@ -28,6 +32,13 @@ export default function ManagerPage({ navigate }) {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("tasks"); // "tasks" | "members" | "summary" | "teamcode"
   const [statusFilter, setStatusFilter] = useState("all");
+
+  // Manager Auth & Access Protection state
+  const [isManager, setIsManager] = useState(null); // null = checking, false = locked, true = unlocked
+  const [authUsername, setAuthUsername] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authenticating, setAuthenticating] = useState(false);
+  const [authError, setAuthError] = useState(null);
 
   // Summary state
   const [summaryScope, setSummaryScope] = useState("daily"); // "daily" | "project"
@@ -57,6 +68,22 @@ export default function ManagerPage({ navigate }) {
   // General messages
   const [feedback, setFeedback] = useState(null); // { type: 'success' | 'error', message: '' }
 
+  const checkManagerAuth = async () => {
+    try {
+      const res = await api.getManagerStatus();
+      if (res && res.is_manager) {
+        setIsManager(true);
+        loadData();
+      } else {
+        setIsManager(false);
+        setLoading(false);
+      }
+    } catch {
+      setIsManager(false);
+      setLoading(false);
+    }
+  };
+
   const loadData = async () => {
     try {
       setLoading(true);
@@ -67,7 +94,11 @@ export default function ManagerPage({ navigate }) {
       setTasks(tasksRes.tasks || []);
       setTeamInfo(teamRes.team || null);
     } catch (err) {
-      setFeedback({ type: "error", message: err.message || "Failed to load manager data." });
+      if (err.status === 401) {
+        setIsManager(false);
+      } else {
+        setFeedback({ type: "error", message: err.message || "Failed to load manager data." });
+      }
     } finally {
       setLoading(false);
     }
@@ -75,16 +106,16 @@ export default function ManagerPage({ navigate }) {
 
   useEffect(() => {
     if (user) {
-      loadData();
+      checkManagerAuth();
     }
   }, [user]);
 
   // Load summary whenever user switches to summary tab or toggles scope
   useEffect(() => {
-    if (activeTab === "summary" && user) {
+    if (activeTab === "summary" && user && isManager) {
       loadSummary(summaryScope);
     }
-  }, [activeTab, summaryScope]);
+  }, [activeTab, summaryScope, isManager]);
 
   const loadSummary = async (scope) => {
     try {
@@ -92,9 +123,45 @@ export default function ManagerPage({ navigate }) {
       const res = await api.getManagerSummary(scope);
       setSummaryData(res);
     } catch (err) {
-      setFeedback({ type: "error", message: err.message || "Failed to generate summary." });
+      if (err.status === 401) {
+        setIsManager(false);
+      } else {
+        setFeedback({ type: "error", message: err.message || "Failed to generate summary." });
+      }
     } finally {
       setLoadingSummary(false);
+    }
+  };
+
+  const handleManagerLogin = async (e) => {
+    e.preventDefault();
+    if (!authUsername.trim() || !authPassword) return;
+    try {
+      setAuthenticating(true);
+      setAuthError(null);
+      const res = await api.loginManager(authUsername.trim(), authPassword);
+      if (res.is_manager) {
+        setIsManager(true);
+        setAuthUsername("");
+        setAuthPassword("");
+        loadData();
+      }
+    } catch (err) {
+      setAuthError(err.message || "Invalid manager credentials.");
+    } finally {
+      setAuthenticating(false);
+    }
+  };
+
+  const handleLockManager = async () => {
+    try {
+      await api.lockManager();
+    } catch {
+      // ignore
+    } finally {
+      setIsManager(false);
+      setTasks([]);
+      setSummaryData(null);
     }
   };
 
@@ -249,6 +316,136 @@ export default function ManagerPage({ navigate }) {
     );
   }
 
+  // Verifying manager permissions
+  if (isManager === null || (loading && tasks.length === 0 && !authError)) {
+    return (
+      <div className="card" style={{ textAlign: "center", padding: "60px 20px" }}>
+        <span className="loading-spinner" style={{ width: 26, height: 26, marginBottom: 16 }} />
+        <div style={{ color: "var(--text-secondary)", fontSize: 14, fontWeight: 500 }}>
+          Checking manager authorization…
+        </div>
+      </div>
+    );
+  }
+
+  // Manager Locked / Non-manager screen
+  if (isManager === false) {
+    return (
+      <div className="stagger" style={{ maxWidth: 520, margin: "40px auto 0" }}>
+        <div className="card card-elevated" style={{ padding: "36px 32px" }}>
+          <div style={{ textAlign: "center", marginBottom: 24 }}>
+            <div
+              style={{
+                width: 54,
+                height: 54,
+                borderRadius: "50%",
+                background: "rgba(239, 68, 68, 0.12)",
+                border: "1px solid rgba(239, 68, 68, 0.25)",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                marginBottom: 16,
+              }}
+            >
+              <Lock size={26} color="#ef4444" />
+            </div>
+            <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>
+              Manager Access Restricted
+            </h2>
+            <p style={{ color: "var(--text-secondary)", fontSize: 13.5, lineHeight: 1.6, margin: 0 }}>
+              Team members cannot access task delegation, add members, or view managerial reports. Enter your manager credentials to unlock this portal.
+            </p>
+          </div>
+
+          {authError && (
+            <div className="notice-box notice-warning" style={{ marginBottom: 18 }}>
+              <AlertCircle size={16} />
+              <span>{authError}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleManagerLogin} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label htmlFor="mgr-user">
+                <span>Manager User ID</span>
+              </label>
+              <input
+                id="mgr-user"
+                type="text"
+                className="text-input"
+                placeholder="e.g. manager"
+                value={authUsername}
+                onChange={(e) => setAuthUsername(e.target.value)}
+                required
+                autoFocus
+                autoComplete="username"
+              />
+            </div>
+
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label htmlFor="mgr-pass">
+                <span>Password</span>
+              </label>
+              <input
+                id="mgr-pass"
+                type="password"
+                className="text-input"
+                placeholder="Enter manager password"
+                value={authPassword}
+                onChange={(e) => setAuthPassword(e.target.value)}
+                required
+                autoComplete="current-password"
+              />
+            </div>
+
+            <div
+              style={{
+                background: "var(--surface-sunken)",
+                border: "1px dashed var(--border-subtle)",
+                borderRadius: "var(--radius-sm)",
+                padding: "10px 14px",
+                fontSize: 12,
+                color: "var(--text-muted)",
+                lineHeight: 1.5,
+              }}
+            >
+              💡 <strong>Default Manager Credentials</strong>:<br />
+              User ID: <code style={{ color: "var(--accent-bright)", fontWeight: 600 }}>manager</code> &nbsp;|&nbsp; Password: <code style={{ color: "var(--accent-bright)", fontWeight: 600 }}>status2026</code>
+            </div>
+
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={authenticating || !authUsername.trim() || !authPassword}
+              style={{ width: "100%", justifyContent: "center", marginTop: 4, height: 40 }}
+            >
+              {authenticating ? (
+                <>
+                  <span className="loading-spinner" style={{ width: 14, height: 14 }} /> Unlocking…
+                </>
+              ) : (
+                <>
+                  <Unlock size={15} /> Unlock Manager Dashboard
+                </>
+              )}
+            </button>
+          </form>
+
+          <div style={{ marginTop: 20, textAlign: "center" }}>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              style={{ fontSize: 13, color: "var(--text-muted)" }}
+              onClick={() => navigate("/")}
+            >
+              ← Back to Team Dashboard
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const filteredTasks = tasks.filter((t) => {
     if (statusFilter === "all") return true;
     return t.status === statusFilter;
@@ -261,15 +458,18 @@ export default function ManagerPage({ navigate }) {
       {/* Header */}
       <div className="page-header">
         <div>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             <h1>Manager Dashboard</h1>
             <span className="badge badge-primary">{teamInfo?.name || user.team_name}</span>
+            <span className="badge badge-success" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+              <ShieldCheck size={12} /> Authorized
+            </span>
           </div>
           <p className="subtitle" style={{ marginBottom: 0 }}>
             Assign tasks to team members, track daily deliverables, and generate end-of-day project summaries.
           </p>
         </div>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
           <button
             type="button"
             className="btn btn-primary"
@@ -286,6 +486,15 @@ export default function ManagerPage({ navigate }) {
             }}
           >
             <Sparkles size={15} color="var(--accent-bright)" /> Generate Summary
+          </button>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={handleLockManager}
+            style={{ fontSize: 13, gap: 6 }}
+            title="Lock manager session"
+          >
+            <Lock size={14} /> Lock
           </button>
         </div>
       </div>
