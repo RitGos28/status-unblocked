@@ -1,6 +1,14 @@
 import React, { useState, useEffect } from "react";
 import { api } from "../api/client";
-import { ArrowLeft, ExternalLink, Quote, ShieldCheck, AlertCircle, User, Clock, Hash } from "lucide-react";
+import { ArrowLeft, ExternalLink } from "lucide-react";
+import { Loading, Notice } from "../components/ui";
+
+const SOURCES = {
+  webform: "the web form",
+  teams: "Teams",
+  cli: "the command line",
+  csv: "a spreadsheet import",
+};
 
 export default function EvidencePage({ itemId, navigate }) {
   const [data, setData] = useState(null);
@@ -9,147 +17,97 @@ export default function EvidencePage({ itemId, navigate }) {
 
   useEffect(() => {
     let isMounted = true;
-    const loadEvidence = async () => {
+    const load = async () => {
       try {
         setLoading(true);
         setError(null);
         const res = await api.getEvidence(itemId);
         if (isMounted) setData(res);
       } catch (err) {
-        if (isMounted) setError(err.message || "Failed to load evidence.");
+        if (isMounted) setError(err.message || "Could not load the evidence.");
       } finally {
         if (isMounted) setLoading(false);
       }
     };
-    loadEvidence();
-    return () => { isMounted = false; };
+    load();
+    return () => {
+      isMounted = false;
+    };
   }, [itemId]);
 
-  if (loading) {
-    return (
-      <div className="card" style={{ textAlign: "center", padding: "50px 24px" }}>
-        <span className="loading-spinner" style={{ width: 30, height: 30 }} />
-        <p className="muted" style={{ marginTop: 16 }}>Verifying citation and audit trail…</p>
-      </div>
-    );
-  }
+  const back = (
+    <button type="button" className="btn btn-ghost btn-sm" onClick={() => window.history.back()}>
+      <ArrowLeft size={13} /> Back
+    </button>
+  );
+
+  if (loading) return <Loading label="Loading evidence…" />;
 
   if (error) {
     return (
-      <div className="stagger">
-        <h1>Evidence Not Found</h1>
-        <div className="notice-box notice-warning">
-          <AlertCircle size={17} />
-          <span>{error}</span>
-        </div>
-        <button type="button" className="btn btn-outline" onClick={() => navigate("/digests")}>
-          <ArrowLeft size={14} /> Back to digests
-        </button>
+      <div>
+        <div className="mb-16">{back}</div>
+        <Notice tone="danger">{error}</Notice>
       </div>
     );
   }
 
-  const {
-    expired, quote, before, after,
-    member_name, captured_at, source_kind,
-    permalink, permalink_reason, item,
-  } = data;
-
-  const formattedDate =
-    new Date(captured_at).toISOString().replace("T", " ").substring(0, 16) + " UTC";
+  const { expired, quote, before, after, member_name, captured_at, source_kind, permalink, permalink_reason, item } =
+    data;
+  const captured = new Date(captured_at).toISOString().replace("T", " ").substring(0, 16) + " UTC";
 
   return (
-    <div className="stagger">
-      <div>
-        <button
-          type="button"
-          className="btn btn-ghost"
-          style={{ padding: "5px 10px", fontSize: 13, color: "var(--text-muted)", marginBottom: 16 }}
-          onClick={() => navigate("/digests")}
-        >
-          <ArrowLeft size={13} /> Back to digests
-        </button>
-        <h1>Source Verification</h1>
+    <div>
+      <div className="mb-16">{back}</div>
+
+      <div className="page-header">
+        <div>
+          <h1>Source</h1>
+          <div className="meta mt-8">
+            <span>
+              <strong>{member_name}</strong>
+            </span>
+            <span>{captured}</span>
+            <span>via {SOURCES[source_kind] || source_kind}</span>
+          </div>
+        </div>
       </div>
 
       {expired ? (
         <div>
-          <p className="subtitle">This evidence has expired under the team's retention policy.</p>
-          <div className="card card-elevated">
-            <p style={{ margin: 0, color: "var(--text-secondary)", fontSize: 14 }}>
-              The original text was purged under automated privacy policies. The quote below is what the digest cited at the time.
-            </p>
-          </div>
-          <h2>Cited Quote</h2>
+          <Notice tone="info">
+            The stored update was removed under the team's retention period. The quoted line is kept
+            as the digest's record.
+          </Notice>
+          <h2>Quoted line</h2>
           <pre className="raw-display">
-            <mark className="quote-highlight">{quote}</mark>
+            <mark>{quote}</mark>
           </pre>
         </div>
       ) : (
         <div>
-          {/* Meta pills */}
-          <div className="evidence-meta" style={{ marginBottom: 18 }}>
-            <div className="evidence-pill">
-              <User size={12} />
-              <strong>{member_name}</strong>
-            </div>
-            <div className="evidence-pill">
-              <Clock size={12} />
-              {formattedDate}
-            </div>
-            <div className="evidence-pill">
-              <Hash size={12} />
-              <code style={{ fontFamily: "var(--font-mono)", fontSize: 11 }}>{source_kind}</code>
-            </div>
-          </div>
-
-          <h2>As Submitted</h2>
+          <h2>As submitted</h2>
           <pre className="raw-display">
             {before}
-            <mark className="quote-highlight">{quote}</mark>
+            <mark>{quote}</mark>
             {after}
           </pre>
-
-          <p className="muted" style={{ marginTop: 12, fontSize: 12.5 }}>
-            Highlighted span: characters{" "}
-            <strong style={{ color: "var(--text-secondary)" }}>
-              {item.span_start}–{item.span_end}
-            </strong>{" "}
-            of the stored submission.{" "}
+          <p className="muted mt-8">
+            Characters {item.span_start} to {item.span_end} of the stored update.{" "}
             {permalink ? (
-              <a
-                href={permalink}
-                target="_blank"
-                rel="noreferrer"
-                style={{
-                  color: "var(--accent-bright)",
-                  fontWeight: 600,
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 4,
-                }}
-              >
+              <a href={permalink} target="_blank" rel="noreferrer">
                 Open in {source_kind} <ExternalLink size={11} />
               </a>
             ) : (
-              <span>{permalink_reason}</span>
+              permalink_reason
             )}
           </p>
         </div>
       )}
 
-      <div className="notice-box notice-info" style={{ marginTop: 24 }}>
-        <ShieldCheck size={17} />
-        <span style={{ fontSize: 13 }}>
-          Audit integrity: This view was cryptographically appended to the tamper-evident audit chain.
-        </span>
-      </div>
-
-      <div style={{ marginTop: 20 }}>
-        <button type="button" className="btn btn-outline" onClick={() => navigate("/digests")}>
-          <ArrowLeft size={14} /> Back to digests
-        </button>
-      </div>
+      <p className="muted mt-24">
+        This view was recorded. {member_name} can see who opened their updates on My data.
+      </p>
     </div>
   );
 }
